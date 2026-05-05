@@ -1,0 +1,74 @@
+# Langfuse Helm chart values for tgolan-langfuse namespace
+# Chart version: 1.5.22
+# Prerequisites: create the "langfuse-secrets" Kubernetes secret before installing.
+# See hub/infra/langfuse/README.md for instructions.
+
+langfuse:
+  image:
+    tag: "3.155.1"
+    pullPolicy: IfNotPresent
+
+  features:
+    telemetryEnabled: false
+    signUpDisabled: false
+
+  salt:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: salt
+
+  encryptionKey:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: encryption-key
+
+  nextauth:
+    url: "http://localhost:3000"
+    secret:
+      secretKeyRef:
+        name: langfuse-secrets
+        key: nextauth-secret
+
+  web:
+    service:
+      type: ClusterIP
+      port: 3000
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  worker:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Single-node ClickHouse (no ZooKeeper, no replication)
+clickhouse:
+  clusterEnabled: false
+  replicaCount: 1
+  resourcesPreset: small
+  zookeeper:
+    enabled: false
+  database: langfuse
+  auth:
+    username: langfuse
+    existingSecret: langfuse-secrets
+    existingSecretKey: clickhouse-password
+
+postgresql:
+  auth:
+    existingSecret: langfuse-secrets
+    existingSecretPasswordKey: postgresql-password
+
+redis:
+  auth:
+    existingSecret: langfuse-secrets
+    existingSecretPasswordKey: redis-password
