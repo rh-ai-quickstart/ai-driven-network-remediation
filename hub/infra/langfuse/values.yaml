@@ -1,4 +1,4 @@
-# Langfuse Helm chart values for tgolan-langfuse namespace
+# Langfuse Helm chart values
 # Chart version: 1.5.22
 # Prerequisites: create the "langfuse-secrets" Kubernetes secret before installing.
 # See hub/infra/langfuse/README.md for instructions.
@@ -23,6 +23,7 @@ langfuse:
       key: encryption-key
 
   nextauth:
+    # Dev-only: update to your Ingress/Route URL for non-local deployments
     url: "http://localhost:3000"
     secret:
       secretKeyRef:

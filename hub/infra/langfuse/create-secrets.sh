@@ -4,11 +4,11 @@
 #
 # Usage:
 #   ./create-secrets.sh [NAMESPACE]
-#   # default namespace: tgolan-langfuse
+#   # default namespace: langfuse
 
 set -euo pipefail
 
-NAMESPACE="${1:-tgolan-langfuse}"
+NAMESPACE="${1:-langfuse}"
 
 kubectl create secret generic langfuse-secrets \
   --namespace "$NAMESPACE" \

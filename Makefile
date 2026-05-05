@@ -9,7 +9,7 @@ PUSH_EXTRA_ARGS ?=
 CHATBOT_IMG := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 
 # ── Langfuse ──────────────────────────────────────────────────
-LANGFUSE_NAMESPACE     := tgolan-langfuse
+LANGFUSE_NAMESPACE     ?= langfuse
 LANGFUSE_RELEASE       := langfuse
 LANGFUSE_CHART_REPO    := langfuse
 LANGFUSE_CHART_URL     := https://langfuse.github.io/langfuse-k8s
