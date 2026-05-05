@@ -10,7 +10,7 @@ set -euo pipefail
 
 NAMESPACE="${1:-langfuse}"
 
-kubectl create secret generic langfuse-secrets \
+oc create secret generic langfuse-secrets \
   --namespace "$NAMESPACE" \
   --from-literal=salt="$(openssl rand -base64 32)" \
   --from-literal=nextauth-secret="$(openssl rand -base64 32)" \
@@ -18,6 +18,6 @@ kubectl create secret generic langfuse-secrets \
   --from-literal=postgresql-password="$(openssl rand -hex 16)" \
   --from-literal=clickhouse-password="$(openssl rand -hex 16)" \
   --from-literal=redis-password="$(openssl rand -hex 16)" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | oc apply -f -
 
 echo "Secret 'langfuse-secrets' created/updated in namespace '$NAMESPACE'"
