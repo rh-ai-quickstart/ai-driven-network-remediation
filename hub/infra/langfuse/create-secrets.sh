@@ -14,8 +14,8 @@ SECRET_NAME="langfuse-secrets"
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required but not installed." >&2; exit 1; }
 
 EXISTING=""
-if kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o json >/dev/null 2>&1; then
-  EXISTING=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o json)
+if oc get secret "$SECRET_NAME" -n "$NAMESPACE" -o json >/dev/null 2>&1; then
+  EXISTING=$(oc get secret "$SECRET_NAME" -n "$NAMESPACE" -o json)
 fi
 
 get_existing() {
@@ -56,7 +56,7 @@ MINIO_SECRET_KEY=$(get_or_generate minio-secret-key "openssl rand -hex 24")
 LANGFUSE_PUBLIC_KEY=$(get_or_generate langfuse-public-key "echo lf_pk_\$(openssl rand -hex 16)")
 LANGFUSE_SECRET_KEY=$(get_or_generate langfuse-secret-key "echo lf_sk_\$(openssl rand -hex 24)")
 
-kubectl create secret generic "$SECRET_NAME" \
+oc create secret generic "$SECRET_NAME" \
   --namespace "$NAMESPACE" \
   --from-literal=salt="$SALT" \
   --from-literal=nextauth-secret="$NEXTAUTH_SECRET" \
@@ -69,6 +69,6 @@ kubectl create secret generic "$SECRET_NAME" \
   --from-literal=minio-secret-key="$MINIO_SECRET_KEY" \
   --from-literal=langfuse-public-key="$LANGFUSE_PUBLIC_KEY" \
   --from-literal=langfuse-secret-key="$LANGFUSE_SECRET_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | oc apply -f -
 
 echo "Secret '$SECRET_NAME' created/updated in namespace '$NAMESPACE'"

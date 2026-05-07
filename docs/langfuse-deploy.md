@@ -45,13 +45,13 @@ The script uses a **merge strategy**: existing keys are preserved, only missing
 keys are generated. This makes `make helm-install` safe to re-run without
 rotating credentials or breaking API key references.
 
-**Prerequisites:** `kubectl`, `jq`, and `openssl` must be available.
+**Prerequisites:** `oc`, `jq`, and `openssl` must be available.
 
 To inspect the generated API keys:
 
 ```bash
-kubectl get secret langfuse-secrets -n hub -o jsonpath='{.data.langfuse-public-key}' | base64 -d
-kubectl get secret langfuse-secrets -n hub -o jsonpath='{.data.langfuse-secret-key}' | base64 -d
+oc get secret langfuse-secrets -n hub -o jsonpath='{.data.langfuse-public-key}' | base64 -d
+oc get secret langfuse-secrets -n hub -o jsonpath='{.data.langfuse-secret-key}' | base64 -d
 ```
 
 ## Headless Initialization
