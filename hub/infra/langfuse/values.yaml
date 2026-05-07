@@ -98,9 +98,7 @@ clickhouse:
   resourcesPreset: small
   zookeeper:
     enabled: false
-  database: langfuse
   auth:
-    username: langfuse
     existingSecret: langfuse-secrets
     existingSecretKey: clickhouse-password
 
