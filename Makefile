@@ -8,8 +8,8 @@ PUSH_EXTRA_ARGS ?=
 
 CHATBOT_IMG := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 
-# ── Langfuse ──────────────────────────────────────────────────
-LANGFUSE_NAMESPACE     ?= langfuse
+# ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
+ENABLE_LANGFUSE        ?=
 LANGFUSE_RELEASE       := langfuse
 LANGFUSE_CHART_REPO    := langfuse
 LANGFUSE_CHART_URL     := https://langfuse.github.io/langfuse-k8s
@@ -47,10 +47,29 @@ helm-install: namespace helm-depend
 		--set image.chatbotService=noc-chatbot-service \
 		--set image.tag=$(VERSION) \
 		--wait --timeout 30m
+ifeq ($(ENABLE_LANGFUSE),true)
+	$(MAKE) _langfuse-deploy
+endif
 
 .PHONY: helm-uninstall
 helm-uninstall:
-	helm uninstall hub --namespace $(NAMESPACE)
+	helm uninstall hub --namespace $(NAMESPACE) || true
+ifeq ($(ENABLE_LANGFUSE),true)
+	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
+	kubectl delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
+	kubectl delete secret langfuse-secrets --namespace $(NAMESPACE) || true
+endif
+
+.PHONY: _langfuse-deploy
+_langfuse-deploy:
+	helm repo add $(LANGFUSE_CHART_REPO) $(LANGFUSE_CHART_URL) || true
+	helm repo update
+	bash $(LANGFUSE_SECRET_SCRIPT) $(NAMESPACE)
+	helm upgrade --install $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
+		--namespace $(NAMESPACE) \
+		--values $(LANGFUSE_VALUES) \
+		--version $(LANGFUSE_CHART_VERSION) \
+		--wait --timeout 10m
 
 .PHONY: integration-tests
 integration-tests:
@@ -59,53 +78,28 @@ integration-tests:
 	trap "kill $$PF_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && uv run pytest
 
-.PHONY: langfuse-install
-langfuse-install:
-	helm repo add $(LANGFUSE_CHART_REPO) $(LANGFUSE_CHART_URL)
-	helm repo update
-	kubectl create namespace $(LANGFUSE_NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	bash $(LANGFUSE_SECRET_SCRIPT) $(LANGFUSE_NAMESPACE)
-	helm install $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
-		--namespace $(LANGFUSE_NAMESPACE) \
-		--values $(LANGFUSE_VALUES) \
-		--version $(LANGFUSE_CHART_VERSION)
-	@echo "Waiting for pods to become ready..."
-	kubectl wait --for=condition=ready pod \
-		-l app.kubernetes.io/name=langfuse \
-		--namespace $(LANGFUSE_NAMESPACE) \
-		--timeout=120s
-
-.PHONY: langfuse-uninstall
-langfuse-uninstall:
-	helm uninstall $(LANGFUSE_RELEASE) --namespace $(LANGFUSE_NAMESPACE) || true
-	kubectl delete pvc --all --namespace $(LANGFUSE_NAMESPACE) || true
-	kubectl delete secret langfuse-secrets --namespace $(LANGFUSE_NAMESPACE) || true
-	kubectl delete namespace $(LANGFUSE_NAMESPACE) || true
+# ── Langfuse day-2 targets ───────────────────────────────────────
 
 .PHONY: langfuse-upgrade
 langfuse-upgrade:
 	helm repo update
 	helm upgrade $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
-		--namespace $(LANGFUSE_NAMESPACE) \
+		--namespace $(NAMESPACE) \
 		--values $(LANGFUSE_VALUES) \
 		--version $(LANGFUSE_CHART_VERSION)
 
 .PHONY: langfuse-port-forward
 langfuse-port-forward:
 	kubectl port-forward svc/langfuse-web $(LANGFUSE_PORT):$(LANGFUSE_PORT) \
-		--namespace $(LANGFUSE_NAMESPACE)
+		--namespace $(NAMESPACE)
 
 .PHONY: langfuse-status
 langfuse-status:
 	@echo "=== Pods ==="
-	kubectl get pods --namespace $(LANGFUSE_NAMESPACE)
+	kubectl get pods -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
 	@echo ""
 	@echo "=== Services ==="
-	kubectl get svc --namespace $(LANGFUSE_NAMESPACE)
+	kubectl get svc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
 	@echo ""
 	@echo "=== Secrets ==="
-	kubectl get secrets --namespace $(LANGFUSE_NAMESPACE)
-
-.PHONY: langfuse-secrets
-langfuse-secrets:
-	bash $(LANGFUSE_SECRET_SCRIPT) $(LANGFUSE_NAMESPACE)
+	kubectl get secret langfuse-secrets --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"

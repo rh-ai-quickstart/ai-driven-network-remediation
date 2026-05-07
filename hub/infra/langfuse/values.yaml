@@ -1,13 +1,9 @@
 # Langfuse Helm chart values
-# Chart version: 1.5.22
+# Chart version: 1.5.22 (image version derived from chart appVersion)
 # Prerequisites: create the "langfuse-secrets" Kubernetes secret before installing.
-# See hub/infra/langfuse/README.md for instructions.
+# See docs/langfuse-deploy.md for details.
 
 langfuse:
-  image:
-    tag: "3.155.1"
-    pullPolicy: IfNotPresent
-
   features:
     telemetryEnabled: false
     signUpDisabled: false
@@ -30,6 +26,30 @@ langfuse:
         name: langfuse-secrets
         key: nextauth-secret
 
+  additionalEnv:
+    - name: LANGFUSE_INIT_ORG_ID
+      value: "ai-driven-network"
+    - name: LANGFUSE_INIT_ORG_NAME
+      value: "AI Driven Network Remediation"
+    - name: LANGFUSE_INIT_PROJECT_NAME
+      value: "default"
+    - name: LANGFUSE_INIT_USER_EMAIL
+      value: "admin@local.dev"
+    - name: LANGFUSE_INIT_USER_NAME
+      value: "Admin"
+    - name: LANGFUSE_INIT_USER_PASSWORD
+      value: "changeme"
+    - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-secrets
+          key: langfuse-public-key
+    - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-secrets
+          key: langfuse-secret-key
+
   web:
     service:
       type: ClusterIP
@@ -51,6 +71,26 @@ langfuse:
         cpu: 500m
         memory: 512Mi
 
+# S3-compatible storage via chart-bundled MinIO
+s3:
+  deploy: true
+  bucket: langfuse
+  region: "auto"
+  forcePathStyle: true
+  accessKeyId:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: minio-access-key
+  secretAccessKey:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: minio-secret-key
+  defaultBuckets: langfuse
+  auth:
+    existingSecret: langfuse-secrets
+    rootUserSecretKey: minio-access-key
+    rootPasswordSecretKey: minio-secret-key
+
 # Single-node ClickHouse (no ZooKeeper, no replication)
 clickhouse:
   clusterEnabled: false
@@ -67,7 +107,9 @@ clickhouse:
 postgresql:
   auth:
     existingSecret: langfuse-secrets
-    existingSecretPasswordKey: postgresql-password
+    secretKeys:
+      userPasswordKey: postgres-password
+      adminPasswordKey: postgres-password
 
 redis:
   auth:

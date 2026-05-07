@@ -205,6 +205,18 @@ git clone https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
 cd ai-driven-network-remediation
 ```
 
+### 2\. Deploy
+
+```bash
+# Core platform
+make helm-install
+
+# With Langfuse observability
+ENABLE_LANGFUSE=true make helm-install
+```
+
+See [Langfuse Deployment Guide](docs/langfuse-deploy.md) for details.
+
 - - -
 ## Architecture Deep Dive
 
