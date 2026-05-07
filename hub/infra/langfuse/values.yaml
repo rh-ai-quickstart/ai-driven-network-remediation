@@ -26,6 +26,18 @@ langfuse:
         name: langfuse-secrets
         key: nextauth-secret
 
+  extraInitContainers:
+    - name: wait-for-pg
+      image: busybox:1.37
+      command:
+        - sh
+        - -c
+        - |
+          until nc -z langfuse-postgresql 5432; do
+            echo "waiting for PostgreSQL..."
+            sleep 2
+          done
+
   additionalEnv:
     - name: LANGFUSE_INIT_ORG_ID
       value: "ai-driven-network"
