@@ -18,6 +18,11 @@ on:
         required: true
         default: ''
         type: string
+      registry:
+        description: 'Container image registry'
+        required: false
+        default: 'quay.io/rh-ai-quickstart'
+        type: string
 
 # Cancel any previous runs of this workflow
 concurrency:
@@ -25,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: quay.io/rh-ai-quickstart
+  REGISTRY: ${{ github.event.inputs.registry }}
 
 jobs:
   build-and-push:
