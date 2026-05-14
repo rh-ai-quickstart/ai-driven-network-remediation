@@ -86,3 +86,6 @@ Thumbs.db
 # Helm Chart deployment tgz files
 */helm/charts/*.tgz
 */helm/tmpcharts*
+scripts/ci/test-local.sh
+.claude/
+

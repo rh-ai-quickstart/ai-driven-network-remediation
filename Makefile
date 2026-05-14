@@ -77,6 +77,38 @@ _langfuse-deploy:
 		--version $(LANGFUSE_CHART_VERSION) \
 		--wait --timeout 10m
 
+# ── LokiStack ───────────────────────────────────────────────────
+LOKISTACK_RELEASE := lokistack
+LOKISTACK_CHART   := hub/infra/lokistack/chart
+LOKISTACK_NS      ?= $(NAMESPACE)
+LOKISTACK_EXTRA   ?=
+
+.PHONY: lokistack-install
+lokistack-install: namespace
+	helm upgrade --install $(LOKISTACK_RELEASE) $(LOKISTACK_CHART) \
+		--namespace $(LOKISTACK_NS) \
+		$(LOKISTACK_EXTRA) \
+		--wait --timeout 15m
+
+.PHONY: lokistack-uninstall
+lokistack-uninstall:
+	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) || true
+	oc delete pvc -l app=minio --namespace $(LOKISTACK_NS) || true
+
+.PHONY: lokistack-status
+lokistack-status:
+	@echo "=== LokiStack ==="
+	oc get lokistack -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
+	@echo ""
+	@echo "=== MinIO ==="
+	oc get pods -l app=minio -n $(LOKISTACK_NS)
+	@echo ""
+	@echo "=== Grafana ==="
+	oc get pods -l app=grafana -n $(LOKISTACK_NS)
+	@echo ""
+	@echo "=== Grafana Route ==="
+	oc get route grafana -n $(LOKISTACK_NS) -o jsonpath='{.spec.host}' 2>/dev/null && echo "" || echo "(none)"
+
 .PHONY: integration-tests
 integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \

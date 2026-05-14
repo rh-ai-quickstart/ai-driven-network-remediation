@@ -1,0 +1,221 @@
+# LokiStack Helm Chart - Default Values
+#
+# Usage: helm install lokistack ./chart -n <namespace>
+#
+# Environment overrides (use --set):
+#   Production:  --set minio.enabled=false --set lokistack.size=1x.medium
+#                --set minio.endpoint=https://s3.us-east-1.amazonaws.com
+#                --set minio.bucketName=production-loki-logs
+#                --set minio.credentials.rootUser=<key>
+#                --set minio.credentials.rootPassword=<secret>
+#                --set grafana.replicas=2
+#   CI/CD:       --set grafana.oauth.enabled=false --set operators.loki.enabled=false
+#                --set operators.operatorGroup.enabled=false
+#   Basic auth:  --set grafana.oauth.enabled=false
+
+# Cluster apps domain (auto-discovered on OpenShift, set manually for helm template or non-OpenShift)
+clusterDomain: ""
+
+# Operator configuration
+operators:
+  # Set to false if OperatorGroup already exists in the namespace
+  operatorGroup:
+    enabled: true
+
+  # Set to false if Loki Operator is already installed
+  loki:
+    enabled: true
+    channel: stable
+    source: redhat-operators
+    sourceNamespace: openshift-marketplace
+    installPlanApproval: Automatic
+
+# MinIO / S3 storage configuration
+# For production, set enabled: false and configure endpoint for external S3
+minio:
+  enabled: true
+  replicas: 1
+  image:
+    repository: quay.io/minio/minio
+    tag: latest
+    pullPolicy: IfNotPresent
+  bucketName: loki
+  # When minio.enabled=true, endpoint is auto-populated; set for external S3
+  endpoint: ""
+  region: us-east-1
+  credentials:
+    rootUser: minio
+    rootPassword: minio123
+
+  persistence:
+    enabled: true
+    storageClass: gp3-csi
+    size: 20Gi
+
+  resources:
+    requests:
+      cpu: 20m
+      memory: 100Mi
+    limits:
+      cpu: 250m
+      memory: 1Gi
+
+  service:
+    type: ClusterIP
+    apiPort: 9000
+    uiPort: 9090
+
+  routes:
+    api:
+      enabled: true
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+    ui:
+      enabled: true
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+
+# LokiStack configuration
+lokistack:
+  name: logging-loki
+  # Options: 1x.extra-small (dev), 1x.small, 1x.medium (production)
+  size: 1x.extra-small
+
+  storage:
+    secret:
+      name: logging-loki-s3
+      type: s3
+
+    schemas:
+      - version: v13
+        effectiveDate: "2024-01-01"
+
+    storageClassName: gp3-csi
+
+  tenants:
+    mode: openshift-logging
+
+  limits:
+    global:
+      queries:
+        queryTimeout: 3m
+        maxVolumeSeries: 1000
+
+# RBAC configuration
+rbac:
+  # User access to Loki logs via ClusterRoleBindings
+  # Example:
+  #   users:
+  #     - name: user@example.com
+  #       permissions:
+  #         application: true
+  #         infrastructure: true
+  #         audit: false
+  userAccess:
+    enabled: true
+    users: []
+
+# Grafana configuration
+grafana:
+  enabled: true
+  # Set replicas: 2 for production HA
+  replicas: 1
+
+  image:
+    repository: grafana/grafana
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  adminUser: admin
+  adminPassword: admin
+
+  auth:
+    basic:
+      enabled: true
+
+    anonymous:
+      enabled: false
+      orgRole: Viewer
+
+  # OAuth (for interactive users querying Loki via browser)
+  # Set enabled: false for CI/CD or basic-auth-only environments
+  oauth:
+    enabled: true
+    name: OpenShift
+    clientId: grafana-oauth-client
+    clientSecret: grafana-oauth-secret
+    scopes: "user:info user:check-access user:list-projects"
+    usePKCE: true
+    autoLogin: false
+    disableLoginForm: false
+    allowInsecureEmailLookup: true
+    # JMESPath string literal — assigns Admin role to all OAuth users
+    roleAttributePath: "'Admin'"
+    tlsSkipVerify: true
+    tlsClientCa: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+    emailAttributePath: metadata.name
+
+  # Loki datasources (oauthPassThru required for application logs in openshift-logging mode)
+  # URLs are auto-constructed from lokistack.name and the release namespace
+  datasources:
+    loki:
+      application:
+        enabled: true
+        name: Loki-Application
+        isDefault: true
+        tlsSkipVerify: true
+        oauthPassThru: true
+
+      infrastructure:
+        enabled: true
+        name: Loki-Infrastructure
+        isDefault: false
+        tlsSkipVerify: true
+        oauthPassThru: true
+
+      audit:
+        enabled: false
+        name: Loki-Audit
+        isDefault: false
+        tlsSkipVerify: true
+        oauthPassThru: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    type: ClusterIP
+    port: 3000
+    annotations:
+      service.alpha.openshift.io/serving-cert-secret-name: grafana-tls
+
+  route:
+    enabled: true
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
+  rbac:
+    enabled: true
+    serviceAccount:
+      create: true
+      name: grafana
+    lokiReader:
+      enabled: true
+      serviceAccountName: grafana-loki-reader
+
+# Test log generator (enable for dev/testing)
+testLogGenerator:
+  enabled: false
+  replicas: 1
+  image:
+    repository: busybox
+    tag: latest
+  interval: 5

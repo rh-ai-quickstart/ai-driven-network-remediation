@@ -1,0 +1,65 @@
+{{- if .Values.minio.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-bucket-create
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: minio-bucket-create
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-minio
+          image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
+          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until mc alias set minio http://minio-service.{{ .Release.Namespace }}.svc:{{ .Values.minio.service.apiPort }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" 2>/dev/null; do
+                echo "Waiting for MinIO to be ready..."
+                sleep 5
+              done
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: minio_root_user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: minio_root_password
+      containers:
+        - name: create-bucket
+          image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
+          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set minio http://minio-service.{{ .Release.Namespace }}.svc:{{ .Values.minio.service.apiPort }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+              mc mb --ignore-existing minio/{{ .Values.minio.bucketName }}
+              echo "Bucket '{{ .Values.minio.bucketName }}' is ready"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: minio_root_user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: minio_root_password
+{{- end }}

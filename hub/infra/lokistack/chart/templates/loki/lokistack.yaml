@@ -1,0 +1,19 @@
+---
+apiVersion: loki.grafana.com/v1
+kind: LokiStack
+metadata:
+  name: {{ .Values.lokistack.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  size: {{ .Values.lokistack.size }}
+  storage:
+    schemas:
+      {{- toYaml .Values.lokistack.storage.schemas | nindent 6 }}
+    secret:
+      name: {{ .Values.lokistack.storage.secret.name }}
+      type: {{ .Values.lokistack.storage.secret.type }}
+  storageClassName: {{ .Values.lokistack.storage.storageClassName }}
+  tenants:
+    mode: {{ .Values.lokistack.tenants.mode }}
+  limits:
+    {{- toYaml .Values.lokistack.limits | nindent 4 }}

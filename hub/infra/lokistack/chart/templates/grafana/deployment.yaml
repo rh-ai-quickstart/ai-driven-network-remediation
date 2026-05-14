@@ -1,0 +1,55 @@
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ include "lokistack.namespace" . }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "grafana") | nindent 4 }}
+spec:
+  replicas: {{ .Values.grafana.replicas }}
+  selector:
+    matchLabels:
+      {{- include "lokistack.componentSelectorLabels" (dict "root" . "component" "grafana") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lokistack.componentSelectorLabels" (dict "root" . "component" "grafana") | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.grafana.rbac.serviceAccount.name }}
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image.repository }}:{{ .Values.grafana.image.tag }}
+          imagePullPolicy: {{ .Values.grafana.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.grafana.service.port }}
+              protocol: TCP
+          env:
+            - name: GF_INSTALL_PLUGINS
+              value: ""
+            {{- if .Values.grafana.oauth.enabled }}
+            - name: GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP
+              value: "{{ .Values.grafana.oauth.allowInsecureEmailLookup }}"
+            {{- end }}
+          volumeMounts:
+            - name: grafana-config
+              mountPath: /etc/grafana
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: loki-token
+              mountPath: /var/run/secrets/loki-token
+              readOnly: true
+          resources:
+            {{- toYaml .Values.grafana.resources | nindent 12 }}
+      volumes:
+        - name: grafana-config
+          configMap:
+            name: grafana-config
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: loki-token
+          secret:
+            secretName: grafana-loki-token
+{{- end }}

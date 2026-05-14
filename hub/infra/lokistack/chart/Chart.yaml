@@ -1,0 +1,14 @@
+apiVersion: v2
+name: lokistack
+description: A Helm chart for deploying LokiStack with optional MinIO storage and Grafana visualization on OpenShift
+type: application
+version: 0.1.0
+appVersion: "6.5.1"
+keywords:
+  - logging
+  - loki
+  - grafana
+  - observability
+  - openshift
+maintainers:
+  - name: rh-ai-quickstart

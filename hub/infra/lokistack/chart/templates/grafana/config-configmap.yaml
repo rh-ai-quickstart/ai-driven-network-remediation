@@ -1,0 +1,60 @@
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: {{ include "lokistack.namespace" . }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "grafana") | nindent 4 }}
+data:
+  grafana.ini: |
+    [server]
+    root_url = https://{{ include "grafana.route.host" . }}
+
+    [auth]
+    disable_login_form = {{ .Values.grafana.oauth.disableLoginForm }}
+    {{- if .Values.grafana.oauth.enabled }}
+    oauth_auto_login = {{ .Values.grafana.oauth.autoLogin }}
+    {{- end }}
+
+    {{- if .Values.grafana.auth.basic.enabled }}
+    [auth.basic]
+    enabled = {{ .Values.grafana.auth.basic.enabled }}
+    {{- end }}
+
+    {{- if .Values.grafana.auth.anonymous.enabled }}
+    [auth.anonymous]
+    enabled = {{ .Values.grafana.auth.anonymous.enabled }}
+    org_role = {{ .Values.grafana.auth.anonymous.orgRole }}
+    {{- end }}
+
+    {{- if .Values.grafana.oauth.enabled }}
+    [auth.generic_oauth]
+    name = {{ .Values.grafana.oauth.name }}
+    enabled = true
+    client_id = {{ .Values.grafana.oauth.clientId }}
+    client_secret = {{ .Values.grafana.oauth.clientSecret }}
+    scopes = {{ .Values.grafana.oauth.scopes }}
+    auth_url = {{ include "lokistack.oauthServerUrl" . }}/oauth/authorize
+    token_url = {{ include "lokistack.oauthServerUrl" . }}/oauth/token
+    api_url = https://kubernetes.default.svc/apis/user.openshift.io/v1/users/~
+    use_pkce = {{ .Values.grafana.oauth.usePKCE }}
+    role_attribute_path = {{ .Values.grafana.oauth.roleAttributePath }}
+    tls_skip_verify_insecure = {{ .Values.grafana.oauth.tlsSkipVerify }}
+    tls_client_ca = {{ .Values.grafana.oauth.tlsClientCa }}
+    allow_assign_grafana_admin = true
+    skip_org_role_sync = true
+    email_attribute_path = {{ .Values.grafana.oauth.emailAttributePath }}
+    {{- end }}
+
+    [users]
+    auto_assign_org_role = Admin
+
+    [security]
+    admin_user = {{ .Values.grafana.adminUser }}
+    admin_password = {{ .Values.grafana.adminPassword }}
+
+    [explore]
+    enabled = true
+{{- end }}

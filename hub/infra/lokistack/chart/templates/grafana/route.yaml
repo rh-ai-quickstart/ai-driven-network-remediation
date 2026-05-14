@@ -1,0 +1,21 @@
+{{- if and .Values.grafana.enabled .Values.grafana.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: grafana
+  namespace: {{ include "lokistack.namespace" . }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "grafana") | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: grafana
+  port:
+    targetPort: http
+  {{- if .Values.grafana.route.tls }}
+  tls:
+    termination: {{ .Values.grafana.route.tls.termination }}
+    insecureEdgeTerminationPolicy: {{ .Values.grafana.route.tls.insecureEdgeTerminationPolicy }}
+  {{- end }}
+{{- end }}

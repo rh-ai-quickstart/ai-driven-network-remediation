@@ -1,0 +1,23 @@
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: {{ include "lokistack.namespace" . }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "grafana") | nindent 4 }}
+  {{- if .Values.grafana.service.annotations }}
+  annotations:
+    {{- toYaml .Values.grafana.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.grafana.service.type }}
+  ports:
+    - port: {{ .Values.grafana.service.port }}
+      targetPort: {{ .Values.grafana.service.port }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "lokistack.componentSelectorLabels" (dict "root" . "component" "grafana") | nindent 4 }}
+{{- end }}

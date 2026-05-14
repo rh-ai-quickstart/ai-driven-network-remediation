@@ -1,0 +1,31 @@
+{{- if .Values.testLogGenerator.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-generator
+  namespace: {{ include "lokistack.namespace" . }}
+spec:
+  replicas: {{ .Values.testLogGenerator.replicas }}
+  selector:
+    matchLabels:
+      app: log-generator
+  template:
+    metadata:
+      labels:
+        app: log-generator
+    spec:
+      containers:
+        - name: log-generator
+          image: {{ .Values.testLogGenerator.image.repository }}:{{ .Values.testLogGenerator.image.tag }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                echo "$(date -Iseconds) - INFO - Log message from test generator"
+                echo "$(date -Iseconds) - ERROR - Error log message for testing"
+                echo "$(date -Iseconds) - WARN - Warning log message"
+                sleep {{ .Values.testLogGenerator.interval }}
+              done
+{{- end }}
