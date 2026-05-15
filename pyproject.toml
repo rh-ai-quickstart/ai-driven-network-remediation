@@ -35,7 +35,7 @@ dependencies = [
     "openai>=1.40.0",  # For vLLM OpenAI-compatible API
 
     # Event Streaming
-    "kafka-python>=2.0.0",
+    "kafka-python-ng>=2.2",
 
     # Database
     "psycopg>=3.1.0",           # PostgreSQL driver

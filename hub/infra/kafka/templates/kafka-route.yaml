@@ -1,0 +1,17 @@
+{{- if and .Values.kafka.tls.enabled .Values.kafka.externalRoute.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-external
+  labels:
+    app: kafka
+spec:
+  host: {{ include "kafka.externalHost" . }}
+  to:
+    kind: Service
+    name: kafka
+  port:
+    targetPort: external
+  tls:
+    termination: passthrough
+{{- end }}

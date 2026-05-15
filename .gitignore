@@ -75,13 +75,16 @@ dist/
 build/
 *.egg-info/
 
-# OpenShift/Kubernetes local files
+# OpenShift local files
 kubeconfig
 .kube/
 
 # Misc
 .DS_Store
 Thumbs.db
+
+.claude
+scripts/ci/test-local.sh
 
 # Helm Chart deployment tgz files
 */helm/charts/*.tgz
