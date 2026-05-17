@@ -69,6 +69,7 @@ ifeq ($(ENABLE_LANGFUSE),true)
 endif
 ifeq ($(ENABLE_LOKISTACK),true)
 	$(MAKE) lokistack-install
+endif
 ifeq ($(ENABLE_KAFKA),true)
 	$(MAKE) kafka-install
 endif
