@@ -28,10 +28,6 @@ spec:
           env:
             - name: GF_INSTALL_PLUGINS
               value: ""
-            {{- if .Values.grafana.oauth.enabled }}
-            - name: GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP
-              value: "{{ .Values.grafana.oauth.allowInsecureEmailLookup }}"
-            {{- end }}
           volumeMounts:
             - name: grafana-config
               mountPath: /etc/grafana

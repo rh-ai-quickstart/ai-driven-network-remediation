@@ -18,17 +18,11 @@ data:
         url: {{ include "lokistack.lokiGatewayUrl" . }}/application/
         isDefault: {{ .Values.grafana.datasources.loki.application.isDefault }}
         editable: false
-        {{- if .Values.grafana.datasources.loki.application.oauthPassThru }}
-        jsonData:
-          tlsSkipVerify: {{ .Values.grafana.datasources.loki.application.tlsSkipVerify }}
-          oauthPassThru: true
-        {{- else }}
         jsonData:
           tlsSkipVerify: {{ .Values.grafana.datasources.loki.application.tlsSkipVerify }}
           httpHeaderName1: 'Authorization'
         secureJsonData:
           httpHeaderValue1: 'Bearer $__file{/var/run/secrets/loki-token/token}'
-        {{- end }}
       {{- end }}
       {{- if .Values.grafana.datasources.loki.infrastructure.enabled }}
       - name: {{ .Values.grafana.datasources.loki.infrastructure.name }}
@@ -37,17 +31,11 @@ data:
         url: {{ include "lokistack.lokiGatewayUrl" . }}/infrastructure/
         isDefault: {{ .Values.grafana.datasources.loki.infrastructure.isDefault }}
         editable: false
-        {{- if .Values.grafana.datasources.loki.infrastructure.oauthPassThru }}
-        jsonData:
-          tlsSkipVerify: {{ .Values.grafana.datasources.loki.infrastructure.tlsSkipVerify }}
-          oauthPassThru: true
-        {{- else }}
         jsonData:
           tlsSkipVerify: {{ .Values.grafana.datasources.loki.infrastructure.tlsSkipVerify }}
           httpHeaderName1: 'Authorization'
         secureJsonData:
           httpHeaderValue1: 'Bearer $__file{/var/run/secrets/loki-token/token}'
-        {{- end }}
       {{- end }}
       {{- if .Values.grafana.datasources.loki.audit.enabled }}
       - name: {{ .Values.grafana.datasources.loki.audit.name }}
@@ -58,6 +46,8 @@ data:
         editable: false
         jsonData:
           tlsSkipVerify: {{ .Values.grafana.datasources.loki.audit.tlsSkipVerify }}
-          oauthPassThru: {{ .Values.grafana.datasources.loki.audit.oauthPassThru }}
+          httpHeaderName1: 'Authorization'
+        secureJsonData:
+          httpHeaderValue1: 'Bearer $__file{/var/run/secrets/loki-token/token}'
       {{- end }}
 {{- end }}

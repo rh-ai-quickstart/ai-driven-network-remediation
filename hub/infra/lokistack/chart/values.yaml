@@ -9,9 +9,8 @@
 #                --set minio.credentials.rootUser=<key>
 #                --set minio.credentials.rootPassword=<secret>
 #                --set grafana.replicas=2
-#   CI/CD:       --set grafana.oauth.enabled=false --set operators.loki.enabled=false
+#   CI/CD:       --set operators.loki.enabled=false
 #                --set operators.operatorGroup.enabled=false
-#   Basic auth:  --set grafana.oauth.enabled=false
 
 # Cluster apps domain (auto-discovered on OpenShift, set manually for helm template or non-OpenShift)
 clusterDomain: ""
@@ -103,20 +102,6 @@ lokistack:
         queryTimeout: 3m
         maxVolumeSeries: 1000
 
-# RBAC configuration
-rbac:
-  # User access to Loki logs via ClusterRoleBindings
-  # Example:
-  #   users:
-  #     - name: user@example.com
-  #       permissions:
-  #         application: true
-  #         infrastructure: true
-  #         audit: false
-  userAccess:
-    enabled: true
-    users: []
-
 # Grafana configuration
 grafana:
   enabled: true
@@ -132,32 +117,11 @@ grafana:
   adminPassword: admin
 
   auth:
-    basic:
-      enabled: true
-
     anonymous:
       enabled: false
       orgRole: Viewer
 
-  # OAuth (for interactive users querying Loki via browser)
-  # Set enabled: false for CI/CD or basic-auth-only environments
-  oauth:
-    enabled: true
-    name: OpenShift
-    clientId: grafana-oauth-client
-    clientSecret: grafana-oauth-secret
-    scopes: "user:info user:check-access user:list-projects"
-    usePKCE: true
-    autoLogin: false
-    disableLoginForm: false
-    allowInsecureEmailLookup: true
-    # JMESPath string literal — assigns Admin role to all OAuth users
-    roleAttributePath: "'Admin'"
-    tlsSkipVerify: true
-    tlsClientCa: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-    emailAttributePath: metadata.name
-
-  # Loki datasources (oauthPassThru required for application logs in openshift-logging mode)
+  # Loki datasources — authenticated via grafana-loki-reader service account token
   # URLs are auto-constructed from lokistack.name and the release namespace
   datasources:
     loki:
@@ -166,21 +130,18 @@ grafana:
         name: Loki-Application
         isDefault: true
         tlsSkipVerify: true
-        oauthPassThru: true
 
       infrastructure:
         enabled: true
         name: Loki-Infrastructure
         isDefault: false
         tlsSkipVerify: true
-        oauthPassThru: true
 
       audit:
         enabled: false
         name: Loki-Audit
         isDefault: false
         tlsSkipVerify: true
-        oauthPassThru: true
 
   resources:
     requests:

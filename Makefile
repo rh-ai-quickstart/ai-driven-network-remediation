@@ -11,6 +11,7 @@ INGESTION_IMG  := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
+ENABLE_LOKISTACK       ?=
 LANGFUSE_RELEASE       := langfuse
 LANGFUSE_CHART_REPO    := langfuse
 LANGFUSE_CHART_URL     := https://langfuse.github.io/langfuse-k8s
@@ -56,6 +57,9 @@ helm-install: namespace helm-depend
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
 endif
+ifeq ($(ENABLE_LOKISTACK),true)
+	$(MAKE) lokistack-install
+endif
 
 .PHONY: helm-uninstall
 helm-uninstall:
@@ -92,8 +96,8 @@ lokistack-install: namespace
 
 .PHONY: lokistack-uninstall
 lokistack-uninstall:
-	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) || true
-	oc delete pvc -l app=minio --namespace $(LOKISTACK_NS) || true
+	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) --ignore-not-found
+	oc delete pvc -l app=minio --namespace $(LOKISTACK_NS) --ignore-not-found
 
 .PHONY: lokistack-status
 lokistack-status:

@@ -82,13 +82,6 @@ Falls back to .Values.clusterDomain when lookup is unavailable (helm template, n
 {{- end }}
 
 {{/*
-Get the OpenShift OAuth server URL.
-*/}}
-{{- define "lokistack.oauthServerUrl" -}}
-{{- printf "https://oauth-openshift.%s" (include "lokistack.clusterDomain" .) }}
-{{- end }}
-
-{{/*
 Get the Grafana route hostname.
 */}}
 {{- define "grafana.route.host" -}}

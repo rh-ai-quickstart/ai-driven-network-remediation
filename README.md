@@ -166,6 +166,7 @@ Install these operators on your cluster(s) before deploying:
 - **Red Hat Ansible Automation Platform 2.5** — For remediation
 - **Advanced Cluster Management 2.15** — For hub-spoke mode (optional)
 - **OpenShift Logging 6.4** — For log collection
+- **LokiStack** — For log aggregation and querying
 
 ### Minimum Resource Requirements
 
