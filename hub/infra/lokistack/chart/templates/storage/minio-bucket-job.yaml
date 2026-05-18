@@ -1,4 +1,3 @@
-{{- if .Values.minio.enabled }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -19,13 +18,12 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: wait-for-minio
-          image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
-          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
-          command:
-            - /bin/sh
-            - -c
+          image: {{ .Values.minio.bucketJobImage.repository }}:{{ .Values.minio.bucketJobImage.tag }}
+          imagePullPolicy: {{ .Values.minio.bucketJobImage.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
             - |
-              until mc alias set minio http://minio-service.{{ .Release.Namespace }}.svc:{{ .Values.minio.service.apiPort }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" 2>/dev/null; do
+              until mc alias set minio {{ .Values.minio.endpoint }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" 2>/dev/null; do
                 echo "Waiting for MinIO to be ready..."
                 sleep 5
               done
@@ -33,33 +31,31 @@ spec:
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: minio_root_user
+                  name: {{ .Values.minio.existingSecret.name }}
+                  key: {{ .Values.minio.existingSecret.userKey }}
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: minio_root_password
+                  name: {{ .Values.minio.existingSecret.name }}
+                  key: {{ .Values.minio.existingSecret.passwordKey }}
       containers:
         - name: create-bucket
-          image: {{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}
-          imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
-          command:
-            - /bin/sh
-            - -c
+          image: {{ .Values.minio.bucketJobImage.repository }}:{{ .Values.minio.bucketJobImage.tag }}
+          imagePullPolicy: {{ .Values.minio.bucketJobImage.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
             - |
-              mc alias set minio http://minio-service.{{ .Release.Namespace }}.svc:{{ .Values.minio.service.apiPort }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+              mc alias set minio {{ .Values.minio.endpoint }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
               mc mb --ignore-existing minio/{{ .Values.minio.bucketName }}
               echo "Bucket '{{ .Values.minio.bucketName }}' is ready"
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: minio_root_user
+                  name: {{ .Values.minio.existingSecret.name }}
+                  key: {{ .Values.minio.existingSecret.userKey }}
             - name: MINIO_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: minio-secret
-                  key: minio_root_password
-{{- end }}
+                  name: {{ .Values.minio.existingSecret.name }}
+                  key: {{ .Values.minio.existingSecret.passwordKey }}

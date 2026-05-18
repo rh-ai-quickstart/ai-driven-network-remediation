@@ -1,80 +1,37 @@
 # LokiStack Helm Chart - Default Values
 #
+# Prerequisites:
+#   - Loki Operator must be installed (via OLM or manually) before deploying this chart
+#   - An OperatorGroup must exist in the target namespace
+#
 # Usage: helm install lokistack ./chart -n <namespace>
 #
+# By default, LokiStack reuses the hub MinIO instance (deployed by the main hub chart).
+# Override minio.endpoint and minio.credentials for external S3.
+#
 # Environment overrides (use --set):
-#   Production:  --set minio.enabled=false --set lokistack.size=1x.medium
-#                --set minio.endpoint=https://s3.us-east-1.amazonaws.com
+#   External S3: --set minio.endpoint=https://s3.us-east-1.amazonaws.com
 #                --set minio.bucketName=production-loki-logs
-#                --set minio.credentials.rootUser=<key>
-#                --set minio.credentials.rootPassword=<secret>
+#                --set lokistack.size=1x.medium
 #                --set grafana.replicas=2
-#   CI/CD:       --set operators.loki.enabled=false
-#                --set operators.operatorGroup.enabled=false
 
 # Cluster apps domain (auto-discovered on OpenShift, set manually for helm template or non-OpenShift)
 clusterDomain: ""
 
-# Operator configuration
-operators:
-  # Set to false if OperatorGroup already exists in the namespace
-  operatorGroup:
-    enabled: true
-
-  # Set to false if Loki Operator is already installed
-  loki:
-    enabled: true
-    channel: stable
-    source: redhat-operators
-    sourceNamespace: openshift-marketplace
-    installPlanApproval: Automatic
-
 # MinIO / S3 storage configuration
-# For production, set enabled: false and configure endpoint for external S3
+# Default: reuse the hub MinIO deployed by the main chart
 minio:
-  enabled: true
-  replicas: 1
-  image:
+  endpoint: "http://minio:9000"
+  bucketName: loki
+  region: us-east-1
+  existingSecret:
+    name: minio
+    userKey: user
+    passwordKey: password
+  bucketJobImage:
     repository: quay.io/minio/minio
     tag: latest
     pullPolicy: IfNotPresent
-  bucketName: loki
-  # When minio.enabled=true, endpoint is auto-populated; set for external S3
-  endpoint: ""
-  region: us-east-1
-  credentials:
-    rootUser: minio
-    rootPassword: minio123
-
-  persistence:
-    enabled: true
-    storageClass: gp3-csi
-    size: 20Gi
-
-  resources:
-    requests:
-      cpu: 20m
-      memory: 100Mi
-    limits:
-      cpu: 250m
-      memory: 1Gi
-
-  service:
-    type: ClusterIP
-    apiPort: 9000
-    uiPort: 9090
-
-  routes:
-    api:
-      enabled: true
-      tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Redirect
-    ui:
-      enabled: true
-      tls:
-        termination: edge
-        insecureEdgeTerminationPolicy: Redirect
 
 # LokiStack configuration
 lokistack:
@@ -98,6 +55,9 @@ lokistack:
 
   limits:
     global:
+      ingestion:
+        ingestionRate: 50
+        ingestionBurstSize: 50
       queries:
         queryTimeout: 3m
         maxVolumeSeries: 1000
@@ -113,6 +73,7 @@ grafana:
     tag: latest
     pullPolicy: IfNotPresent
 
+  # Grafana web UI login credentials
   adminUser: admin
   adminPassword: admin
 
@@ -163,11 +124,13 @@ grafana:
       termination: edge
       insecureEdgeTerminationPolicy: Redirect
 
+  # RBAC for Grafana backend to query LokiStack API (separate from UI login above)
   rbac:
     enabled: true
     serviceAccount:
       create: true
       name: grafana
+    # ServiceAccount used to authenticate datasource requests to LokiStack
     lokiReader:
       enabled: true
       serviceAccountName: grafana-loki-reader

@@ -73,8 +73,8 @@ chatbotService:
 minio:
   secret:
     create: true
-    user: minio_rag_user
-    password: minio_rag_password
+    user: minio_user
+    password: minio_password
     host: minio
     port: "9000"
   sampleFileUpload:

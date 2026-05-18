@@ -66,8 +66,8 @@ helm-uninstall:
 	helm uninstall hub --namespace $(NAMESPACE) || true
 ifeq ($(ENABLE_LANGFUSE),true)
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
-	kubectl delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
-	kubectl delete secret langfuse-secrets --namespace $(NAMESPACE) || true
+	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
+	oc delete secret langfuse-secrets --namespace $(NAMESPACE) || true
 endif
 
 .PHONY: _langfuse-deploy
@@ -85,10 +85,16 @@ _langfuse-deploy:
 LOKISTACK_RELEASE := lokistack
 LOKISTACK_CHART   := hub/infra/lokistack/chart
 LOKISTACK_NS      ?= $(NAMESPACE)
+LOKISTACK_NAME    ?= logging-loki
 LOKISTACK_EXTRA   ?=
 
+.PHONY: _check-minio
+_check-minio:
+	@oc get statefulset minio -n $(LOKISTACK_NS) -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -qE '^[1-9]' || \
+		{ echo "ERROR: MinIO is not running in namespace '$(LOKISTACK_NS)'. Run 'make helm-install' first."; exit 1; }
+
 .PHONY: lokistack-install
-lokistack-install: namespace
+lokistack-install: _check-minio
 	helm upgrade --install $(LOKISTACK_RELEASE) $(LOKISTACK_CHART) \
 		--namespace $(LOKISTACK_NS) \
 		$(LOKISTACK_EXTRA) \
@@ -97,21 +103,39 @@ lokistack-install: namespace
 .PHONY: lokistack-uninstall
 lokistack-uninstall:
 	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) --ignore-not-found
-	oc delete pvc -l app=minio --namespace $(LOKISTACK_NS) --ignore-not-found
+	oc delete pvc -n $(LOKISTACK_NS) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
+	oc exec -n $(LOKISTACK_NS) statefulset/minio -- sh -c \
+		'mc alias set local http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc rb --force local/loki' || true
 
 .PHONY: lokistack-status
 lokistack-status:
 	@echo "=== LokiStack ==="
 	oc get lokistack -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
 	@echo ""
-	@echo "=== MinIO ==="
-	oc get pods -l app=minio -n $(LOKISTACK_NS)
+	@echo "=== Loki Bucket Job ==="
+	oc get jobs minio-bucket-create -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
 	@echo ""
 	@echo "=== Grafana ==="
 	oc get pods -l app=grafana -n $(LOKISTACK_NS)
 	@echo ""
 	@echo "=== Grafana Route ==="
 	oc get route grafana -n $(LOKISTACK_NS) -o jsonpath='{.spec.host}' 2>/dev/null && echo "" || echo "(none)"
+
+.PHONY: minio-install
+minio-install: namespace
+	helm upgrade --install minio hub/helm/charts/minio \
+		--namespace $(NAMESPACE) \
+		--set global.routes.enabled=$(ROUTES_ENABLED) \
+		--wait --timeout 10m
+
+.PHONY: minio-uninstall
+minio-uninstall:
+	@echo "Uninstalling hub MinIO (this will affect all services using it)..."
+	oc delete statefulset minio --namespace $(NAMESPACE) --ignore-not-found
+	oc delete service minio --namespace $(NAMESPACE) --ignore-not-found
+	oc delete secret minio --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
+	oc delete route minio-api minio-webui --namespace $(NAMESPACE) --ignore-not-found
 
 .PHONY: integration-tests
 integration-tests:
@@ -134,16 +158,16 @@ langfuse-upgrade:
 
 .PHONY: langfuse-port-forward
 langfuse-port-forward:
-	kubectl port-forward svc/langfuse-web $(LANGFUSE_PORT):$(LANGFUSE_PORT) \
+	oc port-forward svc/langfuse-web $(LANGFUSE_PORT):$(LANGFUSE_PORT) \
 		--namespace $(NAMESPACE)
 
 .PHONY: langfuse-status
 langfuse-status:
 	@echo "=== Pods ==="
-	kubectl get pods -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
+	oc get pods -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
 	@echo ""
 	@echo "=== Services ==="
-	kubectl get svc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
+	oc get svc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
 	@echo ""
 	@echo "=== Secrets ==="
-	kubectl get secret langfuse-secrets --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
+	oc get secret langfuse-secrets --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
