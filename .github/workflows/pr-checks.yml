@@ -3,6 +3,12 @@ name: Pull Request Checks
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - 'hub/**'
+      - 'Makefile'
+      - 'scripts/ci/**'
+      - '.github/actions/kind/**'
+      - '.github/workflows/pr-checks.yml'
   workflow_dispatch:
   schedule:
     - cron: '0 2 * * *'  # Run daily at 2 AM UTC
