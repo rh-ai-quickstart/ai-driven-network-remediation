@@ -1,0 +1,20 @@
+[project]
+name = "ingestion-pipeline"
+version = "0.1.0"
+description = "Hello-world service calling Llama Stack server"
+authors = [
+    { name = "rh-ai-quickstart" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "llama-stack-client==0.6.0",
+    "uvicorn>=0.32",
+]
+
+[project.scripts]
+ingestion-pipeline = "ingestion_pipeline:main"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"

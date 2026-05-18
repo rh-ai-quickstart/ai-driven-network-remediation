@@ -1,29 +1,59 @@
 # https://kubernetes.io/docs/concepts/containers/images/
 image:
-  # registry: quay.io/rh-ai-quickstart  # production registry
-  registry: quay.io/ecosystem-appeng
+  registry: quay.io/rh-ai-quickstart
   chatbotService: hub-chatbot-service
-  pullPolicy: IfNotPresent
+  ingestionPipeline: hub-ingestion-pipeline
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "0.0.1"
 
+pgvector:
+  secret:
+    user: postgres
+    password: rag_password
+    dbname: rag_blueprint
+    host: pgvector
+    port: "5432"
+
+llama-stack:
+  host: llamastack
+  port: "8321"
+  replicaCount: 1
+  initContainers:
+    enabled: true
+  resources: {}
+  pgvector:
+    enabled: true
+
+ingestionPipeline:
+  vectorStoreName: noc_runbooks
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
 chatbotService:
   replicaCount: 1
-
   service:
     type: ClusterIP
     port: 80
     targetPort: 8080
-
   resources: {}
-
   livenessProbe:
     httpGet:
       path: /api/hello
       port: 8080
     initialDelaySeconds: 5
     periodSeconds: 10
-
   readinessProbe:
     httpGet:
       path: /api/hello

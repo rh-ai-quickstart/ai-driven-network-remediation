@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hub.fullname" . }}-ingestion-pipeline
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hub.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ingestion-pipeline
+  template:
+    metadata:
+      labels:
+        {{- include "hub.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ingestion-pipeline
+    spec:
+      containers:
+        - name: ingestion-pipeline
+          image: "{{ .Values.image.registry }}/{{ .Values.image.ingestionPipeline }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: LLAMASTACK_HOST
+              value: {{ index .Values "llama-stack" "host" | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ index .Values "llama-stack" "port" | quote }}
+            - name: VECTOR_STORE_NAME
+              value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
+          livenessProbe:
+            {{- toYaml .Values.ingestionPipeline.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.ingestionPipeline.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ingestionPipeline.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hub.fullname" . }}-ingestion-pipeline
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion-pipeline
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "hub.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ingestion-pipeline

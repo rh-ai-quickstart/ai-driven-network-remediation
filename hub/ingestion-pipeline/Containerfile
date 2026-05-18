@@ -1,0 +1,27 @@
+FROM python:3.13-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable --no-dev
+
+COPY . /app
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --no-dev
+
+FROM python:3.13-slim
+
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/runbooks /app/runbooks
+ENV PATH="/app/.venv/bin:$PATH"
+
+EXPOSE 8000
+CMD ["ingestion-pipeline"]

@@ -5,7 +5,8 @@ ARCH           ?= linux/amd64
 NAMESPACE      ?= hub
 PUSH_EXTRA_ARGS ?=
 
-CHATBOT_IMG := $(REGISTRY)/noc-chatbot-service:$(VERSION)
+CHATBOT_IMG    := $(REGISTRY)/noc-chatbot-service:$(VERSION)
+INGESTION_IMG  := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -20,14 +21,17 @@ LANGFUSE_PORT          := 3000
 .PHONY: build-all-images
 build-all-images:
 	$(CONTAINER_TOOL) build -t $(CHATBOT_IMG) --platform=$(ARCH) -f hub/chatbot-service/Containerfile hub/chatbot-service
+	$(CONTAINER_TOOL) build -t $(INGESTION_IMG) --platform=$(ARCH) -f hub/ingestion-pipeline/Containerfile hub/ingestion-pipeline
 
 .PHONY: push-all-images
 push-all-images:
 	$(CONTAINER_TOOL) push $(CHATBOT_IMG) $(PUSH_EXTRA_ARGS)
+	$(CONTAINER_TOOL) push $(INGESTION_IMG) $(PUSH_EXTRA_ARGS)
 
 .PHONY: reinstall-all
 reinstall-all:
 	cd hub/chatbot-service && uv sync --reinstall
+	cd hub/ingestion-pipeline && uv sync --reinstall
 
 .PHONY: namespace
 namespace:
@@ -44,6 +48,7 @@ helm-install: namespace helm-depend
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
 		--set image.chatbotService=noc-chatbot-service \
+		--set image.ingestionPipeline=noc-ingestion-pipeline \
 		--set image.tag=$(VERSION) \
 		--wait --timeout 30m
 ifeq ($(ENABLE_LANGFUSE),true)
@@ -73,8 +78,10 @@ _langfuse-deploy:
 .PHONY: integration-tests
 integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
-	PF_PID=$$!; \
-	trap "kill $$PF_PID" EXIT; \
+	PF1_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
+	PF2_PID=$$!; \
+	trap "kill $$PF1_PID $$PF2_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && uv run pytest
 
 # ── Langfuse day-2 targets ───────────────────────────────────────

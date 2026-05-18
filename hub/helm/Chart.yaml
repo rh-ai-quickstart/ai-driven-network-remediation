@@ -4,3 +4,11 @@ description: Helm chart for the hub component
 type: application
 version: 0.0.1
 appVersion: 0.0.1
+
+dependencies:
+  - name: pgvector
+    version: 0.5.5
+    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+  - name: llama-stack
+    version: 0.7.4
+    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts

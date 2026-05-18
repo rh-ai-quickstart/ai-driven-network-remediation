@@ -82,3 +82,7 @@ kubeconfig
 # Misc
 .DS_Store
 Thumbs.db
+
+# Helm Chart deployment tgz files
+*/helm/charts/*.tgz
+*/helm/tmpcharts*
