@@ -29,6 +29,14 @@ KAFKA_VALUES           := hub/infra/kafka/values.yaml
 KAFKA_PORT             := 9092
 KAFKA_HELM_EXTRA_ARGS  ?=
 
+ADNR_LLM_ENABLED := $(and $(ADNR_LLM_ID),$(ADNR_LLM_URL),$(ADNR_LLM_TOKEN))
+
+helm_adnr_llm_args = \
+	$(if $(ADNR_LLM_ENABLED),--set llama-stack.models.adnr-llm.enabled=true,) \
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.id='$(ADNR_LLM_ID)',) \
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.url='$(ADNR_LLM_URL)',) \
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',)
+
 .PHONY: build-all-images
 build-all-images:
 	$(CONTAINER_TOOL) build -t $(CHATBOT_IMG) --platform=$(ARCH) -f hub/chatbot-service/Containerfile hub/chatbot-service
@@ -62,6 +70,7 @@ helm-install: namespace helm-depend
 		--set image.ingestionPipeline=noc-ingestion-pipeline \
 		--set global.routes.enabled=$(ROUTES_ENABLED) \
 		--set image.tag=$(VERSION) \
+		$(helm_adnr_llm_args) \
 		$(HELM_EXTRA_ARGS) \
 		--wait --timeout 30m
 ifeq ($(ENABLE_LANGFUSE),true)

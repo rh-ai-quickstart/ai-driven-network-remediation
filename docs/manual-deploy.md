@@ -6,6 +6,12 @@ $NAMESPACE default `hub`: namespace used to install the Hub
 $REGISTRY default `quay.io/rh-ai-quickstart`: Remote container registry
 $VERSION default `0.1.0`: Versions for all container images
 
+To expose the ADNR-backed Llama Stack model during `make helm-install`, also set:
+
+- `$ADNR_LLM_ID`: model identifier registered in Llama Stack
+- `$ADNR_LLM_URL`: remote OpenAI-compatible or vLLM endpoint
+- `$ADNR_LLM_TOKEN`: bearer token for that endpoint
+
 1. Login to OpenShift remote cluster. For instance:
 
 ```bash

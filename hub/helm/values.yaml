@@ -28,6 +28,16 @@ llama-stack:
   resources: {}
   pgvector:
     enabled: true
+  # `make helm-install` enables this model when ADNR_LLM_* vars are provided.
+  # The upstream wait-for-models init container expands model URL and token
+  # directly in Bash, so these fields must be concrete values.
+  models:
+    adnr-llm:
+      id: ""
+      enabled: false
+      url: ""
+      apiToken: ""
+      maxTokens: 4096
 
 ingestionPipeline:
   vectorStoreName: noc_runbooks
