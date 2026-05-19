@@ -32,6 +32,24 @@ spec:
               value: {{ index .Values "llama-stack" "port" | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.ingestionPipeline.minio.endpoint | quote }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: user
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio
+                  key: password
+            - name: MINIO_BUCKET
+              value: {{ .Values.ingestionPipeline.minio.bucket | quote }}
+            - name: MINIO_SECURE
+              value: {{ .Values.ingestionPipeline.minio.secure | quote }}
+            - name: MINIO_RUNBOOK_PREFIX
+              value: {{ .Values.ingestionPipeline.minio.runbookPrefix | quote }}
           livenessProbe:
             {{- toYaml .Values.ingestionPipeline.livenessProbe | nindent 12 }}
           readinessProbe:

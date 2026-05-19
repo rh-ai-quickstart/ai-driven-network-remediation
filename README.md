@@ -248,7 +248,7 @@ See [Langfuse Deployment Guide](docs/langfuse-deploy.md) for details.
 ### Data Persistence
 
 - **Incident state** → PostgreSQL (LangGraph checkpoint)
-- **Runbooks** → PostgreSQL + pgvector (RAG)
+- **Runbooks** → MinIO object storage + PostgreSQL/pgvector (RAG)
 - **Traces** → Langfuse (observability)
 - **Playbook definitions** → AAP (Ansible)
 - **Logs** → Kafka (event stream)

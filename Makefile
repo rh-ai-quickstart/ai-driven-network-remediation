@@ -4,6 +4,7 @@ VERSION        ?= 0.1.0
 ARCH           ?= linux/amd64
 NAMESPACE      ?= hub
 PUSH_EXTRA_ARGS ?=
+ROUTES_ENABLED ?= true
 
 CHATBOT_IMG    := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG  := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
@@ -49,6 +50,7 @@ helm-install: namespace helm-depend
 		--set image.registry=$(REGISTRY) \
 		--set image.chatbotService=noc-chatbot-service \
 		--set image.ingestionPipeline=noc-ingestion-pipeline \
+		--set global.routes.enabled=$(ROUTES_ENABLED) \
 		--set image.tag=$(VERSION) \
 		--wait --timeout 30m
 ifeq ($(ENABLE_LANGFUSE),true)

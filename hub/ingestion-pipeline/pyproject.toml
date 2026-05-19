@@ -1,7 +1,7 @@
 [project]
 name = "ingestion-pipeline"
 version = "0.1.0"
-description = "Hello-world service calling Llama Stack server"
+description = "Service for syncing runbooks to MinIO and ingesting them into a Llama Stack vector store"
 authors = [
     { name = "rh-ai-quickstart" }
 ]
@@ -9,6 +9,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
     "llama-stack-client==0.6.0",
+    "minio>=7.2.20",
     "uvicorn>=0.32",
 ]
 

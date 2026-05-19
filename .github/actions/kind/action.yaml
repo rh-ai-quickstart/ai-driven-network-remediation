@@ -32,6 +32,6 @@ runs:
       shell: bash
 
     - name: Helm Install
-      run: make helm-install REGISTRY=localhost:5001
+      run: make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false
       shell: bash
 

@@ -7,6 +7,10 @@ image:
   # Overrides the image tag whose default is the chart appVersion.
   tag: "0.0.1"
 
+global:
+  routes:
+    enabled: true
+
 pgvector:
   secret:
     user: postgres
@@ -27,6 +31,11 @@ llama-stack:
 
 ingestionPipeline:
   vectorStoreName: noc_runbooks
+  minio:
+    endpoint: minio:9000
+    bucket: runbooks
+    secure: false
+    runbookPrefix: runbooks/
   resources: {}
   livenessProbe:
     httpGet:
@@ -60,3 +69,13 @@ chatbotService:
       port: 8080
     initialDelaySeconds: 5
     periodSeconds: 10
+
+minio:
+  secret:
+    create: true
+    user: minio_rag_user
+    password: minio_rag_password
+    host: minio
+    port: "9000"
+  sampleFileUpload:
+    enabled: false
