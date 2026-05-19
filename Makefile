@@ -21,11 +21,12 @@ LANGFUSE_SECRET_SCRIPT := hub/infra/langfuse/create-secrets.sh
 LANGFUSE_PORT          := 3000
 
 # ── Kafka (optional: ENABLE_KAFKA=true) ─────────────────────────
-ENABLE_KAFKA         ?=
-ENABLE_KAFKA_UI      ?= true
-KAFKA_RELEASE        := kafka
-KAFKA_VALUES         := hub/infra/kafka/values.yaml
-KAFKA_PORT           := 9092
+ENABLE_KAFKA           ?=
+ENABLE_KAFKA_UI        ?= true
+KAFKA_RELEASE          := kafka
+KAFKA_VALUES           := hub/infra/kafka/values.yaml
+KAFKA_PORT             := 9092
+KAFKA_HELM_EXTRA_ARGS  ?=
 
 .PHONY: build-all-images
 build-all-images:
@@ -126,7 +127,8 @@ kafka-install:
 		--values $(KAFKA_VALUES) \
 		--set kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 		--set kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
-		--set kafkaUI.route.enabled=$(ROUTES_ENABLED)
+		--set kafkaUI.route.enabled=$(ROUTES_ENABLED) \
+		$(KAFKA_HELM_EXTRA_ARGS)
 
 .PHONY: kafka-uninstall
 kafka-uninstall:
