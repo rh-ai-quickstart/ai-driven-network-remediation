@@ -1,10 +1,11 @@
-CONTAINER_TOOL ?= podman
-REGISTRY       ?= quay.io/rh-ai-quickstart
-VERSION        ?= 0.1.0
-ARCH           ?= linux/amd64
-NAMESPACE      ?= hub
+CONTAINER_TOOL  ?= podman
+REGISTRY        ?= quay.io/rh-ai-quickstart
+VERSION         ?= 0.1.0
+ARCH            ?= linux/amd64
+NAMESPACE       ?= hub
+RELEASE         ?= hub
 PUSH_EXTRA_ARGS ?=
-ROUTES_ENABLED ?= true
+ROUTES_ENABLED  ?= true
 
 CHATBOT_IMG    := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG  := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
@@ -52,7 +53,7 @@ helm-depend:
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
-	helm upgrade --install hub hub/helm \
+	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
 		--set image.chatbotService=noc-chatbot-service \
@@ -70,7 +71,7 @@ endif
 
 .PHONY: helm-uninstall
 helm-uninstall:
-	helm uninstall hub --namespace $(NAMESPACE) --ignore-not-found
+	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 ifeq ($(ENABLE_LANGFUSE),true)
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
