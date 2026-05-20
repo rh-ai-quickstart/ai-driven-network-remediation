@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
 from dataclasses import dataclass
+from io import BytesIO
 from urllib.parse import urlparse
 
 from minio import Minio

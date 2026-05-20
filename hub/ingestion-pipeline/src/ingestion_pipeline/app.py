@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-
 from ingestion_pipeline.clients.llamastack import (
     LlamaStackVectorStoreClient,
     VectorStoreFileContentSummary,
@@ -147,5 +146,3 @@ def vector_store_file_content(file_id: str) -> dict[str, Any]:
             for item in summary.data
         ],
     }
-
-

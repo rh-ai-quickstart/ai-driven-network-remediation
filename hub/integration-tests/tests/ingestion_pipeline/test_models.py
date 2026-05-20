@@ -24,7 +24,10 @@ def test_runbooks_sync_ingest_and_content_flow(ingestion_client):
     assert sync_data["bucket"] == "runbooks"
     assert sync_data["prefix"] == "runbooks/"
     assert sync_data["uploaded_count"] + sync_data["skipped_count"] > 0
-    assert "runbooks/nginx-crashloop.md" in sync_data["uploaded_objects"] or "runbooks/nginx-crashloop.md" in sync_data["skipped_objects"]
+    assert (
+        "runbooks/nginx-crashloop.md" in sync_data["uploaded_objects"]
+        or "runbooks/nginx-crashloop.md" in sync_data["skipped_objects"]
+    )
 
     ingest_response = ingestion_client.post("/runbooks/ingest", timeout=60.0)
     assert ingest_response.status_code == 200
