@@ -21,7 +21,7 @@ LANGFUSE_SECRET_SCRIPT := hub/infra/langfuse/create-secrets.sh
 LANGFUSE_PORT          := 3000
 
 # ── Kafka (optional: ENABLE_KAFKA=true) ─────────────────────────
-ENABLE_KAFKA           ?=
+ENABLE_KAFKA           ?= true
 ENABLE_KAFKA_UI        ?= true
 KAFKA_RELEASE          := kafka
 KAFKA_VALUES           := hub/infra/kafka/values.yaml
