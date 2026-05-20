@@ -32,6 +32,16 @@ runs:
       shell: bash
 
     - name: Helm Install
-      run: make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false
+      run: |
+        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
+          KAFKA_HELM_EXTRA_ARGS="\
+            --set kafka.storage.storageClass=standard \
+            --set kafka.storage.size=256Mi \
+            --set kafka.retention.hours=1 \
+            --set kafka.retention.bytes=10485760 \
+            --set kafka.resources.requests.cpu=100m \
+            --set kafka.resources.requests.memory=256Mi \
+            --set kafka.resources.limits.cpu=500m \
+            --set kafka.resources.limits.memory=512Mi"
       shell: bash
 

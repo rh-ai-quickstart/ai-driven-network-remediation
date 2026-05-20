@@ -1,0 +1,139 @@
+{{- if .Values.kafka.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  labels:
+    app: kafka
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - { name: broker, port: {{ .Values.kafka.service.port }} }
+    - { name: controller, port: {{ .Values.kafka.controllerPort }} }
+    {{- if .Values.kafka.tls.enabled }}
+    - { name: external, port: {{ .Values.kafka.externalPort }} }
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app: kafka
+spec:
+  selector:
+    app: kafka
+  ports:
+    - { name: broker, port: {{ .Values.kafka.service.port }} }
+    {{- if .Values.kafka.tls.enabled }}
+    - { name: external, port: {{ .Values.kafka.externalPort }} }
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  labels:
+    app: kafka
+spec:
+  serviceName: kafka-headless
+  replicas: {{ .Values.kafka.replicas }}
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      initContainers:
+        - name: init-config
+          image: {{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}
+          command: ["sh", "-c", "cp -r /opt/kafka/config/* /tmp/kafka-config/"]
+          volumeMounts:
+            - { name: config, mountPath: /tmp/kafka-config }
+        {{- if .Values.kafka.tls.enabled }}
+        - name: init-tls
+          image: {{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
+                -in /tls-secret/tls.key -out /tmp/pk8.key
+              cat /tmp/pk8.key /tls-secret/tls.crt > /prepared-tls/keystore.pem
+              cp /tls-secret/ca.crt /prepared-tls/truststore.pem
+          volumeMounts:
+            - { name: tls-secret, mountPath: /tls-secret, readOnly: true }
+            - { name: tls, mountPath: /prepared-tls }
+        {{- end }}
+      containers:
+        - name: kafka
+          image: {{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}
+          imagePullPolicy: {{ .Values.kafka.image.pullPolicy }}
+          ports:
+            - { containerPort: {{ .Values.kafka.service.port }}, name: broker }
+            - { containerPort: {{ .Values.kafka.controllerPort }}, name: controller }
+            {{- if .Values.kafka.tls.enabled }}
+            - { containerPort: {{ .Values.kafka.externalPort }}, name: external }
+            {{- end }}
+          env:
+            - name: KAFKA_NODE_ID
+              value: "1"  # TODO: PRODUCTION: Derive from pod ordinal for replicas>1 (use fieldRef metadata.name)
+            - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@kafka-0.kafka-headless.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.kafka.controllerPort }}"  # TODO: PRODUCTION: Generate voter list for all replicas
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:{{ .Values.kafka.service.port }},CONTROLLER://:{{ .Values.kafka.controllerPort }}{{- if .Values.kafka.tls.enabled }},EXTERNAL://:{{ .Values.kafka.externalPort }}{{- end }}"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.kafka.service.port }}{{- if .Values.kafka.tls.enabled }},EXTERNAL://{{ include "kafka.externalHost" . }}:443{{- end }}"
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER" }
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT{{- if .Values.kafka.tls.enabled }},EXTERNAL:SSL{{- end }}"
+            - { name: KAFKA_INTER_BROKER_LISTENER_NAME, value: "PLAINTEXT" }
+            - { name: CLUSTER_ID, value: {{ .Values.kafka.clusterId | quote }} }
+            - { name: KAFKA_LOG_DIRS, value: "/var/kafka/data/kafka-logs" }
+            - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: {{ .Values.kafka.autoCreateTopics | quote }} }
+            - { name: KAFKA_LOG_RETENTION_HOURS, value: {{ .Values.kafka.retention.hours | quote }} }
+            - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: {{ .Values.kafka.replicas | quote }} }
+            {{- if .Values.kafka.tls.enabled }}
+            - { name: KAFKA_SSL_KEYSTORE_TYPE, value: "PEM" }
+            - { name: KAFKA_SSL_KEYSTORE_LOCATION, value: "/opt/kafka/tls/keystore.pem" }
+            - { name: KAFKA_SSL_TRUSTSTORE_TYPE, value: "PEM" }
+            - { name: KAFKA_SSL_TRUSTSTORE_LOCATION, value: "/opt/kafka/tls/truststore.pem" }
+            - { name: KAFKA_SSL_CLIENT_AUTH, value: "required" }
+            {{- end }}
+          resources:
+            {{- toYaml .Values.kafka.resources | nindent 12 }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.kafka.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          volumeMounts:
+            - { name: data, mountPath: /var/kafka/data }
+            - { name: config, mountPath: /opt/kafka/config }
+            - { name: logs, mountPath: /opt/kafka/logs }
+            {{- if .Values.kafka.tls.enabled }}
+            - { name: tls, mountPath: /opt/kafka/tls, readOnly: true }
+            {{- end }}
+      volumes:
+        - { name: config, emptyDir: {} }
+        - { name: logs, emptyDir: {} }
+        {{- if .Values.kafka.tls.enabled }}
+        - name: tls-secret
+          secret:
+            secretName: kafka-tls
+        - { name: tls, emptyDir: {} }
+        {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.kafka.storage.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.kafka.storage.size }}
+{{- end }}

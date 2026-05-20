@@ -1,0 +1,41 @@
+{{- if and .Values.kafka.enabled .Values.kafka.topics }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-create-topics
+  labels:
+    app: kafka
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: kafka-topics
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-kafka
+          image: {{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              until /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:{{ .Values.kafka.service.port }} >/dev/null 2>&1; do
+                echo "waiting for kafka..."; sleep 5
+              done
+      containers:
+        - name: create-topics
+          image: {{ .Values.kafka.image.repository }}:{{ .Values.kafka.image.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              {{- range .Values.kafka.topics }}
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:{{ $.Values.kafka.service.port }} \
+                --create --if-not-exists \
+                --topic {{ .name }} \
+                --partitions {{ .partitions }} \
+                --config retention.ms={{ .retention | int64 }}
+              {{- end }}
+{{- end }}

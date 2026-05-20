@@ -1,0 +1,52 @@
+kafka:
+  enabled: true
+  replicas: 1  # TODO: PRODUCTION: Set to 3 for HA
+  clusterId: "MkU3OEVBNTcwNTJENDM2Qk"  # TODO: PRODUCTION: Generate unique ID (kafka-storage.sh random-uuid)
+  autoCreateTopics: true
+  image:
+    repository: apache/kafka
+    tag: "4.1.2"
+    pullPolicy: IfNotPresent
+  service:
+    port: 9092
+  controllerPort: 9093
+  storage:
+    size: 10Gi
+    storageClass: gp3-csi
+  retention:
+    hours: "168"
+  resources:  # TODO: PRODUCTION: Increase for production workload
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  topics:
+    - { name: system-alerts, partitions: 3, retention: 604800000 }
+    - { name: noc-alerts, partitions: 1, retention: 2592000000 }
+    - { name: remediation-jobs, partitions: 1, retention: 86400000 }
+    - { name: agent-events, partitions: 1, retention: 86400000 }
+    - { name: incident-audit, partitions: 1, retention: 7776000000 }
+  externalPort: 9094
+  tls:
+    enabled: true
+  externalRoute:
+    enabled: true
+    host: ""  # Auto-discovered from OpenShift ingress config; override only if needed
+
+kafkaUI:
+  enabled: true
+  image:
+    repository: kafbat/kafka-ui
+    tag: "v1.5.0"
+    pullPolicy: IfNotPresent
+  route:
+    enabled: true
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

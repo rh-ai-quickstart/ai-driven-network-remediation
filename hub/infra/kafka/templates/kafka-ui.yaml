@@ -1,0 +1,63 @@
+{{- if .Values.kafkaUI.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui
+  labels:
+    app: kafka-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+        - name: kafka-ui
+          image: {{ .Values.kafkaUI.image.repository }}:{{ .Values.kafkaUI.image.tag }}
+          imagePullPolicy: {{ .Values.kafkaUI.image.pullPolicy }}
+          ports:
+            - { containerPort: 8080, name: http }
+          env:
+            - { name: KAFKA_CLUSTERS_0_NAME, value: kafka }
+            - { name: KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS, value: "kafka:{{ .Values.kafka.service.port }}" }
+            - { name: DYNAMIC_CONFIG_ENABLED, value: "true" }
+          resources:
+            {{- toYaml .Values.kafkaUI.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui
+  labels:
+    app: kafka-ui
+spec:
+  type: ClusterIP
+  selector:
+    app: kafka-ui
+  ports:
+    - { port: 8080, targetPort: 8080, name: http }
+{{- if .Values.kafkaUI.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-ui
+spec:
+  to:
+    kind: Service
+    name: kafka-ui
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }}
