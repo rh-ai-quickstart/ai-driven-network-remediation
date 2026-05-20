@@ -39,6 +39,29 @@ lokistack:
   # Options: 1x.extra-small (dev), 1x.small, 1x.medium (production)
   size: 1x.extra-small
 
+  # Replication factor for log streams
+  # Set to 1 for dev/test environments with limited cluster resources
+  # Set to 2+ for production HA
+  replication:
+    factor: 1
+
+  # Component-level replica overrides
+  # Reduces resource requirements for dev/test environments
+  # All components set to 1 replica (no HA) for minimal resource usage
+  template:
+    distributor:
+      replicas: 1
+    gateway:
+      replicas: 1
+    indexGateway:
+      replicas: 1
+    ingester:
+      replicas: 1
+    querier:
+      replicas: 1
+    queryFrontend:
+      replicas: 1
+
   storage:
     secret:
       name: logging-loki-s3
@@ -125,14 +148,12 @@ grafana:
       insecureEdgeTerminationPolicy: Redirect
 
   # RBAC for Grafana backend to query LokiStack API (separate from UI login above)
+  # These resources are always created when Grafana is enabled (required for LokiStack auth)
   rbac:
-    enabled: true
     serviceAccount:
-      create: true
       name: grafana
     # ServiceAccount used to authenticate datasource requests to LokiStack
     lokiReader:
-      enabled: true
       serviceAccountName: grafana-loki-reader
 
 # Test log generator (enable for dev/testing)

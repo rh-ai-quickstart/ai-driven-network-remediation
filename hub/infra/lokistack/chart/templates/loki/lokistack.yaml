@@ -6,6 +6,14 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   size: {{ .Values.lokistack.size }}
+  {{- if .Values.lokistack.replication }}
+  replication:
+    {{- toYaml .Values.lokistack.replication | nindent 4 }}
+  {{- end }}
+  {{- if .Values.lokistack.template }}
+  template:
+    {{- toYaml .Values.lokistack.template | nindent 4 }}
+  {{- end }}
   storage:
     schemas:
       {{- toYaml .Values.lokistack.storage.schemas | nindent 6 }}

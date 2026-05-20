@@ -88,13 +88,32 @@ LOKISTACK_NS      ?= $(NAMESPACE)
 LOKISTACK_NAME    ?= logging-loki
 LOKISTACK_EXTRA   ?=
 
+.PHONY: _check-loki-operator
+_check-loki-operator:
+	@oc get csv -A 2>/dev/null | grep -q "loki-operator" || \
+		{ echo ""; \
+		  echo "ERROR: Loki Operator is not installed on this cluster."; \
+		  echo ""; \
+		  echo "The LokiStack requires the Loki Operator to be installed first."; \
+		  echo ""; \
+		  echo "To install the Loki Operator:"; \
+		  echo "  1. In the OpenShift web console, navigate to:"; \
+		  echo "     Operators → OperatorHub"; \
+		  echo "  2. Search for 'Loki Operator'"; \
+		  echo "  3. Select 'Loki Operator' (provided by Red Hat)"; \
+		  echo "  4. Click 'Install' and follow the installation wizard"; \
+		  echo "  5. Choose installation mode (all namespaces recommended)"; \
+		  echo "  6. Wait for the operator to become ready"; \
+		  echo ""; \
+		  exit 1; }
+
 .PHONY: _check-minio
 _check-minio:
 	@oc get statefulset minio -n $(LOKISTACK_NS) -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -qE '^[1-9]' || \
 		{ echo "ERROR: MinIO is not running in namespace '$(LOKISTACK_NS)'. Run 'make helm-install' first."; exit 1; }
 
 .PHONY: lokistack-install
-lokistack-install: _check-minio
+lokistack-install: _check-loki-operator _check-minio
 	helm upgrade --install $(LOKISTACK_RELEASE) $(LOKISTACK_CHART) \
 		--namespace $(LOKISTACK_NS) \
 		$(LOKISTACK_EXTRA) \

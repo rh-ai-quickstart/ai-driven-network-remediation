@@ -1,14 +1,10 @@
 {{- if .Values.grafana.enabled }}
-{{- if .Values.grafana.rbac.enabled }}
-{{- if .Values.grafana.rbac.serviceAccount.create }}
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ .Values.grafana.rbac.serviceAccount.name }}
   namespace: {{ include "lokistack.namespace" . }}
-{{- end }}
-{{- if .Values.grafana.rbac.lokiReader.enabled }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -52,6 +48,4 @@ metadata:
   annotations:
     kubernetes.io/service-account.name: {{ .Values.grafana.rbac.lokiReader.serviceAccountName }}
 type: kubernetes.io/service-account-token
-{{- end }}
-{{- end }}
 {{- end }}
