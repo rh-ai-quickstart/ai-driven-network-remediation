@@ -56,4 +56,3 @@ def draw_graph(output: Path, config: Optional[GraphConfig] = None) -> None:
     compiled = build_graph(config)
     png_bytes = compiled.get_graph().draw_mermaid_png()
     output.write_bytes(png_bytes)
-

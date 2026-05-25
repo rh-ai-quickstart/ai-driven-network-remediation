@@ -44,9 +44,7 @@ class TestLinearFlow:
 
 class TestConditionalRouting:
     def test_high_confidence_routes_through_execute(self):
-        with patch(
-            "agent_service.graph.analyze_node", _make_analyze_stub(0.85)
-        ):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.85)):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event"})
 
@@ -55,9 +53,7 @@ class TestConditionalRouting:
         assert len(result["notifications_sent"]) > 0
 
     def test_low_confidence_routes_through_escalate(self):
-        with patch(
-            "agent_service.graph.analyze_node", _make_analyze_stub(0.5)
-        ):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.5)):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event"})
 
@@ -65,9 +61,7 @@ class TestConditionalRouting:
         assert len(result["notifications_sent"]) > 0
 
     def test_mid_confidence_routes_through_request_approval(self):
-        with patch(
-            "agent_service.graph.analyze_node", _make_analyze_stub(0.75)
-        ):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.75)):
             graph = build_graph()
             result = graph.invoke({"raw_event": "test event"})
 
@@ -77,9 +71,7 @@ class TestConditionalRouting:
 
     def test_custom_thresholds_alter_routing(self):
         config = GraphConfig(remediate_threshold=0.9, escalate_threshold=0.8)
-        with patch(
-            "agent_service.graph.analyze_node", _make_analyze_stub(0.85)
-        ):
+        with patch("agent_service.graph.analyze_node", _make_analyze_stub(0.85)):
             graph = build_graph(config)
             result = graph.invoke({"raw_event": "test event"})
 
@@ -89,9 +81,7 @@ class TestConditionalRouting:
 class TestConfidenceOverride:
     def test_confidence_override_controls_routing(self):
         graph = build_graph()
-        result = graph.invoke(
-            {"raw_event": "test event", "confidence_override": 0.5}
-        )
+        result = graph.invoke({"raw_event": "test event", "confidence_override": 0.5})
 
         assert result["root_cause_analysis"].confidence == 0.5
         assert result["decision"] == "escalate"
