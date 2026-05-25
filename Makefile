@@ -175,6 +175,10 @@ minio-uninstall:
 	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete route minio-api minio-webui --namespace $(NAMESPACE) --ignore-not-found
 
+.PHONY: unit-tests
+unit-tests:
+	cd hub/agent-service && uv run pytest
+
 .PHONY: integration-tests
 integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \

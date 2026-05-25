@@ -7,7 +7,12 @@ authors = [
     { name = "rh-ai-quickstart" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "click>=8.1.0",
+    "langgraph>=1.0.0",
+    "loguru>=0.7.0",
+    "pydantic>=2.0.0",
+]
 
 [project.scripts]
 agent-service = "agent_service:main"
@@ -15,3 +20,11 @@ agent-service = "agent_service:main"
 [build-system]
 requires = ["uv_build>=0.9.13,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+]
