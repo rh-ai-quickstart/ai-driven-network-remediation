@@ -23,9 +23,21 @@ spec:
             - -c
             - |
               while true; do
-                echo "$(date -Iseconds) - INFO - Log message from test generator"
-                echo "$(date -Iseconds) - ERROR - Error log message for testing"
-                echo "$(date -Iseconds) - WARN - Warning log message"
+                echo "$(date -Iseconds) [LOKITEST] INFO: Application started - network monitoring service v1.0"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] ERROR: BGP peer 10.0.0.1 connection dropped - session reset"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] WARN: Interface eth0 packet loss detected - 15pct drop rate"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] ERROR: Network timeout on route 192.168.1.0/24 - retrying connection"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] INFO: Health check passed - all services operational"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] ERROR: Link flap detected on port GigabitEthernet0/1 - state DOWN"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] CRITICAL: OSPF adjacency lost on router-id 10.0.0.5 - neighbor unreachable"
+                sleep {{ .Values.testLogGenerator.interval }}
+                echo "$(date -Iseconds) [LOKITEST] INFO: Request abc12345-6789-0abc-def0-123456789abc completed in 42ms"
                 sleep {{ .Values.testLogGenerator.interval }}
               done
 {{- end }}

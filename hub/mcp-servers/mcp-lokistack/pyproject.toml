@@ -11,6 +11,7 @@ dependencies = [
     "mcp[cli]>=1.23",
     "httpx>=0.28",
     "uvicorn>=0.34",
+    "tenacity>=8.0",
 ]
 
 [project.scripts]
@@ -19,3 +20,10 @@ mcp-lokistack = "mcp_lokistack:main"
 [build-system]
 requires = ["uv_build>=0.9.13,<0.10.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-asyncio", "pytest-cov", "respx>=0.22"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=mcp_lokistack --cov-report=term-missing"

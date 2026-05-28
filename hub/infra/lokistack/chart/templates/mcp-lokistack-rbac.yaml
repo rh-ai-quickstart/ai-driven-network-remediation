@@ -1,0 +1,91 @@
+{{- if .Values.mcpLokistack.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+  namespace: {{ include "lokistack.namespace" . }}
+---
+# Explicit ClusterRole granting access to LokiStack tenants via the gateway OPA policy.
+# The gateway performs a SubjectAccessReview for "get application.loki.grafana.com"
+# before allowing queries. This role ensures that check passes regardless of whether
+# the operator-managed cluster-logging-*-reader ClusterRoles exist on this cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+rules:
+  - apiGroups: ["loki.grafana.com"]
+    resources: ["application", "infrastructure", "audit"]
+    resourceNames: ["logs"]
+    verbs: ["get"]
+  - apiGroups: ["project.openshift.io"]
+    resources: ["projects"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+    namespace: {{ include "lokistack.namespace" . }}
+---
+# Keep bindings to operator-managed ClusterRoles as a fallback for clusters
+# that enforce the cluster-logging-* roles in their OPA policies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}-application
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-logging-application-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+    namespace: {{ include "lokistack.namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}-infrastructure
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-logging-infrastructure-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+    namespace: {{ include "lokistack.namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}-audit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-logging-audit-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+    namespace: {{ include "lokistack.namespace" . }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mcp-lokistack-token
+  namespace: {{ include "lokistack.namespace" . }}
+  annotations:
+    kubernetes.io/service-account.name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+type: kubernetes.io/service-account-token
+{{- end }}

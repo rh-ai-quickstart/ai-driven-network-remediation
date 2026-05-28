@@ -42,6 +42,15 @@ KAFKA_VALUES           := hub/infra/kafka/values.yaml
 KAFKA_PORT             := 9092
 KAFKA_HELM_EXTRA_ARGS  ?=
 
+# ── LokiStack (optional: ENABLE_LOKISTACK=true) ─────────────────
+ENABLE_LOKISTACK       ?= true
+ENABLE_LOKISTACK_TEST  ?= false
+LOKISTACK_RELEASE      := lokistack
+LOKISTACK_CHART        := hub/infra/lokistack/chart
+LOKISTACK_NAMESPACE    ?= $(NAMESPACE)
+LOKISTACK_NAME         ?= logging-loki
+LOKISTACK_EXTRA        ?=
+
 # ── MinIO ────────────────────────────────────────────────────────
 ENABLE_MINIO           ?= true
 MINIO_RELEASE          := minio
@@ -128,6 +137,8 @@ ifeq ($(ENABLE_HUB),true)
 		--set global.routes.enabled=$(ROUTES_ENABLED) \
 		--set image.tag=$(VERSION) \
 		$(helm_mcp_image_args) \
+		--set-string lokistack.name='$(LOKISTACK_NAME)' \
+		--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
 		$(helm_adnr_llm_args) \
 		$(HELM_EXTRA_ARGS) \
 		--wait --timeout 30m
@@ -148,6 +159,9 @@ endif
 helm-uninstall:
 ifeq ($(ENABLE_HUB),true)
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+ifeq ($(ENABLE_LOKISTACK),true)
+	$(MAKE) lokistack-uninstall
+endif
 ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-uninstall
 endif
@@ -174,13 +188,6 @@ _langfuse-deploy:
 		--values $(LANGFUSE_VALUES) \
 		--version $(LANGFUSE_CHART_VERSION) \
 		--wait --timeout 10m
-
-# ── LokiStack ───────────────────────────────────────────────────
-LOKISTACK_RELEASE := lokistack
-LOKISTACK_CHART   := hub/infra/lokistack/chart
-LOKISTACK_NS      ?= $(NAMESPACE)
-LOKISTACK_NAME    ?= logging-loki
-LOKISTACK_EXTRA   ?=
 
 .PHONY: _check-loki-operator
 _check-loki-operator:
@@ -209,30 +216,32 @@ _check-minio:
 .PHONY: lokistack-install
 lokistack-install: _check-loki-operator _check-minio
 	helm upgrade --install $(LOKISTACK_RELEASE) $(LOKISTACK_CHART) \
-		--namespace $(LOKISTACK_NS) \
+		--namespace $(LOKISTACK_NAMESPACE) \
+		--set-string lokistack.name='$(LOKISTACK_NAME)' \
+		--set testLogGenerator.enabled=$(ENABLE_LOKISTACK_TEST) \
 		$(LOKISTACK_EXTRA) \
 		--wait --timeout 15m
 
 .PHONY: lokistack-uninstall
 lokistack-uninstall:
-	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) --ignore-not-found
-	oc delete pvc -n $(LOKISTACK_NS) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
-	oc exec -n $(LOKISTACK_NS) statefulset/minio -- sh -c \
+	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NAMESPACE) --ignore-not-found
+	oc delete pvc -n $(LOKISTACK_NAMESPACE) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
+	oc exec -n $(LOKISTACK_NAMESPACE) statefulset/minio -- sh -c \
 		'mc alias set local http://localhost:$(MINIO_PORT) $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc rb --force local/loki' || true
 
 .PHONY: lokistack-status
 lokistack-status:
 	@echo "=== LokiStack ==="
-	oc get lokistack -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
+	oc get lokistack -n $(LOKISTACK_NAMESPACE) 2>/dev/null || echo "(none)"
 	@echo ""
 	@echo "=== Loki Bucket Job ==="
-	oc get jobs minio-bucket-create -n $(LOKISTACK_NS) 2>/dev/null || echo "(none)"
+	oc get jobs minio-bucket-create -n $(LOKISTACK_NAMESPACE) 2>/dev/null || echo "(none)"
 	@echo ""
 	@echo "=== Grafana ==="
-	oc get pods -l app=grafana -n $(LOKISTACK_NS)
+	oc get pods -l app=grafana -n $(LOKISTACK_NAMESPACE)
 	@echo ""
 	@echo "=== Grafana Route ==="
-	oc get route grafana -n $(LOKISTACK_NS) -o jsonpath='{.spec.host}' 2>/dev/null && echo "" || echo "(none)"
+	oc get route grafana -n $(LOKISTACK_NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null && echo "" || echo "(none)"
 
 .PHONY: minio-install
 minio-install: namespace

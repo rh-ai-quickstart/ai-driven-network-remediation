@@ -156,11 +156,32 @@ grafana:
     lokiReader:
       serviceAccountName: grafana-loki-reader
 
+# MCP LokiStack reader RBAC (ServiceAccount + RoleBindings + token Secret)
+mcpLokistack:
+  enabled: true
+  rbac:
+    serviceAccountName: mcp-lokistack-reader
+
+# ClusterLogForwarder — collects pod logs and forwards them to LokiStack.
+# Runs in the openshift-logging namespace (where the log collector DaemonSet lives).
+# The logcollector ServiceAccount and its RBAC are managed by the Loki Operator.
+clusterLogForwarder:
+  enabled: true
+  name: instance
+  namespace: openshift-logging
+  serviceAccountName: logcollector
+  tls:
+    insecureSkipVerify: true
+  pipelines:
+    application: true
+    infrastructure: true
+    audit: false
+
 # Test log generator (enable for dev/testing)
 testLogGenerator:
   enabled: false
   replicas: 1
   image:
-    repository: busybox
+    repository: curlimages/curl
     tag: latest
   interval: 5

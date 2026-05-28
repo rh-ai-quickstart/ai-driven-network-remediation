@@ -1,6 +1,7 @@
 """LokiStack MCP server configuration."""
 
 import os
+from pathlib import Path
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
@@ -11,17 +12,49 @@ MCP_TRANSPORT: Literal["stdio", "sse", "streamable-http"] = os.environ.get(
 MCP_PORT = int(os.environ.get("MCP_PORT", "8002"))
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 
-LOKI_URL = os.getenv("LOKI_URL", "http://logging-loki-gateway.openshift-logging.svc:8080")
+LOKI_URL = os.getenv(
+    "LOKI_URL",
+    "https://logging-loki-gateway-http.openshift-logging.svc:8080",
+)
 LOKI_TOKEN = os.getenv("LOKI_TOKEN", "")
-DEFAULT_NAMESPACE = os.getenv("DEFAULT_NAMESPACE", "dark-noc-edge")
+LOKI_TOKEN_PATH = os.getenv("LOKI_TOKEN_PATH", "")
+LOKI_TLS_VERIFY = os.getenv("LOKI_TLS_VERIFY", "false").lower() == "true"
+LOKI_CA_CERT_PATH = os.getenv("LOKI_CA_CERT_PATH", "")
+
+LOKI_DEFAULT_TENANT = os.getenv("LOKI_DEFAULT_TENANT", "application")
+VALID_TENANTS = ("application", "infrastructure", "audit")
+
+LOKI_MAX_LINES = int(os.getenv("LOKI_MAX_LINES", "100"))  # cap log lines to avoid blowing up the agent's context window
+LOKI_MAX_LINES_CEILING = int(os.getenv("LOKI_MAX_LINES_CEILING", "500"))
+LOKI_MAX_DURATION = os.getenv("LOKI_MAX_DURATION", "24h")
+LOKI_QUERY_TIMEOUT = int(os.getenv("LOKI_QUERY_TIMEOUT", "30"))
+LOKI_RETRY_ATTEMPTS = int(os.getenv("LOKI_RETRY_ATTEMPTS", "3"))
+
+DEFAULT_SEVERITY_REGEX = r"(?i)(error|fatal|critical|panic|exception)"
+
+
+def read_token() -> str:
+    if LOKI_TOKEN_PATH:
+        try:
+            return Path(LOKI_TOKEN_PATH).read_text().strip()
+        except OSError:
+            pass
+    return LOKI_TOKEN
+
 
 mcp = FastMCP(
     "noc-lokistack",
     instructions=(
-        "LokiStack log query tools using LogQL. "
-        "Use get_recent_errors for quick error lookups. "
-        "Use query_logs for complex LogQL queries. "
-        "Time range: use relative durations like '1h', '30m', '7d'."
+        "LokiStack log query tools for the NOC remediation agent. "
+        "Tenant-aware: use tenant='application' for workload logs (default), "
+        "'infrastructure' for node/system logs, 'audit' for API audit logs.\n"
+        "Tools:\n"
+        "- search_logs: search by namespace/pod/container with literal text\n"
+        "- search_logs_regex: search with regex line filter\n"
+        "- query_logql: run a raw LogQL query\n"
+        "- query_metrics: error_rate or log_volume time series\n"
+        "- find_error_patterns: group recurring errors by message pattern\n"
+        "Time ranges: use relative durations like '30m', '1h', '6h', '24h'."
     ),
     host=MCP_HOST,
     port=MCP_PORT,

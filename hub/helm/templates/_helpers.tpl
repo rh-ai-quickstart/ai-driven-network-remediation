@@ -40,3 +40,12 @@ Selector labels
 app.kubernetes.io/name: {{ include "hub.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Loki gateway base URL, constructed from .Values.lokistack.name and .Values.lokistack.namespace.
+Namespace defaults to the release namespace when empty.
+*/}}
+{{- define "hub.lokiGatewayUrl" -}}
+{{- $ns := .Values.lokistack.namespace | default .Release.Namespace }}
+{{- printf "https://%s-gateway-http.%s.svc:8080" .Values.lokistack.name $ns }}
+{{- end }}

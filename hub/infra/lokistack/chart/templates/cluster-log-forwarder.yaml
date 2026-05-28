@@ -1,0 +1,42 @@
+{{- if .Values.clusterLogForwarder.enabled }}
+---
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: {{ .Values.clusterLogForwarder.name }}
+  namespace: {{ .Values.clusterLogForwarder.namespace }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "log-forwarder") | nindent 4 }}
+spec:
+  managementState: Managed
+  serviceAccount:
+    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+  outputs:
+    - name: loki-app
+      type: lokiStack
+      lokiStack:
+        target:
+          name: {{ .Values.lokistack.name }}
+          namespace: {{ include "lokistack.namespace" . }}
+        authentication:
+          token:
+            from: serviceAccount
+      tls:
+        insecureSkipVerify: {{ .Values.clusterLogForwarder.tls.insecureSkipVerify }}
+  pipelines:
+    {{- if .Values.clusterLogForwarder.pipelines.application }}
+    - name: application-logs
+      inputRefs: [application]
+      outputRefs: [loki-app]
+    {{- end }}
+    {{- if .Values.clusterLogForwarder.pipelines.infrastructure }}
+    - name: infrastructure-logs
+      inputRefs: [infrastructure]
+      outputRefs: [loki-app]
+    {{- end }}
+    {{- if .Values.clusterLogForwarder.pipelines.audit }}
+    - name: audit-logs
+      inputRefs: [audit]
+      outputRefs: [loki-app]
+    {{- end }}
+{{- end }}

@@ -80,6 +80,10 @@ chatbotService:
     initialDelaySeconds: 5
     periodSeconds: 10
 
+lokistack:
+  name: logging-loki
+  namespace: ""   # empty = release namespace; set to e.g. "openshift-logging" if different
+
 # ── MinIO connection (must match hub/infra/minio values) ─────────
 minio:
   host: minio
@@ -141,10 +145,26 @@ mcp-servers:
       port: 8000
       targetPort: 8000
       transport: streamable-http
-      imagePullPolicy: IfNotPresent
+      # TODO: change back to IfNotPresent before releasing the helm chart
+      imagePullPolicy: Always
       env:
         MCP_TRANSPORT: "streamable-http"
         MCP_PORT: "8000"
+        LOKI_TLS_VERIFY: "false"
+        LOKI_DEFAULT_TENANT: "application"
+        LOKI_MAX_LINES: "100"
+        LOKI_MAX_LINES_CEILING: "500"
+        LOKI_MAX_DURATION: "24h"
+        LOKI_QUERY_TIMEOUT: "30"
+        LOKI_RETRY_ATTEMPTS: "3"
+        LOKI_CA_CERT_PATH: ""
+      envSecrets:
+        LOKI_URL:
+          name: lokistack-config
+          key: LOKI_URL
+        LOKI_TOKEN:
+          name: mcp-lokistack-token
+          key: token
 
     noc-kafka:
       enabled: true

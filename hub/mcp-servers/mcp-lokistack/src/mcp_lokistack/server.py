@@ -2,12 +2,13 @@
 LokiStack MCP Server
 ======================
 MCP server for querying LokiStack via the LogQL API.
-Gives the AI remediation agent access to historical log data.
+Gives the AI remediation agent access to historical log data,
+error pattern analysis, and log-based metrics.
 
 Tools:
-    query_logs        - Run a LogQL query against LokiStack
-    get_recent_errors - Get recent error logs from a namespace/app
-    count_errors      - Count error occurrences in a time window
+    search_logs          - Search by namespace/pod/container/text or raw LogQL
+    query_metrics        - Error rate, log volume, or top errors by count
+    find_error_patterns  - Group recurring errors by normalized message
 
 Transport: Configurable via MCP_TRANSPORT env var (default: sse)
 """
