@@ -25,7 +25,6 @@ ENABLE_HUB             ?= true
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
-ENABLE_LOKISTACK       ?=
 LANGFUSE_RELEASE       := langfuse
 LANGFUSE_CHART_REPO    := langfuse
 LANGFUSE_CHART_URL     := https://langfuse.github.io/langfuse-k8s
@@ -43,7 +42,7 @@ KAFKA_PORT             := 9092
 KAFKA_HELM_EXTRA_ARGS  ?=
 
 # ── LokiStack (optional: ENABLE_LOKISTACK=true) ─────────────────
-ENABLE_LOKISTACK       ?= true
+ENABLE_LOKISTACK       ?= false
 ENABLE_LOKISTACK_TEST  ?= false
 LOKISTACK_RELEASE      := lokistack
 LOKISTACK_CHART        := hub/infra/lokistack/chart

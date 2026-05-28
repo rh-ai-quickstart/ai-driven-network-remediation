@@ -58,6 +58,7 @@ runs:
             --set kafka.resources.requests.cpu=100m \
             --set kafka.resources.requests.memory=256Mi \
             --set kafka.resources.limits.cpu=500m \
-            --set kafka.resources.limits.memory=512Mi"
+            --set kafka.resources.limits.memory=512Mi" \
+          HELM_EXTRA_ARGS="--set mcp-servers.mcp-servers.noc-lokistack.enabled=false"
       shell: bash
 
