@@ -3,6 +3,8 @@ import os
 import httpx
 import pytest
 
+_lokistack_enabled = os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
+
 
 @pytest.fixture(scope="session")
 def mcp_openshift_client():
@@ -13,6 +15,8 @@ def mcp_openshift_client():
 
 @pytest.fixture(scope="session")
 def mcp_lokistack_client():
+    if not _lokistack_enabled:
+        pytest.skip("LokiStack is disabled (ENABLE_LOKISTACK != true)")
     base_url = os.environ.get("MCP_LOKISTACK_URL", "http://localhost:8002")
     with httpx.Client(base_url=base_url) as client:
         yield client

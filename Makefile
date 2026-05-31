@@ -270,8 +270,11 @@ ifeq ($(ENABLE_HUB),true)
 	PF2_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-openshift 8001:8000 & \
 	PF3_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
-	PF4_PID=$$!; \
+	PF4_PID=""; \
+	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
+		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
+		PF4_PID=$$!; \
+	fi; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-kafka 8003:8000 & \
 	PF5_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
@@ -281,7 +284,8 @@ ifeq ($(ENABLE_HUB),true)
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
 	PF8_PID=$$!; \
 	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID" EXIT; \
-	sleep 2 && cd hub/integration-tests && uv run pytest
+	sleep 2 && cd hub/integration-tests && \
+	ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
 endif

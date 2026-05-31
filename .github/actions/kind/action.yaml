@@ -49,7 +49,8 @@ runs:
       run: |
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_HUB=true ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
           HELM_EXTRA_ARGS="\
-            --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig" \
+            --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
+            --set mcp-servers.mcp-servers.noc-lokistack.enabled=false" \
           KAFKA_HELM_EXTRA_ARGS="\
             --set kafka.storage.storageClass=standard \
             --set kafka.storage.size=256Mi \
@@ -58,7 +59,6 @@ runs:
             --set kafka.resources.requests.cpu=100m \
             --set kafka.resources.requests.memory=256Mi \
             --set kafka.resources.limits.cpu=500m \
-            --set kafka.resources.limits.memory=512Mi" \
-          HELM_EXTRA_ARGS="--set mcp-servers.mcp-servers.noc-lokistack.enabled=false"
+            --set kafka.resources.limits.memory=512Mi"
       shell: bash
 
