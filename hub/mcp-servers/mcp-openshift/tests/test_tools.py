@@ -4,8 +4,6 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from mcp_openshift.tools import (
     _run_oc,
     get_events,
@@ -91,9 +89,7 @@ class TestRunOc:
     """Tests for the _run_oc helper."""
 
     def test_success(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="ok", stderr="", returncode=0
-        )
+        mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
         result = _run_oc(["get", "pods"], kubeconfig="/fake/config")
         assert result["success"] is True
         assert result["stdout"] == "ok"
@@ -102,9 +98,7 @@ class TestRunOc:
         assert "--kubeconfig=/fake/config" in cmd
 
     def test_nonzero_exit(self, mock_run):
-        mock_run.return_value = MagicMock(
-            stdout="", stderr="not found", returncode=1
-        )
+        mock_run.return_value = MagicMock(stdout="", stderr="not found", returncode=1)
         result = _run_oc(["get", "pods"])
         assert result["success"] is False
         assert result["stderr"] == "not found"
@@ -316,7 +310,12 @@ class TestRolloutRestart:
     def test_success(self, mock_oc):
         mock_oc.side_effect = [
             {"stdout": "deployment.apps/edge-worker restarted", "stderr": "", "returncode": 0, "success": True},
-            {"stdout": "deployment edge-worker successfully rolled out", "stderr": "", "returncode": 0, "success": True},
+            {
+                "stdout": "deployment edge-worker successfully rolled out",
+                "stderr": "",
+                "returncode": 0,
+                "success": True,
+            },
         ]
         result = rollout_restart(deployment="edge-worker", namespace="dark-noc-edge")
         assert result["success"] is True
@@ -358,9 +357,7 @@ class TestPatchDeploymentMemory:
             "returncode": 0,
             "success": True,
         }
-        result = patch_deployment_memory(
-            deployment="edge-worker", memory_limit="1Gi"
-        )
+        result = patch_deployment_memory(deployment="edge-worker", memory_limit="1Gi")
         assert result["success"] is True
         assert result["new_memory_limit"] == "1Gi"
         cmd = mock_oc.call_args[0][0]
@@ -373,9 +370,7 @@ class TestPatchDeploymentMemory:
             "returncode": 1,
             "success": False,
         }
-        result = patch_deployment_memory(
-            deployment="no-limits", memory_limit="512Mi"
-        )
+        result = patch_deployment_memory(deployment="no-limits", memory_limit="512Mi")
         assert result["success"] is False
 
 
@@ -410,7 +405,7 @@ class TestGetPodLogs:
     def test_pod_not_found(self, mock_oc):
         mock_oc.return_value = {
             "stdout": "",
-            "stderr": "pods \"gone\" not found",
+            "stderr": 'pods "gone" not found',
             "returncode": 1,
             "success": False,
         }

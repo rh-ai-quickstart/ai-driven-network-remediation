@@ -55,9 +55,7 @@ def test_openshift_tools_list(mcp_openshift_client):
     assert response.status_code == 200
     data = _parse_sse_json(response)
     tool_names = {t["name"] for t in data.get("result", {}).get("tools", [])}
-    assert EXPECTED_TOOLS.issubset(tool_names), (
-        f"Missing tools: {EXPECTED_TOOLS - tool_names}"
-    )
+    assert EXPECTED_TOOLS.issubset(tool_names), f"Missing tools: {EXPECTED_TOOLS - tool_names}"
 
 
 def test_get_namespaces(mcp_openshift_client):
