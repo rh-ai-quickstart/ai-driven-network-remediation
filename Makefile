@@ -162,6 +162,7 @@ endif
 ifeq ($(ENABLE_KAFKA),true)
 	$(MAKE) kafka-uninstall
 endif
+endif
 
 .PHONY: _langfuse-deploy
 _langfuse-deploy:
