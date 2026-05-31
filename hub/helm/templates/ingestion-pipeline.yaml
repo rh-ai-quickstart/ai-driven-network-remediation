@@ -6,7 +6,7 @@ metadata:
     {{- include "hub.labels" . | nindent 4 }}
     app.kubernetes.io/component: ingestion-pipeline
 spec:
-  replicas: 1
+  replicas: {{ .Values.ingestionPipeline.replicaCount }}
   selector:
     matchLabels:
       {{- include "hub.selectorLabels" . | nindent 6 }}
@@ -33,16 +33,16 @@ spec:
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
             - name: MINIO_ENDPOINT
-              value: {{ .Values.ingestionPipeline.minio.endpoint | quote }}
+              value: {{ printf "%s:%s" .Values.minio.host .Values.minio.port | quote }}
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio
+                  name: {{ .Values.minio.secretName | quote }}
                   key: user
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: minio
+                  name: {{ .Values.minio.secretName | quote }}
                   key: password
             - name: MINIO_BUCKET
               value: {{ .Values.ingestionPipeline.minio.bucket | quote }}

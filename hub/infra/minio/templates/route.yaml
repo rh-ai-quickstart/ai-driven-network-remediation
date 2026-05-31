@@ -1,4 +1,4 @@
-{{- if and .Values.route.enabled (dig "routes" "enabled" true .Values.global) }}
+{{- if and .Values.route.enabled (dig "routes" "enabled" true (.Values.global | default dict)) }}
 ---
 kind: Route
 apiVersion: route.openshift.io/v1
@@ -32,4 +32,3 @@ spec:
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
 {{- end }}
-

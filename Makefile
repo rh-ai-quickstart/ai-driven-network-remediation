@@ -38,6 +38,14 @@ KAFKA_VALUES           := hub/infra/kafka/values.yaml
 KAFKA_PORT             := 9092
 KAFKA_HELM_EXTRA_ARGS  ?=
 
+# ── MinIO ────────────────────────────────────────────────────────
+ENABLE_MINIO           ?= true
+MINIO_RELEASE          := minio
+MINIO_CHART            := hub/infra/minio
+MINIO_NAMESPACE        ?= $(NAMESPACE)
+MINIO_PORT             ?= 9000
+MINIO_HELM_EXTRA_ARGS  ?=
+
 ADNR_LLM_ENABLED := $(and $(ADNR_LLM_ID),$(ADNR_LLM_URL),$(ADNR_LLM_TOKEN))
 
 helm_adnr_llm_args = \
@@ -104,6 +112,9 @@ helm-depend:
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
+ifeq ($(ENABLE_MINIO),true)
+	$(MAKE) minio-install
+endif
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
@@ -128,6 +139,9 @@ endif
 .PHONY: helm-uninstall
 helm-uninstall:
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+ifeq ($(ENABLE_MINIO),true)
+	$(MAKE) minio-uninstall
+endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
@@ -179,8 +193,8 @@ _check-loki-operator:
 
 .PHONY: _check-minio
 _check-minio:
-	@oc get statefulset minio -n $(LOKISTACK_NS) -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -qE '^[1-9]' || \
-		{ echo "ERROR: MinIO is not running in namespace '$(LOKISTACK_NS)'. Run 'make helm-install' first."; exit 1; }
+	@oc get statefulset $(MINIO_RELEASE) -n $(MINIO_NAMESPACE) -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -qE '^[1-9]' || \
+		{ echo "ERROR: MinIO is not running in namespace '$(MINIO_NAMESPACE)'. Run 'make minio-install' first."; exit 1; }
 
 .PHONY: lokistack-install
 lokistack-install: _check-loki-operator _check-minio
@@ -194,7 +208,7 @@ lokistack-uninstall:
 	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NS) --ignore-not-found
 	oc delete pvc -n $(LOKISTACK_NS) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
 	oc exec -n $(LOKISTACK_NS) statefulset/minio -- sh -c \
-		'mc alias set local http://localhost:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc rb --force local/loki' || true
+		'mc alias set local http://localhost:$(MINIO_PORT) $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc rb --force local/loki' || true
 
 .PHONY: lokistack-status
 lokistack-status:
@@ -212,19 +226,17 @@ lokistack-status:
 
 .PHONY: minio-install
 minio-install: namespace
-	helm upgrade --install minio hub/helm/charts/minio \
-		--namespace $(NAMESPACE) \
+	helm upgrade --install $(MINIO_RELEASE) $(MINIO_CHART) \
+		--namespace $(MINIO_NAMESPACE) \
 		--set global.routes.enabled=$(ROUTES_ENABLED) \
+		$(MINIO_HELM_EXTRA_ARGS) \
 		--wait --timeout 10m
 
 .PHONY: minio-uninstall
 minio-uninstall:
 	@echo "Uninstalling hub MinIO (this will affect all services using it)..."
-	oc delete statefulset minio --namespace $(NAMESPACE) --ignore-not-found
-	oc delete service minio --namespace $(NAMESPACE) --ignore-not-found
-	oc delete secret minio --namespace $(NAMESPACE) --ignore-not-found
-	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
-	oc delete route minio-api minio-webui --namespace $(NAMESPACE) --ignore-not-found
+	helm uninstall $(MINIO_RELEASE) --namespace $(MINIO_NAMESPACE) --ignore-not-found
+	oc delete pvc minio-data-$(MINIO_RELEASE)-0 --namespace $(MINIO_NAMESPACE) --ignore-not-found
 
 .PHONY: unit-tests
 unit-tests:

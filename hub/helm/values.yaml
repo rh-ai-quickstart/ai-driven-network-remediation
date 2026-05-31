@@ -40,9 +40,9 @@ llama-stack:
       maxTokens: 4096
 
 ingestionPipeline:
+  replicaCount: 1
   vectorStoreName: noc_runbooks
   minio:
-    endpoint: minio:9000
     bucket: runbooks
     secure: false
     runbookPrefix: runbooks/
@@ -80,15 +80,12 @@ chatbotService:
     initialDelaySeconds: 5
     periodSeconds: 10
 
+# ── MinIO connection (must match hub/infra/minio values) ─────────
 minio:
-  secret:
-    create: true
-    user: minio_user
-    password: minio_password
-    host: minio
-    port: "9000"
-  sampleFileUpload:
-    enabled: false
+  host: minio
+  port: "9000"
+  secretName: minio
+
 # ── MCP Secrets ───────────────────────────────────────────────────
 # Credentials for MCP servers injected via secretKeyRef.
 # Set create: false and create the secrets out-of-band if preferred.
