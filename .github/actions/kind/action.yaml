@@ -31,9 +31,25 @@ runs:
       run: make push-all-images REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
       shell: bash
 
+    - name: Create edge namespace with dummy workloads
+      run: |
+        oc create namespace dark-noc-edge
+        oc create deployment edge-worker --image=registry.k8s.io/pause:3.10 --replicas=1 -n dark-noc-edge
+        oc wait --for=condition=available deployment/edge-worker -n dark-noc-edge --timeout=60s
+      shell: bash
+
+    - name: Prepare in-cluster kubeconfig for edge namespace
+      run: |
+        CP_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' kind-control-plane)
+        cp "$HOME/.kube/config" /tmp/edge-kubeconfig
+        sed -i "s|https://127.0.0.1:[0-9]*|https://${CP_IP}:6443|g" /tmp/edge-kubeconfig
+      shell: bash
+
     - name: Helm Install
       run: |
-        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
+        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_HUB=true ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
+          HELM_EXTRA_ARGS="\
+            --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig" \
           KAFKA_HELM_EXTRA_ARGS="\
             --set kafka.storage.storageClass=standard \
             --set kafka.storage.size=256Mi \

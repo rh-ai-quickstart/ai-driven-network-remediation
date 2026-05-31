@@ -6,22 +6,29 @@ set -o errexit
 REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
 VERSION="${VERSION:-0.1.0}"
 NAMESPACE="${NAMESPACE:-hub}"
+ENABLE_HUB="${ENABLE_HUB:-true}"
+ENABLE_KAFKA="${ENABLE_KAFKA:-true}"
 
 echo "Using REGISTRY=${REGISTRY}"
 echo "Using VERSION=${VERSION}"
 echo "Using NAMESPACE=${NAMESPACE}"
+echo "Using ENABLE_HUB=${ENABLE_HUB}"
+echo "Using ENABLE_KAFKA=${ENABLE_KAFKA}"
 
-echo "Building images"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-all-images
+if [ "${ENABLE_HUB}" = "true" ]; then
+  echo "Building images"
+  REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-all-images
 
-echo "Pushing images"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" make push-all-images
+  echo "Pushing images"
+  REGISTRY="${REGISTRY}" VERSION="${VERSION}" make push-all-images
 
-echo "Cleaning up existing deployment"
-NAMESPACE="${NAMESPACE}" make helm-uninstall
+  echo "Cleaning up existing deployment"
+  NAMESPACE="${NAMESPACE}" ENABLE_HUB="${ENABLE_HUB}" make helm-uninstall
+fi
 
-echo "Deploying hub"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" make helm-install
+echo "Deploying"
+REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" \
+  ENABLE_HUB="${ENABLE_HUB}" ENABLE_KAFKA="${ENABLE_KAFKA}" make helm-install
 
 echo "Running integration tests"
-NAMESPACE="${NAMESPACE}" make integration-tests
+NAMESPACE="${NAMESPACE}" ENABLE_HUB="${ENABLE_HUB}" make integration-tests

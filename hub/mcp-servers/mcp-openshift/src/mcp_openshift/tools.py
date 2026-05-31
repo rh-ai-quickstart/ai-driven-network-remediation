@@ -5,12 +5,18 @@ import subprocess
 
 from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp
 
+OC_TIMEOUT = 30
 
-def _run_oc(args: list[str], kubeconfig: str = EDGE_KUBECONFIG) -> dict:
-    """Run an oc/kubectl command and return parsed output."""
-    cmd = ["kubectl", f"--kubeconfig={kubeconfig}"] + args
+
+def _run_oc(
+    args: list[str],
+    kubeconfig: str = EDGE_KUBECONFIG,
+    timeout: int = OC_TIMEOUT,
+) -> dict:
+    """Run an oc command and return parsed output."""
+    cmd = ["oc", f"--kubeconfig={kubeconfig}"] + args
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return {
             "stdout": result.stdout,
             "stderr": result.stderr,
@@ -18,9 +24,37 @@ def _run_oc(args: list[str], kubeconfig: str = EDGE_KUBECONFIG) -> dict:
             "success": result.returncode == 0,
         }
     except subprocess.TimeoutExpired:
-        return {"stdout": "", "stderr": "Command timed out after 30s", "returncode": -1, "success": False}
+        return {"stdout": "", "stderr": f"Command timed out after {timeout}s", "returncode": -1, "success": False}
     except Exception as e:
         return {"stdout": "", "stderr": str(e), "returncode": -1, "success": False}
+
+
+@mcp.tool()
+def get_namespaces() -> dict:
+    """
+    List all namespaces on the cluster with their status.
+
+    Returns:
+        Dict with namespaces list: [{name, status}]
+    """
+    result = _run_oc(["get", "namespaces", "-o", "json"])
+
+    if not result["success"]:
+        return {"error": result["stderr"], "namespaces": []}
+
+    try:
+        data = json.loads(result["stdout"])
+        namespaces = []
+        for ns in data.get("items", []):
+            namespaces.append(
+                {
+                    "name": ns["metadata"]["name"],
+                    "status": ns["status"].get("phase", "Unknown"),
+                }
+            )
+        return {"namespaces": namespaces, "count": len(namespaces)}
+    except json.JSONDecodeError as e:
+        return {"error": f"Failed to parse namespace output: {e}", "namespaces": []}
 
 
 @mcp.tool()
@@ -29,7 +63,7 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
     List all pods in the specified namespace with their status.
 
     Args:
-        namespace: Kubernetes namespace to query (default: dark-noc-edge)
+        namespace: OpenShift namespace to query (default: dark-noc-edge)
 
     Returns:
         Dict with pods list: [{name, status, restart_count, node, ready}]
@@ -65,10 +99,10 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
 @mcp.tool()
 def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
     """
-    Get recent Kubernetes events (especially warnings) from a namespace.
+    Get recent OpenShift events (especially warnings) from a namespace.
 
     Args:
-        namespace: Kubernetes namespace (default: dark-noc-edge)
+        namespace: OpenShift namespace (default: dark-noc-edge)
         limit:     Maximum number of events to return (default: 20)
 
     Returns:
@@ -89,11 +123,11 @@ def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
                     "reason": evt.get("reason", ""),
                     "message": evt.get("message", ""),
                     "object": f"{evt['involvedObject']['kind']}/{evt['involvedObject']['name']}",
-                    "time": evt.get("lastTimestamp", ""),
+                    "time": evt.get("lastTimestamp") or evt.get("eventTime") or "",
                     "count": evt.get("count", 1),
                 }
             )
-        events.sort(key=lambda e: (0 if e["type"] == "Warning" else 1, e["time"]))
+        events.sort(key=lambda e: (0 if e["type"] == "Warning" else 1, e["time"] or ""))
         return {"namespace": namespace, "events": events}
     except json.JSONDecodeError as e:
         return {"error": f"Failed to parse events: {e}", "events": []}
@@ -124,7 +158,8 @@ def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict
             "-n",
             namespace,
             "--timeout=90s",
-        ]
+        ],
+        timeout=120,
     )
 
     return {

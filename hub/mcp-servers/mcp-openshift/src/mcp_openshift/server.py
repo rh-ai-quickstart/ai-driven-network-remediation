@@ -5,6 +5,7 @@ MCP server exposing OpenShift operations as tools
 for the AI-driven network remediation agent.
 
 Tools:
+    get_namespaces         - List all namespaces on the cluster
     get_pods               - List pods in a namespace with status
     get_events             - Get recent OpenShift events (warnings)
     rollout_restart        - Trigger a rolling restart

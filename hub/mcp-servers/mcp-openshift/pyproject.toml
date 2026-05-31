@@ -2,7 +2,6 @@
 name = "mcp-openshift"
 version = "0.1.0"
 description = "MCP server exposing OpenShift operations as tools for the AI remediation agent"
-readme = "README.md"
 authors = [
     { name = "rh-ai-quickstart" }
 ]
@@ -11,6 +10,14 @@ dependencies = [
     "mcp[cli]>=1.23",
     "uvicorn>=0.34",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [project.scripts]
 mcp-openshift = "mcp_openshift:main"

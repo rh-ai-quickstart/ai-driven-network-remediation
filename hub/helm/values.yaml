@@ -91,6 +91,9 @@ minio:
 # Set create: false and create the secrets out-of-band if preferred.
 # Override values at install time: --set mcpSecrets.aap.password=...
 mcpSecrets:
+  openshift:
+    create: true
+    kubeconfig: ""
   aap:
     create: true
     username: ""
@@ -119,6 +122,15 @@ mcp-servers:
       env:
         MCP_TRANSPORT: "streamable-http"
         MCP_PORT: "8000"
+        EDGE_KUBECONFIG: "/kubeconfig/kubeconfig"
+      volumes:
+        - name: edge-kubeconfig
+          secret:
+            secretName: noc-openshift-edge-kubeconfig
+      volumeMounts:
+        - name: edge-kubeconfig
+          mountPath: /kubeconfig
+          readOnly: true
 
     noc-lokistack:
       enabled: true

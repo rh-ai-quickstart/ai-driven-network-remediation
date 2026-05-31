@@ -1,0 +1,45 @@
+ARG SERVICE_NAME=mcp-openshift
+ARG MODULE_NAME=mcp_openshift
+
+FROM python:3.13-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+ARG SERVICE_NAME
+WORKDIR /app
+
+COPY ${SERVICE_NAME}/pyproject.toml ${SERVICE_NAME}/uv.lock ./
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable --no-dev
+
+COPY ${SERVICE_NAME}/ .
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --no-dev
+
+FROM python:3.13-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    curl -L https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | \
+    tar -xz -C /usr/local/bin/ oc && \
+    chmod +x /usr/local/bin/oc && \
+    apt-get purge -y curl && apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+ARG MODULE_NAME
+ENV MODULE_NAME=${MODULE_NAME}
+
+USER 1001
+EXPOSE 8000
+
+CMD ["sh", "-c", "exec uvicorn ${MODULE_NAME}:app --host ${APP_HOST:-0.0.0.0} --port ${APP_PORT:-8000}"]

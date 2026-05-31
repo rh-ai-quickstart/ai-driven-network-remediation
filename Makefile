@@ -16,8 +16,12 @@ MCP_AAP_IMG        := $(REGISTRY)/noc-mcp-aap:$(VERSION)
 MCP_SLACK_IMG      := $(REGISTRY)/noc-mcp-slack:$(VERSION)
 MCP_SERVICENOW_IMG := $(REGISTRY)/noc-mcp-servicenow:$(VERSION)
 
-MCP_CONTAINERFILE  := hub/mcp-servers/Containerfile
-MCP_CONTEXT        := hub/mcp-servers
+MCP_CONTAINERFILE           := hub/mcp-servers/Containerfile
+MCP_OPENSHIFT_CONTAINERFILE := hub/mcp-servers/Containerfile.openshift
+MCP_CONTEXT                 := hub/mcp-servers
+
+# ── Hub (optional: ENABLE_HUB=true) ──────────────────────────────
+ENABLE_HUB             ?= true
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -78,7 +82,7 @@ build-chatbot-image:
 
 .PHONY: build-mcp-images
 build-mcp-images:
-	$(CONTAINER_TOOL) build -t $(MCP_OPENSHIFT_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-openshift  --build-arg MODULE_NAME=mcp_openshift  -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
+	$(CONTAINER_TOOL) build -t $(MCP_OPENSHIFT_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-openshift  --build-arg MODULE_NAME=mcp_openshift  -f $(MCP_OPENSHIFT_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_LOKISTACK_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-lokistack  --build-arg MODULE_NAME=mcp_lokistack  -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_KAFKA_IMG)      --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-kafka      --build-arg MODULE_NAME=mcp_kafka      -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_AAP_IMG)        --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-aap        --build-arg MODULE_NAME=mcp_aap        -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
@@ -115,6 +119,7 @@ helm-install: namespace helm-depend
 ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-install
 endif
+ifeq ($(ENABLE_HUB),true)
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
@@ -126,6 +131,9 @@ endif
 		$(helm_adnr_llm_args) \
 		$(HELM_EXTRA_ARGS) \
 		--wait --timeout 30m
+else
+	@echo "ENABLE_HUB is not true — skipping hub chart deployment"
+endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
 endif
@@ -138,6 +146,7 @@ endif
 
 .PHONY: helm-uninstall
 helm-uninstall:
+ifeq ($(ENABLE_HUB),true)
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-uninstall
@@ -241,9 +250,11 @@ minio-uninstall:
 .PHONY: unit-tests
 unit-tests:
 	cd hub/agent-service && uv run pytest
+	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
 
 .PHONY: integration-tests
 integration-tests:
+ifeq ($(ENABLE_HUB),true)
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
 	PF1_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
@@ -262,6 +273,9 @@ integration-tests:
 	PF8_PID=$$!; \
 	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && uv run pytest
+else
+	@echo "ENABLE_HUB is not true — skipping hub integration tests"
+endif
 
 # ── Langfuse day-2 targets ───────────────────────────────────────
 

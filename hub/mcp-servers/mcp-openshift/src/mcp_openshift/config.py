@@ -8,10 +8,10 @@ from mcp.server.fastmcp import FastMCP
 MCP_TRANSPORT: Literal["stdio", "sse", "streamable-http"] = os.environ.get(
     "MCP_TRANSPORT", "sse"
 )  # type: ignore[assignment]
-MCP_PORT = int(os.environ.get("MCP_PORT", "8001"))
+MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 
-EDGE_KUBECONFIG = os.getenv("EDGE_KUBECONFIG", "/kubeconfig/edge-kubeconfig")
+EDGE_KUBECONFIG = os.getenv("EDGE_KUBECONFIG", "/kubeconfig/kubeconfig")
 DEFAULT_NAMESPACE = os.getenv("DEFAULT_NAMESPACE", "dark-noc-edge")
 
 mcp = FastMCP(
