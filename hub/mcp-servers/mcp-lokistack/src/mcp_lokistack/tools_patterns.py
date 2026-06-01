@@ -1,4 +1,4 @@
-"""LokiStack MCP tools for error analysis."""
+"""LokiStack MCP tools for error-pattern grouping."""
 
 import httpx
 

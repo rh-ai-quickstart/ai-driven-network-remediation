@@ -87,12 +87,13 @@ def search_logs_regex(
     try:
         query = _build_logql(namespace, pod, container, labels)
         if regex:
+            re.compile(regex)
             escaped_regex = regex.replace('"', '\\"')
             query += f' |~ "{escaped_regex}"'
 
         return _query_logs(query, tenant, duration, limit)
 
-    except (ValueError, httpx.HTTPStatusError, httpx.HTTPError) as e:
+    except (ValueError, re.error, httpx.HTTPStatusError, httpx.HTTPError) as e:
         return format_error(e)
 
 
