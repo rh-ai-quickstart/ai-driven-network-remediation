@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EDGE_NAMESPACE="${1:?Usage: $0 <edge-namespace> <hub-namespace>}"
-HUB_NAMESPACE="${2:?Usage: $0 <edge-namespace> <hub-namespace>}"
+EDGE_NAMESPACE="${1:?Usage: $0 <edge-namespace> <hub-namespace> [api-server-url]}"
+HUB_NAMESPACE="${2:?Usage: $0 <edge-namespace> <hub-namespace> [api-server-url]}"
+EDGE_SERVER="${3:-https://kubernetes.default.svc}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SA_NAME=noc-openshift-mcp
 
@@ -23,9 +24,8 @@ oc get secret "$SA_NAME-token" -n "$EDGE_NAMESPACE" \
     -o jsonpath='{.data.ca\.crt}' | base64 -d > "$CA_FILE"
 
 EDGE_KC=$(mktemp)
-SERVER=$(oc whoami --show-server)
 KUBECONFIG="$EDGE_KC" oc config set-cluster edge \
-    --server="$SERVER" --certificate-authority="$CA_FILE" --embed-certs=true > /dev/null
+    --server="$EDGE_SERVER" --certificate-authority="$CA_FILE" --embed-certs=true > /dev/null
 KUBECONFIG="$EDGE_KC" oc config set-credentials "$SA_NAME" --token="$TOKEN" > /dev/null
 KUBECONFIG="$EDGE_KC" oc config set-context edge \
     --cluster=edge --namespace="$EDGE_NAMESPACE" --user="$SA_NAME" > /dev/null
