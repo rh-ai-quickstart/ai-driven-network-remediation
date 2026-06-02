@@ -183,6 +183,7 @@ mcp-servers:
         MCP_PORT: "8000"
         KAFKA_CONSUME_TOPICS: "system-alerts,noc-alerts,remediation-jobs"
         KAFKA_PRODUCE_TOPICS: "remediation-jobs,agent-events,incident-audit"
+        KAFKA_BOOTSTRAP: "kafka:9092"
 
     noc-aap:
       enabled: true

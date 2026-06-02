@@ -1,12 +1,112 @@
 """Kafka tool implementations."""
 
 import json
+import logging
 from datetime import datetime, timezone
 
-from kafka import KafkaConsumer, KafkaProducer
+from kafka import KafkaAdminClient, KafkaConsumer, KafkaProducer
 from kafka.structs import TopicPartition
 
-from .config import KAFKA_BOOTSTRAP, mcp
+from . import config
+from .config import mcp
+from .utils import _resolve_topic, format_error
+from .validators import (
+    clamp_max_messages,
+    clamp_timeout_ms,
+    suggest_topics,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def _seek_to_tail(consumer, topic, max_messages):
+    partitions = consumer.partitions_for_topic(topic)
+    if not partitions:
+        return None
+
+    tp_list = [TopicPartition(topic, p) for p in partitions]
+    consumer.assign(tp_list)
+
+    seek_depth = max(1, max_messages // len(tp_list))
+    for tp in tp_list:
+        end_offset = consumer.end_offsets([tp])[tp]
+        start_offset = max(0, end_offset - seek_depth)
+        consumer.seek(tp, start_offset)
+
+    return tp_list
+
+
+def _parse_value(raw):
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def _poll_messages(consumer, max_messages, timeout_ms):
+    # Use poll() with an explicit timeout instead of the iterator so that the
+    # timeout budget starts HERE, not back when KafkaConsumer was constructed.
+    records = consumer.poll(timeout_ms=timeout_ms, max_records=max_messages)
+    messages = []
+    for tp_msgs in records.values():
+        for msg in tp_msgs:
+            messages.append({
+                "partition": msg.partition,
+                "offset": msg.offset,
+                "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
+                "value": _parse_value(msg.value),
+            })
+            if len(messages) >= max_messages:
+                return messages
+    return messages
+
+
+def _build_clamped_info(orig_max, orig_timeout, max_messages, timeout_ms):
+    fields = [
+        ("max_messages", orig_max, max_messages),
+        ("timeout_ms", orig_timeout, timeout_ms),
+    ]
+    clamped = {name: actual for name, orig, actual in fields if orig is not None}
+    return clamped
+
+
+def _topic_not_found_error(consumer, topic):
+    available = sorted(t for t in consumer.topics() if not t.startswith("_"))
+    pool = [t for t in available if t in config.KAFKA_CONSUME_TOPICS] if config.KAFKA_CONSUME_TOPICS else available
+    return format_error(
+        ValueError(f"Topic '{topic}' not found."),
+        suggestions=suggest_topics(topic, pool),
+    )
+
+
+def _send_and_confirm(topic, message, key):
+    producer = KafkaProducer(
+        bootstrap_servers=config.KAFKA_BOOTSTRAP,
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+        key_serializer=lambda k: k.encode("utf-8") if k else None,
+        acks="all",
+    )
+    try:
+        future = producer.send(topic, value=message, key=key if key else None)
+        return future.get(timeout=config.PRODUCE_TIMEOUT_S)
+    finally:
+        producer.close()
+
+
+def _calculate_partition_lag(end_offsets, committed_offsets, tp_list):
+    partitions = []
+    for tp in tp_list:
+        end_offset = end_offsets[tp]
+        oam = committed_offsets.get(tp)
+        committed_offset = oam.offset if oam is not None and oam.offset != -1 else 0
+        partitions.append({
+            "partition": tp.partition,
+            "end_offset": end_offset,
+            "committed_offset": committed_offset,
+            "lag": max(0, end_offset - committed_offset),
+        })
+    total_lag = sum(p["lag"] for p in partitions)
+    return partitions, total_lag
 
 
 @mcp.tool()
@@ -19,53 +119,42 @@ def consume_topic(
     Read recent messages from a Kafka topic.
 
     Args:
-        topic:        Kafka topic name (e.g., "nginx-logs", "noc-alerts")
-        max_messages: Maximum number of messages to return (default: 20)
-        timeout_ms:   Consumer poll timeout in ms (default: 5000)
+        topic:        Kafka topic name (e.g., "system-alerts", "noc-alerts")
+        max_messages: Maximum number of messages to return (default: 20, max: 100)
+        timeout_ms:   Consumer poll timeout in ms (default: 5000, max: 15000)
 
     Returns:
         Dict with messages list: [{partition, offset, timestamp, value}]
     """
-    consumer = KafkaConsumer(
-        topic,
-        bootstrap_servers=KAFKA_BOOTSTRAP,
-        auto_offset_reset="latest",
-        enable_auto_commit=False,
-        consumer_timeout_ms=timeout_ms,
-        value_deserializer=lambda m: m.decode("utf-8", errors="replace"),
-    )
-
-    messages = []
     try:
-        consumer.poll(timeout_ms=1000)
-        partitions = consumer.assignment()
+        _resolve_topic(topic, config.KAFKA_CONSUME_TOPICS, "consume")
+        max_messages, orig_max = clamp_max_messages(max_messages)
+        timeout_ms, orig_timeout = clamp_timeout_ms(timeout_ms)
 
-        for tp in partitions:
-            end_offset = consumer.end_offsets([tp])[tp]
-            start_offset = max(0, end_offset - max_messages)
-            consumer.seek(tp, start_offset)
+        consumer = KafkaConsumer(
+            bootstrap_servers=config.KAFKA_BOOTSTRAP,
+            enable_auto_commit=False,
+            value_deserializer=lambda m: m.decode("utf-8", errors="replace"),
+        )
+        try:
+            tp_list = _seek_to_tail(consumer, topic, max_messages)
+            if tp_list is None:
+                return _topic_not_found_error(consumer, topic)
+            messages = _poll_messages(consumer, max_messages, timeout_ms)
+        finally:
+            consumer.close()
 
-        for msg in consumer:
-            try:
-                value = json.loads(msg.value)
-            except json.JSONDecodeError:
-                value = msg.value
+        logger.info("consume_topic topic=%s count=%d", topic, len(messages))
+        result: dict = {"success": True, "topic": topic, "messages": messages, "count": len(messages)}
+        clamped = _build_clamped_info(orig_max, orig_timeout, max_messages, timeout_ms)
+        if clamped:
+            result["clamped"] = clamped
+        return result
 
-            messages.append(
-                {
-                    "partition": msg.partition,
-                    "offset": msg.offset,
-                    "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
-                    "value": value,
-                }
-            )
-
-            if len(messages) >= max_messages:
-                break
-    finally:
-        consumer.close()
-
-    return {"topic": topic, "messages": messages, "count": len(messages)}
+    except Exception as exc:
+        logger.error("consume_topic failed for topic=%s", topic, exc_info=True)
+        suggestions = suggest_topics(topic, config.KAFKA_CONSUME_TOPICS) if config.KAFKA_CONSUME_TOPICS else []
+        return format_error(exc, suggestions=suggestions)
 
 
 @mcp.tool()
@@ -78,39 +167,40 @@ def produce_message(
     Produce a message to a Kafka topic.
 
     Args:
-        topic:   Target topic (e.g., "noc-alerts", "remediation-jobs", "incident-audit")
+        topic:   Target topic (e.g., "remediation-jobs", "agent-events", "incident-audit")
         message: Dict to serialize as JSON and send
         key:     Optional message key (for partitioning)
 
     Returns:
         Dict with delivery confirmation
     """
-    producer = KafkaProducer(
-        bootstrap_servers=KAFKA_BOOTSTRAP,
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-        key_serializer=lambda k: k.encode("utf-8") if k else None,
-        acks="all",
-    )
-
     try:
-        future = producer.send(topic, value=message, key=key if key else None)
-        record_metadata = future.get(timeout=10)
-        producer.flush()
-    finally:
-        producer.close()
+        _resolve_topic(topic, config.KAFKA_PRODUCE_TOPICS, "produce")
+        record_metadata = _send_and_confirm(topic, message, key)
 
-    return {
-        "success": True,
-        "topic": record_metadata.topic,
-        "partition": record_metadata.partition,
-        "offset": record_metadata.offset,
-    }
+        logger.info(
+            "produce_message topic=%s partition=%d offset=%d",
+            record_metadata.topic,
+            record_metadata.partition,
+            record_metadata.offset,
+        )
+        return {
+            "success": True,
+            "topic": record_metadata.topic,
+            "partition": record_metadata.partition,
+            "offset": record_metadata.offset,
+        }
+
+    except Exception as exc:
+        logger.error("produce_message failed for topic=%s", topic, exc_info=True)
+        suggestions = suggest_topics(topic, config.KAFKA_PRODUCE_TOPICS) if config.KAFKA_PRODUCE_TOPICS else []
+        return format_error(exc, suggestions=suggestions)
 
 
 @mcp.tool()
 def get_consumer_lag(
-    group_id: str = "dark-noc-agent",
-    topic: str = "nginx-logs",
+    group_id: str = config.DEFAULT_CONSUMER_GROUP,
+    topic: str = config.DEFAULT_LAG_TOPIC,
 ) -> dict:
     """
     Get the current consumer lag for a consumer group.
@@ -123,43 +213,46 @@ def get_consumer_lag(
     Returns:
         Dict with lag per partition and total lag
     """
-    consumer = KafkaConsumer(
-        bootstrap_servers=KAFKA_BOOTSTRAP,
-        group_id=group_id,
-        enable_auto_commit=False,
-    )
-
     try:
-        tp_list = [TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic) or [0]]
+        # Plain consumer (no group_id) — gets partition list and end offsets
+        # without triggering the group join protocol.
+        consumer = KafkaConsumer(
+            bootstrap_servers=config.KAFKA_BOOTSTRAP,
+            enable_auto_commit=False,
+            request_timeout_ms=25_000,
+        )
+        try:
+            tp_list = [TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic) or [0]]
+            end_offsets = consumer.end_offsets(tp_list)
+        finally:
+            consumer.close()
 
-        end_offsets = consumer.end_offsets(tp_list)
-        committed = {tp: consumer.committed(tp) for tp in tp_list}
+        # AdminClient fetches committed offsets directly without joining the group.
+        admin = KafkaAdminClient(
+            bootstrap_servers=config.KAFKA_BOOTSTRAP,
+            request_timeout_ms=25_000,
+            api_version_auto_timeout_ms=10_000,
+        )
+        try:
+            committed_offsets = admin.list_consumer_group_offsets(group_id, partitions=tp_list)
+        finally:
+            admin.close()
 
-        partitions = []
-        total_lag = 0
-        for tp in tp_list:
-            end = end_offsets[tp]
-            committed_offset = committed[tp] or 0
-            lag = max(0, end - committed_offset)
-            total_lag += lag
-            partitions.append(
-                {
-                    "partition": tp.partition,
-                    "end_offset": end,
-                    "committed_offset": committed_offset,
-                    "lag": lag,
-                }
-            )
-    finally:
-        consumer.close()
+        partitions, total_lag = _calculate_partition_lag(end_offsets, committed_offsets, tp_list)
+        status = "healthy" if total_lag < config.CONSUMER_LAG_THRESHOLD else "behind"
+        logger.info("get_consumer_lag group=%s topic=%s lag=%d status=%s", group_id, topic, total_lag, status)
+        return {
+            "success": True,
+            "group_id": group_id,
+            "topic": topic,
+            "total_lag": total_lag,
+            "partitions": partitions,
+            "status": status,
+        }
 
-    return {
-        "group_id": group_id,
-        "topic": topic,
-        "total_lag": total_lag,
-        "partitions": partitions,
-        "status": "healthy" if total_lag < 100 else "behind",
-    }
+    except Exception as exc:
+        logger.error("get_consumer_lag failed group=%s topic=%s", group_id, topic, exc_info=True)
+        return format_error(exc)
 
 
 @mcp.tool()
@@ -170,16 +263,20 @@ def list_topics() -> dict:
     Returns:
         Dict with topics list: [{name, partitions}]
     """
-    consumer = KafkaConsumer(bootstrap_servers=KAFKA_BOOTSTRAP)
     try:
-        topics = list(consumer.topics())
-        result = []
-        for topic in sorted(topics):
-            if topic.startswith("_"):
-                continue
-            partitions = consumer.partitions_for_topic(topic) or set()
-            result.append({"name": topic, "partitions": len(partitions)})
-    finally:
-        consumer.close()
+        consumer = KafkaConsumer(bootstrap_servers=config.KAFKA_BOOTSTRAP)
+        try:
+            result = [
+                {"name": t, "partitions": len(consumer.partitions_for_topic(t) or set())}
+                for t in sorted(consumer.topics())
+                if not t.startswith("_")
+            ]
+        finally:
+            consumer.close()
 
-    return {"topics": result, "count": len(result)}
+        logger.info("list_topics count=%d", len(result))
+        return {"success": True, "topics": result, "count": len(result)}
+
+    except Exception as exc:
+        logger.error("list_topics failed", exc_info=True)
+        return format_error(exc)
