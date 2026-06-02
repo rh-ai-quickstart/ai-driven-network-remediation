@@ -38,4 +38,18 @@ spec:
                 --partitions {{ .partitions }} \
                 --config retention.ms={{ .retention | int64 }}
               {{- end }}
+              echo "Waiting for group coordinator..."
+              timeout 30 /opt/kafka/bin/kafka-consumer-groups.sh \
+                --bootstrap-server kafka:{{ .Values.kafka.service.port }} \
+                --describe --group warmup-init-group 2>/dev/null || true
+              WAIT=0
+              until /opt/kafka/bin/kafka-topics.sh \
+                  --bootstrap-server kafka:{{ .Values.kafka.service.port }} \
+                  --describe --topic __consumer_offsets 2>/dev/null | grep -q "Leader:" \
+                  || [ "$WAIT" -ge 15 ]; do
+                WAIT=$((WAIT + 1))
+                echo "  waiting for __consumer_offsets leader ($WAIT/15)..."
+                sleep 2
+              done
+              echo "Group coordinator ready"
 {{- end }}

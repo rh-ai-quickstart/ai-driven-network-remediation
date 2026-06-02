@@ -272,6 +272,7 @@ minio-uninstall:
 unit-tests:
 	cd hub/agent-service && uv run pytest
 	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
+	cd hub/mcp-servers/mcp-kafka && uv sync --group dev && uv run pytest
 
 .PHONY: integration-tests
 integration-tests:
@@ -328,7 +329,8 @@ kafka-install:
 		--set kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 		--set kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
 		--set kafkaUI.route.enabled=$(ROUTES_ENABLED) \
-		$(KAFKA_HELM_EXTRA_ARGS)
+		$(KAFKA_HELM_EXTRA_ARGS) \
+		--wait --timeout 10m
 
 .PHONY: kafka-uninstall
 kafka-uninstall:

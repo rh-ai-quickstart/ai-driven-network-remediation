@@ -97,6 +97,7 @@ spec:
             - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: {{ .Values.kafka.autoCreateTopics | quote }} }
             - { name: KAFKA_LOG_RETENTION_HOURS, value: {{ .Values.kafka.retention.hours | quote }} }
             - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: {{ .Values.kafka.replicas | quote }} }
+            - { name: KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS, value: {{ .Values.kafka.offsetsTopicNumPartitions | default 1 | quote }} }
             {{- if .Values.kafka.tls.enabled }}
             - { name: KAFKA_SSL_KEYSTORE_TYPE, value: "PEM" }
             - { name: KAFKA_SSL_KEYSTORE_LOCATION, value: "/opt/kafka/tls/keystore.pem" }

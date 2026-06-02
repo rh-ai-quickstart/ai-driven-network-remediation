@@ -25,7 +25,7 @@ def mcp_lokistack_client():
 @pytest.fixture(scope="session")
 def mcp_kafka_client():
     base_url = os.environ.get("MCP_KAFKA_URL", "http://localhost:8003")
-    with httpx.Client(base_url=base_url) as client:
+    with httpx.Client(base_url=base_url, timeout=60) as client:
         yield client
 
 
