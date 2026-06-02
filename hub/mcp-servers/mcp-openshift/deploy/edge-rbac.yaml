@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: noc-openshift-mcp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: noc-openshift-mcp
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["list", "get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "get"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: noc-openshift-mcp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: noc-openshift-mcp
+subjects:
+  - kind: ServiceAccount
+    name: noc-openshift-mcp
+    namespace: EDGE_NAMESPACE_PLACEHOLDER
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: noc-openshift-mcp-token
+  annotations:
+    kubernetes.io/service-account.name: noc-openshift-mcp
+type: kubernetes.io/service-account-token

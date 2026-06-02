@@ -3,6 +3,7 @@ REGISTRY        ?= quay.io/rh-ai-quickstart
 VERSION         ?= 0.1.0
 ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
+EDGE_NAMESPACE  ?= $(NAMESPACE) # TODO: Change to dark-noc-edge
 RELEASE         ?= hub
 PUSH_EXTRA_ARGS ?=
 ROUTES_ENABLED  ?= true
@@ -35,7 +36,7 @@ LANGFUSE_PORT          := 3000
 
 # ── Kafka (optional: ENABLE_KAFKA=true) ─────────────────────────
 ENABLE_KAFKA           ?= true
-ENABLE_KAFKA_UI        ?= true
+ENABLE_KAFKA_UI        ?= false
 KAFKA_RELEASE          := kafka
 KAFKA_VALUES           := hub/infra/kafka/values.yaml
 KAFKA_PORT             := 9092
@@ -128,6 +129,8 @@ ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-install
 endif
 ifeq ($(ENABLE_HUB),true)
+	@oc get secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) > /dev/null 2>&1 || \
+		hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
@@ -136,6 +139,8 @@ ifeq ($(ENABLE_HUB),true)
 		--set global.routes.enabled=$(ROUTES_ENABLED) \
 		--set image.tag=$(VERSION) \
 		$(helm_mcp_image_args) \
+		--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
+		--set mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
 		--set-string lokistack.name='$(LOKISTACK_NAME)' \
 		--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
 		$(helm_adnr_llm_args) \
@@ -158,6 +163,7 @@ endif
 helm-uninstall:
 ifeq ($(ENABLE_HUB),true)
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 ifeq ($(ENABLE_LOKISTACK),true)
 	$(MAKE) lokistack-uninstall
 endif
@@ -176,6 +182,12 @@ ifeq ($(ENABLE_KAFKA),true)
 	$(MAKE) kafka-uninstall
 endif
 endif
+
+.PHONY: edge-rbac-teardown
+edge-rbac-teardown:
+	sed 's/EDGE_NAMESPACE_PLACEHOLDER/$(EDGE_NAMESPACE)/g' hub/mcp-servers/mcp-openshift/deploy/edge-rbac.yaml \
+		| oc delete -n $(EDGE_NAMESPACE) --ignore-not-found -f -
+	oc delete secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) --ignore-not-found
 
 .PHONY: _langfuse-deploy
 _langfuse-deploy:
@@ -285,7 +297,7 @@ ifeq ($(ENABLE_HUB),true)
 	PF8_PID=$$!; \
 	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) uv run pytest
+	ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
 endif

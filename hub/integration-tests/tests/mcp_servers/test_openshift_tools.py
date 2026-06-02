@@ -1,6 +1,10 @@
 """Integration tests verifying noc-openshift exposes and executes its MCP tools."""
 
 import json
+import os
+import subprocess
+
+EDGE_NAMESPACE = os.environ.get("EDGE_NAMESPACE", "dark-noc-edge")
 
 EXPECTED_TOOLS = {
     "get_namespaces",
@@ -64,34 +68,46 @@ def test_get_namespaces(mcp_openshift_client):
     assert "namespaces" in result
     assert result.get("count", 0) >= 1
     names = [ns["name"] for ns in result["namespaces"]]
-    assert "dark-noc-edge" in names
+    assert EDGE_NAMESPACE in names
+
+
+def _oc_pod_names(namespace: str) -> set[str]:
+    """Return pod names from a direct ``oc get pods`` call."""
+    out = subprocess.run(
+        ["oc", "get", "pods", "-n", namespace,
+         "-o", "jsonpath={.items[*].metadata.name}"],
+        capture_output=True, text=True, timeout=30,
+    )
+    return set(out.stdout.split()) if out.stdout.strip() else set()
 
 
 def test_get_pods(mcp_openshift_client):
-    """Call get_pods and verify the edge-worker deployment pod is visible."""
-    result = _call_tool(mcp_openshift_client, "get_pods", {"namespace": "dark-noc-edge"})
+    """Call get_pods and verify the returned set matches a direct oc query."""
+    result = _call_tool(mcp_openshift_client, "get_pods", {"namespace": EDGE_NAMESPACE})
     assert "pods" in result
-    assert result.get("count", 0) >= 1
-    pod_names = [p["name"] for p in result["pods"]]
-    assert any("edge-worker" in name for name in pod_names)
+    mcp_names = {p["name"] for p in result["pods"]}
+    oc_names = _oc_pod_names(EDGE_NAMESPACE)
+    assert mcp_names == oc_names
 
 
 def test_get_events(mcp_openshift_client):
     """Call get_events and verify it returns a list (may be empty on a fresh namespace)."""
-    result = _call_tool(mcp_openshift_client, "get_events", {"namespace": "dark-noc-edge"})
+    result = _call_tool(mcp_openshift_client, "get_events", {"namespace": EDGE_NAMESPACE})
     assert "events" in result
     assert isinstance(result["events"], list)
 
 
 def test_get_pod_logs(mcp_openshift_client):
-    """Call get_pod_logs on the edge-worker pod."""
-    pods_result = _call_tool(mcp_openshift_client, "get_pods", {"namespace": "dark-noc-edge"})
-    pod_name = next(p["name"] for p in pods_result["pods"] if "edge-worker" in p["name"])
+    """Call get_pod_logs on the first running pod in the namespace."""
+    pods_result = _call_tool(mcp_openshift_client, "get_pods", {"namespace": EDGE_NAMESPACE})
+    running = [p for p in pods_result["pods"] if p["status"] == "Running"]
+    assert running, "No running pods found in namespace"
+    pod_name = running[0]["name"]
 
     result = _call_tool(
         mcp_openshift_client,
         "get_pod_logs",
-        {"pod_name": pod_name, "namespace": "dark-noc-edge", "tail_lines": 10},
+        {"pod_name": pod_name, "namespace": EDGE_NAMESPACE, "tail_lines": 10},
     )
     assert result["success"] is True
     assert result["pod"] == pod_name
