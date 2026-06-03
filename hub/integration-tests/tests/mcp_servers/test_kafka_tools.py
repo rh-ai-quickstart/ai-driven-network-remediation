@@ -4,6 +4,7 @@ Requires a deployed kafka-mcp instance.
 """
 
 import json
+import time
 import uuid
 
 import pytest
@@ -50,12 +51,19 @@ def temp_topic(mcp_kafka_client):
     # remediation-jobs is also in the consume allowlist, making it the only
     # topic valid for both directions.
     name = "remediation-jobs"
-    result = _call_tool(
-        mcp_kafka_client,
-        "produce_message",
-        {"topic": name, "message": {"_seed": True}},
-    )
-    assert result.get("success"), f"Seed produce failed: {result}"
+    last_result = None
+    for _ in range(5):
+        result = _call_tool(
+            mcp_kafka_client,
+            "produce_message",
+            {"topic": name, "message": {"_seed": True}},
+        )
+        if result.get("success"):
+            break
+        last_result = result
+        time.sleep(3)
+    else:
+        pytest.fail(f"Seed produce failed after 5 attempts: {last_result}")
     yield name
 
 

@@ -45,7 +45,7 @@ def test_runbooks_sync_ingest_and_content_flow(ingestion_client):
         or "runbooks/nginx-crashloop.md" in sync_data["skipped_objects"]
     )
 
-    ingest_response = ingestion_client.post("/runbooks/ingest", timeout=120.0)
+    ingest_response = ingestion_client.post("/runbooks/ingest", timeout=60.0)
     assert ingest_response.status_code == 200
     ingest_data = ingest_response.json()
     assert ingest_data["prefix"] == "runbooks/"

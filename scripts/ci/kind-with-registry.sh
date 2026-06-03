@@ -26,7 +26,9 @@ EOF
 REGISTRY_DIR="/etc/containerd/certs.d/localhost:${reg_port}"
 for node in $(kind get nodes); do
   docker exec "${node}" mkdir -p "${REGISTRY_DIR}"
-  printf '[host."http://%s:5000"]\n' "${reg_name}" | docker exec -i "${node}" cp /dev/stdin "${REGISTRY_DIR}/hosts.toml"
+  cat <<EOF | docker exec -i "${node}" cp /dev/stdin "${REGISTRY_DIR}/hosts.toml"
+[host."http://${reg_name}:5000"]
+EOF
 done
 
 # 4. Connect the registry container to the kind network

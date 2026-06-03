@@ -279,7 +279,10 @@ integration-tests:
 ifeq ($(ENABLE_HUB),true)
 	oc wait pod/kafka-0 --for=condition=Ready -n $(NAMESPACE) --timeout=5m && \
 	oc wait job/kafka-create-topics --for=condition=complete -n $(NAMESPACE) --timeout=5m && \
-	oc wait deployment/mcp-noc-kafka --for=condition=Available -n $(NAMESPACE) --timeout=5m && \
+	oc wait deployment/hub-llama-stack --for=condition=Available -n $(NAMESPACE) --timeout=5m && \
+	oc wait deployment/hub-ingestion-pipeline --for=condition=Available -n $(NAMESPACE) --timeout=5m && \
+	oc rollout restart deployment/mcp-noc-kafka -n $(NAMESPACE) && \
+	oc rollout status deployment/mcp-noc-kafka -n $(NAMESPACE) --timeout=5m && \
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
 	PF1_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
@@ -300,7 +303,7 @@ ifeq ($(ENABLE_HUB),true)
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
 	PF8_PID=$$!; \
 	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID" EXIT; \
-	sleep 2 && cd hub/integration-tests && \
+	sleep 5 && cd hub/integration-tests && \
 	ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
