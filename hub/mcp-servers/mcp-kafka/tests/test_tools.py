@@ -126,6 +126,22 @@ class TestConsumeTopic:
         for offset in seek_offsets:
             assert offset >= 200 - (20 // 4)
 
+    def test_retry_returns_messages(self, mock_consumer_cls):
+        consumer = mock_consumer_cls.return_value
+        tp = TopicPartition("system-alerts", 0)
+        consumer.partitions_for_topic.return_value = {0}
+        consumer.end_offsets.return_value = {tp: 50}
+        consumer.poll.side_effect = [
+            {},
+            {},
+            {tp: [self._make_msg()]},
+        ]
+
+        result = consume_topic(topic="system-alerts", max_messages=5)
+
+        assert result["success"] is True
+        assert result["count"] == 1
+
     def test_connection_error(self, mock_consumer_cls):
         mock_consumer_cls.side_effect = NoBrokersAvailable()
 
@@ -224,6 +240,16 @@ class TestGetConsumerLag:
         assert result["success"] is False
         assert result["error"] == "connection_error"
 
+    def test_topic_not_found(self, mock_consumer_cls, mock_admin_cls):
+        consumer = mock_consumer_cls.return_value
+        consumer.partitions_for_topic.return_value = None
+        consumer.topics.return_value = {"nginx-logs", "noc-alerts", "_consumer_offsets"}
+
+        result = get_consumer_lag(topic="nonexistent")
+
+        assert result["success"] is False
+        assert "not found" in result["message"].lower()
+
     @patch("mcp_kafka.tools.time.sleep")
     def test_coordinator_retry_succeeds(self, mock_sleep, mock_consumer_cls, mock_admin_cls):
         consumer = mock_consumer_cls.return_value
@@ -241,7 +267,7 @@ class TestGetConsumerLag:
 
         assert result["success"] is True
         assert result["total_lag"] == 10
-        mock_sleep.assert_called_once_with(5)
+        mock_sleep.assert_called_once_with(2)
 
     @patch("mcp_kafka.tools.time.sleep")
     def test_coordinator_retry_exhausted(self, mock_sleep, mock_consumer_cls, mock_admin_cls):
@@ -253,11 +279,8 @@ class TestGetConsumerLag:
 
         result = get_consumer_lag()
 
-        # After 5 failed retries the function falls back to committed=0
-        # rather than surfacing a connection_error, because end_offsets
-        # already proved the broker is reachable.
         assert result["success"] is True
         assert result["total_lag"] == 100
         assert result["partitions"][0]["committed_offset"] == 0
-        assert mock_sleep.call_count == 4
-        mock_sleep.assert_called_with(5)
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_called_with(2)

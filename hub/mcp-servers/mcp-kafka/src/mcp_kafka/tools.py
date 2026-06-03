@@ -41,7 +41,7 @@ def _seek_to_tail(consumer, topic, max_messages):
 def _parse_value(raw):
     try:
         return json.loads(raw)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         return raw
 
 
@@ -71,11 +71,8 @@ def _poll_messages(consumer, max_messages, timeout_ms):
     if messages:
         return messages
 
-    # In resource-constrained environments (e.g. Kind CI) the broker may need
-    # multiple fetch rounds before messages are visible — retry up to 3 more
-    # times with a 5-second window each before giving up.
-    for _ in range(3):
-        records = consumer.poll(timeout_ms=5_000, max_records=max_messages)
+    for _ in range(2):
+        records = consumer.poll(timeout_ms=3_000, max_records=max_messages)
         messages = _extract_messages(records, max_messages)
         if messages:
             return messages
@@ -246,7 +243,14 @@ def get_consumer_lag(
             request_timeout_ms=25_000,
         )
         try:
-            tp_list = [TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic) or [0]]
+            partitions = consumer.partitions_for_topic(topic)
+            if not partitions:
+                available = sorted(t for t in consumer.topics() if not t.startswith("_"))
+                return format_error(
+                    ValueError(f"Topic '{topic}' not found."),
+                    suggestions=suggest_topics(topic, available),
+                )
+            tp_list = [TopicPartition(topic, p) for p in partitions]
             end_offsets = consumer.end_offsets(tp_list)
         finally:
             consumer.close()
@@ -260,11 +264,11 @@ def get_consumer_lag(
         # unconsumed) rather than surfacing a connection_error — end_offsets already
         # confirmed the broker is reachable, so this is a coordinator-specific issue.
         committed_offsets = {}
-        for _attempt in range(5):
+        for _attempt in range(3):
             try:
                 admin = KafkaAdminClient(
                     bootstrap_servers=config.KAFKA_BOOTSTRAP,
-                    request_timeout_ms=25_000,
+                    request_timeout_ms=15_000,
                     api_version_auto_timeout_ms=10_000,
                 )
                 try:
@@ -273,15 +277,15 @@ def get_consumer_lag(
                     admin.close()
                 break
             except NoBrokersAvailable:
-                if _attempt == 4:
+                if _attempt == 2:
                     logger.warning(
-                        "Group coordinator unavailable after 5 retries for group=%s; "
+                        "Group coordinator unavailable after 3 retries for group=%s; "
                         "treating committed offsets as 0",
                         group_id,
                     )
                     break
-                logger.warning("Group coordinator not available, retrying in 5s (attempt %d/5)", _attempt + 1)
-                time.sleep(5)
+                logger.warning("Group coordinator not available, retrying in 2s (attempt %d/3)", _attempt + 1)
+                time.sleep(2)
 
         partitions, total_lag = _calculate_partition_lag(end_offsets, committed_offsets, tp_list)
         status = "healthy" if total_lag < config.CONSUMER_LAG_THRESHOLD else "behind"
