@@ -78,6 +78,7 @@ def _oc_pod_names(namespace: str) -> set[str]:
          "-o", "jsonpath={.items[*].metadata.name}"],
         capture_output=True, text=True, timeout=30,
     )
+    assert out.returncode == 0, out.stderr
     return set(out.stdout.split()) if out.stdout.strip() else set()
 
 

@@ -17,6 +17,7 @@ for _ in 1 2 3 4 5; do
     [ -n "$TOKEN" ] && break
     sleep 2
 done
+[ -z "$TOKEN" ] && echo "ERROR: token not populated after waiting" && exit 1
 TOKEN=$(echo "$TOKEN" | base64 -d)
 
 CA_FILE=$(mktemp)
