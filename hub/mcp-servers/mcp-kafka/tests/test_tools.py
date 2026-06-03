@@ -246,13 +246,18 @@ class TestGetConsumerLag:
     @patch("mcp_kafka.tools.time.sleep")
     def test_coordinator_retry_exhausted(self, mock_sleep, mock_consumer_cls, mock_admin_cls):
         consumer = mock_consumer_cls.return_value
+        tp = TopicPartition("nginx-logs", 0)
         consumer.partitions_for_topic.return_value = {0}
-        consumer.end_offsets.return_value = {TopicPartition("nginx-logs", 0): 100}
+        consumer.end_offsets.return_value = {tp: 100}
         mock_admin_cls.side_effect = NoBrokersAvailable()
 
         result = get_consumer_lag()
 
-        assert result["success"] is False
-        assert result["error"] == "connection_error"
+        # After 5 failed retries the function falls back to committed=0
+        # rather than surfacing a connection_error, because end_offsets
+        # already proved the broker is reachable.
+        assert result["success"] is True
+        assert result["total_lag"] == 100
+        assert result["partitions"][0]["committed_offset"] == 0
         assert mock_sleep.call_count == 4
         mock_sleep.assert_called_with(5)

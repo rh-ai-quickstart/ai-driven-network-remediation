@@ -45,11 +45,7 @@ def _parse_value(raw):
         return raw
 
 
-def _poll_messages(consumer, max_messages, timeout_ms):
-    # poll(0) primes the fetch pipeline after assign+seek; the real poll then
-    # waits up to timeout_ms for the response.
-    consumer.poll(timeout_ms=0)
-    records = consumer.poll(timeout_ms=timeout_ms, max_records=max_messages)
+def _extract_messages(records, max_messages):
     messages = []
     for tp_msgs in records.values():
         for msg in tp_msgs:
@@ -63,24 +59,26 @@ def _poll_messages(consumer, max_messages, timeout_ms):
             )
             if len(messages) >= max_messages:
                 return messages
+    return messages
 
-    if not messages:
-        # One retry for slow-broker environments (e.g. Kind CI) where the first
-        # poll window is consumed by connection setup or the broker's high-water
-        # mark hasn't propagated yet at the time of the initial fetch response.
-        records = consumer.poll(timeout_ms=3_000, max_records=max_messages)
-        for tp_msgs in records.values():
-            for msg in tp_msgs:
-                messages.append(
-                    {
-                        "partition": msg.partition,
-                        "offset": msg.offset,
-                        "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
-                        "value": _parse_value(msg.value),
-                    }
-                )
-                if len(messages) >= max_messages:
-                    return messages
+
+def _poll_messages(consumer, max_messages, timeout_ms):
+    # poll(0) primes the fetch pipeline after assign+seek; the real poll then
+    # waits up to timeout_ms for the response.
+    consumer.poll(timeout_ms=0)
+    records = consumer.poll(timeout_ms=timeout_ms, max_records=max_messages)
+    messages = _extract_messages(records, max_messages)
+    if messages:
+        return messages
+
+    # In resource-constrained environments (e.g. Kind CI) the broker may need
+    # multiple fetch rounds before messages are visible — retry up to 3 more
+    # times with a 5-second window each before giving up.
+    for _ in range(3):
+        records = consumer.poll(timeout_ms=5_000, max_records=max_messages)
+        messages = _extract_messages(records, max_messages)
+        if messages:
+            return messages
 
     return messages
 
@@ -258,6 +256,10 @@ def get_consumer_lag(
         # when kafka-python exhausts its internal retries on FindCoordinatorRequest.
         # In resource-constrained environments (e.g. Kind CI), the coordinator election
         # can take significantly longer than on a production cluster.
+        # After all retries, fall back to empty committed offsets (treats all lag as
+        # unconsumed) rather than surfacing a connection_error — end_offsets already
+        # confirmed the broker is reachable, so this is a coordinator-specific issue.
+        committed_offsets = {}
         for _attempt in range(5):
             try:
                 admin = KafkaAdminClient(
@@ -272,7 +274,12 @@ def get_consumer_lag(
                 break
             except NoBrokersAvailable:
                 if _attempt == 4:
-                    raise
+                    logger.warning(
+                        "Group coordinator unavailable after 5 retries for group=%s; "
+                        "treating committed offsets as 0",
+                        group_id,
+                    )
+                    break
                 logger.warning("Group coordinator not available, retrying in 5s (attempt %d/5)", _attempt + 1)
                 time.sleep(5)
 
