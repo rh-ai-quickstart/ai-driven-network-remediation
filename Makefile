@@ -279,6 +279,7 @@ integration-tests:
 ifeq ($(ENABLE_HUB),true)
 	oc wait pod/kafka-0 --for=condition=Ready -n $(NAMESPACE) --timeout=5m && \
 	oc wait deployment/mcp-noc-kafka --for=condition=Available -n $(NAMESPACE) --timeout=5m && \
+	sleep 120 && \
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
 	PF1_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
