@@ -67,11 +67,11 @@ def _poll_messages(consumer, max_messages, timeout_ms):
 
 
 def _build_clamped_info(orig_max, orig_timeout, max_messages, timeout_ms):
-    fields = [
-        ("max_messages", orig_max, max_messages),
-        ("timeout_ms", orig_timeout, timeout_ms),
-    ]
-    clamped = {name: actual for name, orig, actual in fields if orig is not None}
+    clamped = {}
+    if orig_max is not None:
+        clamped["max_messages"] = max_messages
+    if orig_timeout is not None:
+        clamped["timeout_ms"] = timeout_ms
     return clamped
 
 

@@ -17,13 +17,15 @@ def suggest_topics(topic: str, available_topics: list[str]) -> list[str]:
     return result[:5]
 
 
+def _clamp(value: int, floor: int, cap: int) -> tuple[int, int | None]:
+    if value > cap:
+        return cap, value
+    return max(floor, value), None
+
+
 def clamp_max_messages(value: int) -> tuple[int, int | None]:
-    if value > MAX_MESSAGES_CAP:
-        return MAX_MESSAGES_CAP, value
-    return max(1, value), None
+    return _clamp(value, 1, MAX_MESSAGES_CAP)
 
 
 def clamp_timeout_ms(value: int) -> tuple[int, int | None]:
-    if value > MAX_TIMEOUT_MS_CAP:
-        return MAX_TIMEOUT_MS_CAP, value
-    return max(100, value), None
+    return _clamp(value, 100, MAX_TIMEOUT_MS_CAP)

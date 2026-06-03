@@ -51,8 +51,7 @@ def temp_topic(mcp_kafka_client):
         "produce_message",
         {"topic": name, "message": {"_seed": True}},
     )
-    if not result.get("success"):
-        pytest.skip(f"Cannot create temp topic: {result.get('message', '')}")
+    assert result.get("success"), f"Cannot create temp topic: {result}"
     yield name
 
 
