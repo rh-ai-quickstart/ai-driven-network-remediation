@@ -241,7 +241,7 @@ class TestGetConsumerLag:
 
         assert result["success"] is True
         assert result["total_lag"] == 10
-        mock_sleep.assert_called_once_with(3)
+        mock_sleep.assert_called_once_with(5)
 
     @patch("mcp_kafka.tools.time.sleep")
     def test_coordinator_retry_exhausted(self, mock_sleep, mock_consumer_cls, mock_admin_cls):
@@ -254,4 +254,5 @@ class TestGetConsumerLag:
 
         assert result["success"] is False
         assert result["error"] == "connection_error"
-        mock_sleep.assert_called_once_with(3)
+        assert mock_sleep.call_count == 4
+        mock_sleep.assert_called_with(5)

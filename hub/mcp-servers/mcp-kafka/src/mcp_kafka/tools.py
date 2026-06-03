@@ -63,6 +63,25 @@ def _poll_messages(consumer, max_messages, timeout_ms):
             )
             if len(messages) >= max_messages:
                 return messages
+
+    if not messages:
+        # One retry for slow-broker environments (e.g. Kind CI) where the first
+        # poll window is consumed by connection setup or the broker's high-water
+        # mark hasn't propagated yet at the time of the initial fetch response.
+        records = consumer.poll(timeout_ms=3_000, max_records=max_messages)
+        for tp_msgs in records.values():
+            for msg in tp_msgs:
+                messages.append(
+                    {
+                        "partition": msg.partition,
+                        "offset": msg.offset,
+                        "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
+                        "value": _parse_value(msg.value),
+                    }
+                )
+                if len(messages) >= max_messages:
+                    return messages
+
     return messages
 
 
@@ -235,9 +254,11 @@ def get_consumer_lag(
             consumer.close()
 
         # AdminClient fetches committed offsets directly without joining the group.
-        # Retry once: NoBrokersAvailable wraps GroupCoordinatorNotAvailable after
-        # kafka-python exhausts its internal retries on FindCoordinatorRequest.
-        for _attempt in range(2):
+        # Retry up to 5 times: NoBrokersAvailable wraps GroupCoordinatorNotAvailable
+        # when kafka-python exhausts its internal retries on FindCoordinatorRequest.
+        # In resource-constrained environments (e.g. Kind CI), the coordinator election
+        # can take significantly longer than on a production cluster.
+        for _attempt in range(5):
             try:
                 admin = KafkaAdminClient(
                     bootstrap_servers=config.KAFKA_BOOTSTRAP,
@@ -250,10 +271,10 @@ def get_consumer_lag(
                     admin.close()
                 break
             except NoBrokersAvailable:
-                if _attempt == 1:
+                if _attempt == 4:
                     raise
-                logger.warning("Group coordinator not available, retrying in 3s")
-                time.sleep(3)
+                logger.warning("Group coordinator not available, retrying in 5s (attempt %d/5)", _attempt + 1)
+                time.sleep(5)
 
         partitions, total_lag = _calculate_partition_lag(end_offsets, committed_offsets, tp_list)
         status = "healthy" if total_lag < config.CONSUMER_LAG_THRESHOLD else "behind"
