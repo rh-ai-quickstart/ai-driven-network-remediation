@@ -45,13 +45,17 @@ def _call_tool(client, tool_name, arguments=None):
 
 @pytest.fixture(scope="module")
 def temp_topic(mcp_kafka_client):
-    name = f"test-mcp-{uuid.uuid4().hex[:8]}"
+    # Use an existing allowed topic rather than a dynamic name so the produce
+    # allowlist (remediation-jobs, agent-events, incident-audit) is satisfied.
+    # remediation-jobs is also in the consume allowlist, making it the only
+    # topic valid for both directions.
+    name = "remediation-jobs"
     result = _call_tool(
         mcp_kafka_client,
         "produce_message",
         {"topic": name, "message": {"_seed": True}},
     )
-    assert result.get("success"), f"Cannot create temp topic: {result}"
+    assert result.get("success"), f"Seed produce failed: {result}"
     yield name
 
 
