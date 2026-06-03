@@ -51,5 +51,9 @@ spec:
                 echo "  waiting for __consumer_offsets leader ($WAIT/15)..."
                 sleep 2
               done
+              if [ "$WAIT" -ge 15 ]; then
+                echo "ERROR: timed out waiting for __consumer_offsets leader"
+                exit 1
+              fi
               echo "Group coordinator ready"
 {{- end }}

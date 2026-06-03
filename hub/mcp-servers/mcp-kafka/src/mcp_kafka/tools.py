@@ -2,9 +2,11 @@
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 
 from kafka import KafkaAdminClient, KafkaConsumer, KafkaProducer
+from kafka.errors import NoBrokersAvailable
 from kafka.structs import TopicPartition
 
 from . import config
@@ -44,18 +46,21 @@ def _parse_value(raw):
 
 
 def _poll_messages(consumer, max_messages, timeout_ms):
-    # Use poll() with an explicit timeout instead of the iterator so that the
-    # timeout budget starts HERE, not back when KafkaConsumer was constructed.
+    # poll(0) primes the fetch pipeline after assign+seek; the real poll then
+    # waits up to timeout_ms for the response.
+    consumer.poll(timeout_ms=0)
     records = consumer.poll(timeout_ms=timeout_ms, max_records=max_messages)
     messages = []
     for tp_msgs in records.values():
         for msg in tp_msgs:
-            messages.append({
-                "partition": msg.partition,
-                "offset": msg.offset,
-                "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
-                "value": _parse_value(msg.value),
-            })
+            messages.append(
+                {
+                    "partition": msg.partition,
+                    "offset": msg.offset,
+                    "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
+                    "value": _parse_value(msg.value),
+                }
+            )
             if len(messages) >= max_messages:
                 return messages
     return messages
@@ -99,12 +104,14 @@ def _calculate_partition_lag(end_offsets, committed_offsets, tp_list):
         end_offset = end_offsets[tp]
         oam = committed_offsets.get(tp)
         committed_offset = oam.offset if oam is not None and oam.offset != -1 else 0
-        partitions.append({
-            "partition": tp.partition,
-            "end_offset": end_offset,
-            "committed_offset": committed_offset,
-            "lag": max(0, end_offset - committed_offset),
-        })
+        partitions.append(
+            {
+                "partition": tp.partition,
+                "end_offset": end_offset,
+                "committed_offset": committed_offset,
+                "lag": max(0, end_offset - committed_offset),
+            }
+        )
     total_lag = sum(p["lag"] for p in partitions)
     return partitions, total_lag
 
@@ -228,15 +235,25 @@ def get_consumer_lag(
             consumer.close()
 
         # AdminClient fetches committed offsets directly without joining the group.
-        admin = KafkaAdminClient(
-            bootstrap_servers=config.KAFKA_BOOTSTRAP,
-            request_timeout_ms=25_000,
-            api_version_auto_timeout_ms=10_000,
-        )
-        try:
-            committed_offsets = admin.list_consumer_group_offsets(group_id, partitions=tp_list)
-        finally:
-            admin.close()
+        # Retry once: NoBrokersAvailable wraps GroupCoordinatorNotAvailable after
+        # kafka-python exhausts its internal retries on FindCoordinatorRequest.
+        for _attempt in range(2):
+            try:
+                admin = KafkaAdminClient(
+                    bootstrap_servers=config.KAFKA_BOOTSTRAP,
+                    request_timeout_ms=25_000,
+                    api_version_auto_timeout_ms=10_000,
+                )
+                try:
+                    committed_offsets = admin.list_consumer_group_offsets(group_id, partitions=tp_list)
+                finally:
+                    admin.close()
+                break
+            except NoBrokersAvailable:
+                if _attempt == 1:
+                    raise
+                logger.warning("Group coordinator not available, retrying in 3s")
+                time.sleep(3)
 
         partitions, total_lag = _calculate_partition_lag(end_offsets, committed_offsets, tp_list)
         status = "healthy" if total_lag < config.CONSUMER_LAG_THRESHOLD else "behind"

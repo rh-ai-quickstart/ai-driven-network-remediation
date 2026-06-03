@@ -223,3 +223,35 @@ class TestGetConsumerLag:
 
         assert result["success"] is False
         assert result["error"] == "connection_error"
+
+    @patch("mcp_kafka.tools.time.sleep")
+    def test_coordinator_retry_succeeds(self, mock_sleep, mock_consumer_cls, mock_admin_cls):
+        consumer = mock_consumer_cls.return_value
+        tp = TopicPartition("nginx-logs", 0)
+        consumer.partitions_for_topic.return_value = {0}
+        consumer.end_offsets.return_value = {tp: 100}
+
+        admin = MagicMock()
+        oam = MagicMock()
+        oam.offset = 90
+        admin.list_consumer_group_offsets.return_value = {tp: oam}
+        mock_admin_cls.side_effect = [NoBrokersAvailable(), admin]
+
+        result = get_consumer_lag()
+
+        assert result["success"] is True
+        assert result["total_lag"] == 10
+        mock_sleep.assert_called_once_with(3)
+
+    @patch("mcp_kafka.tools.time.sleep")
+    def test_coordinator_retry_exhausted(self, mock_sleep, mock_consumer_cls, mock_admin_cls):
+        consumer = mock_consumer_cls.return_value
+        consumer.partitions_for_topic.return_value = {0}
+        consumer.end_offsets.return_value = {TopicPartition("nginx-logs", 0): 100}
+        mock_admin_cls.side_effect = NoBrokersAvailable()
+
+        result = get_consumer_lag()
+
+        assert result["success"] is False
+        assert result["error"] == "connection_error"
+        mock_sleep.assert_called_once_with(3)
