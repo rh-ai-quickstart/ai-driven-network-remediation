@@ -117,14 +117,16 @@ class TestConsumeTopic:
     def test_multi_partition_seek_divides_max(self, mock_consumer_cls):
         consumer = mock_consumer_cls.return_value
         consumer.partitions_for_topic.return_value = {0, 1, 2, 3}
-        consumer.end_offsets.side_effect = lambda tps: {tps[0]: 200}
+        consumer.end_offsets.side_effect = lambda tps: {tp: 200 for tp in tps}
         consumer.poll.return_value = {}
 
-        consume_topic(topic="system-alerts", max_messages=20)
+        result = consume_topic(topic="system-alerts", max_messages=20)
 
+        assert result["success"] is True
+        assert consumer.seek.call_count == 4
         seek_offsets = [call.args[1] for call in consumer.seek.call_args_list]
         for offset in seek_offsets:
-            assert offset >= 200 - (20 // 4)
+            assert offset == 200 - (20 // 4)
 
     def test_connection_error(self, mock_consumer_cls):
         mock_consumer_cls.side_effect = NoBrokersAvailable()
