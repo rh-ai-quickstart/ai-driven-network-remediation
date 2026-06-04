@@ -23,7 +23,7 @@ def _resolve_topic(
 def format_error(exc: Exception, suggestions: list[str] | None = None) -> dict:
     if isinstance(exc, NoBrokersAvailable):
         error_type = "connection_error"
-        message = "Cannot connect to Kafka broker. " "Check KAFKA_BOOTSTRAP configuration and network connectivity."
+        message = "Cannot connect to Kafka broker. Check KAFKA_BOOTSTRAP configuration and network connectivity."
     elif isinstance(exc, ValueError):
         error_type = "validation_error"
         message = str(exc)

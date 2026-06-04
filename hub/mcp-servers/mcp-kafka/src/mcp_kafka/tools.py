@@ -11,8 +11,7 @@ from . import config
 from .config import mcp
 from .utils import _resolve_topic, format_error
 from .validators import (
-    clamp_max_messages,
-    clamp_timeout_ms,
+    clamp,
     suggest_topics,
 )
 
@@ -27,10 +26,10 @@ def _seek_to_tail(consumer, topic, max_messages):
     tp_list = [TopicPartition(topic, p) for p in partitions]
     consumer.assign(tp_list)
 
+    end_offsets = consumer.end_offsets(tp_list)
     seek_depth = max(1, max_messages // len(tp_list))
     for tp in tp_list:
-        end_offset = consumer.end_offsets([tp])[tp]
-        start_offset = max(0, end_offset - seek_depth)
+        start_offset = max(0, end_offsets[tp] - seek_depth)
         consumer.seek(tp, start_offset)
 
     return tp_list
@@ -59,24 +58,6 @@ def _poll_messages(consumer, max_messages, timeout_ms):
             if len(messages) >= max_messages:
                 return messages
     return messages
-
-
-def _build_clamped_info(orig_max, orig_timeout, max_messages, timeout_ms):
-    fields = [
-        ("max_messages", orig_max, max_messages),
-        ("timeout_ms", orig_timeout, timeout_ms),
-    ]
-    clamped = {name: actual for name, orig, actual in fields if orig is not None}
-    return clamped
-
-
-def _topic_not_found_error(consumer, topic):
-    available = sorted(t for t in consumer.topics() if not t.startswith("_"))
-    pool = [t for t in available if t in config.KAFKA_CONSUME_TOPICS] if config.KAFKA_CONSUME_TOPICS else available
-    return format_error(
-        ValueError(f"Topic '{topic}' not found."),
-        suggestions=suggest_topics(topic, pool),
-    )
 
 
 def _send_and_confirm(topic, message, key):
@@ -128,8 +109,8 @@ def consume_topic(
     """
     try:
         _resolve_topic(topic, config.KAFKA_CONSUME_TOPICS, "consume")
-        max_messages, orig_max = clamp_max_messages(max_messages)
-        timeout_ms, orig_timeout = clamp_timeout_ms(timeout_ms)
+        max_messages, orig_max = clamp(max_messages, 1, config.MAX_MESSAGES_CAP)
+        timeout_ms, orig_timeout = clamp(timeout_ms, 100, config.MAX_TIMEOUT_MS_CAP)
 
         consumer = KafkaConsumer(
             bootstrap_servers=config.KAFKA_BOOTSTRAP,
@@ -139,14 +120,23 @@ def consume_topic(
         try:
             tp_list = _seek_to_tail(consumer, topic, max_messages)
             if tp_list is None:
-                return _topic_not_found_error(consumer, topic)
+                available = sorted(t for t in consumer.topics() if not t.startswith("_"))
+                pool = [t for t in available if t in config.KAFKA_CONSUME_TOPICS] if config.KAFKA_CONSUME_TOPICS else available
+                return format_error(
+                    ValueError(f"Topic '{topic}' not found."),
+                    suggestions=suggest_topics(topic, pool),
+                )
             messages = _poll_messages(consumer, max_messages, timeout_ms)
         finally:
             consumer.close()
 
         logger.info("consume_topic topic=%s count=%d", topic, len(messages))
         result: dict = {"success": True, "topic": topic, "messages": messages, "count": len(messages)}
-        clamped = _build_clamped_info(orig_max, orig_timeout, max_messages, timeout_ms)
+        clamped = {}
+        if orig_max is not None:
+            clamped["max_messages"] = max_messages
+        if orig_timeout is not None:
+            clamped["timeout_ms"] = timeout_ms
         if clamped:
             result["clamped"] = clamped
         return result

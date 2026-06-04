@@ -1,7 +1,6 @@
 import pytest
 from mcp_kafka.validators import (
-    clamp_max_messages,
-    clamp_timeout_ms,
+    clamp,
     suggest_topics,
 )
 
@@ -35,36 +34,23 @@ class TestSuggestTopics:
         assert "noc-alerts" in result
 
 
-class TestClampMaxMessages:
+class TestClamp:
     @pytest.mark.parametrize(
-        "value, expected_clamped, expected_original",
+        "value, lo, hi, expected_clamped, expected_original",
         [
-            (20, 20, None),  # within range — no clamping
-            (100, 100, None),  # upper boundary — no clamping
-            (500, 100, 500),  # above max — clamped, original preserved
-            (1, 1, None),  # lower boundary — no clamping
-            (0, 1, None),  # below min — clamped to 1
-            (-5, 1, None),  # negative — clamped to 1
+            (20, 1, 100, 20, None),       # within range — no clamping
+            (100, 1, 100, 100, None),      # upper boundary — no clamping
+            (500, 1, 100, 100, 500),       # above max — clamped, original preserved
+            (1, 1, 100, 1, None),          # lower boundary — no clamping
+            (0, 1, 100, 1, None),          # below min — clamped to 1
+            (-5, 1, 100, 1, None),         # negative — clamped to 1
+            (5000, 100, 15000, 5000, None),    # timeout within range
+            (15000, 100, 15000, 15000, None),  # timeout upper boundary
+            (30000, 100, 15000, 15000, 30000),  # timeout above max
+            (50, 100, 15000, 100, None),       # timeout below min
         ],
     )
-    def test_clamping(self, value, expected_clamped, expected_original):
-        clamped, original = clamp_max_messages(value)
-        assert clamped == expected_clamped
-        assert original == expected_original
-
-
-class TestClampTimeoutMs:
-    @pytest.mark.parametrize(
-        "value, expected_clamped, expected_original",
-        [
-            (5000, 5000, None),  # within range — no clamping
-            (15000, 15000, None),  # upper boundary — no clamping
-            (30000, 15000, 30000),  # above max — clamped, original preserved
-            (100, 100, None),  # lower boundary — no clamping
-            (50, 100, None),  # below min — clamped to 100
-        ],
-    )
-    def test_clamping(self, value, expected_clamped, expected_original):
-        clamped, original = clamp_timeout_ms(value)
+    def test_clamping(self, value, lo, hi, expected_clamped, expected_original):
+        clamped, original = clamp(value, lo, hi)
         assert clamped == expected_clamped
         assert original == expected_original

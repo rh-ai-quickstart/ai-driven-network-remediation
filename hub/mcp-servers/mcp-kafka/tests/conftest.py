@@ -18,19 +18,3 @@ def _set_env(monkeypatch):
     )
     monkeypatch.setattr(config, "MAX_MESSAGES_CAP", 100)
     monkeypatch.setattr(config, "MAX_TIMEOUT_MS_CAP", 15_000)
-
-
-SAMPLE_KAFKA_MESSAGE = {
-    "level": "error",
-    "message": "connection refused",
-    "host": "edge-worker-1",
-}
-
-SAMPLE_KAFKA_TOPICS = {
-    "system-alerts",
-    "noc-alerts",
-    "remediation-jobs",
-    "agent-events",
-    "incident-audit",
-    "nginx-logs",
-}
