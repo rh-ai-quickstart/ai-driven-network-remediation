@@ -5,7 +5,6 @@ Slim AAP Mock -- covers the AAP v2 REST API surface used by mcp-aap tools.
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -144,13 +143,15 @@ def launch_template(template_id: int, body: dict[str, Any] | None = None):
         "PLAY RECAP ***",
         "host1 : ok=2 changed=1 unreachable=0 failed=0",
     ]:
-        events.append({
-            "id": _next_event_id,
-            "event": "runner_on_ok",
-            "stdout": line,
-            "event_display": line,
-            "job": job_id,
-        })
+        events.append(
+            {
+                "id": _next_event_id,
+                "event": "runner_on_ok",
+                "stdout": line,
+                "event_display": line,
+                "job": job_id,
+            }
+        )
         _next_event_id += 1
     job_events_db[job_id] = events
 

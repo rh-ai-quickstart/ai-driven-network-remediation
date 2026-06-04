@@ -74,9 +74,10 @@ def test_get_namespaces(mcp_openshift_client):
 def _oc_pod_names(namespace: str) -> set[str]:
     """Return pod names from a direct ``oc get pods`` call."""
     out = subprocess.run(
-        ["oc", "get", "pods", "-n", namespace,
-         "-o", "jsonpath={.items[*].metadata.name}"],
-        capture_output=True, text=True, timeout=30,
+        ["oc", "get", "pods", "-n", namespace, "-o", "jsonpath={.items[*].metadata.name}"],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert out.returncode == 0, out.stderr
     return set(out.stdout.split()) if out.stdout.strip() else set()
