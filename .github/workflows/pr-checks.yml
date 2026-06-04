@@ -95,7 +95,7 @@ jobs:
       - name: Verify helm-uninstall cleanup
         if: always()
         run: |
-          make helm-uninstall ENABLE_HUB=true ENABLE_KAFKA=true 2>/dev/null || true
+          make helm-uninstall ENABLE_HUB=true ENABLE_KAFKA=true ENABLE_AAP_MOCK=true 2>/dev/null || true
 
           remaining=$(oc get all -n hub --no-headers 2>/dev/null | grep -v "Completed" || true)
           if [ -n "$remaining" ]; then
