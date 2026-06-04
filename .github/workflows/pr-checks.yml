@@ -91,3 +91,17 @@ jobs:
         with:
           artifactPrefix: hub
           namespace: hub
+
+      - name: Verify helm-uninstall cleanup
+        if: always()
+        run: |
+          make helm-uninstall ENABLE_HUB=true ENABLE_KAFKA=true 2>/dev/null || true
+
+          remaining=$(oc get all -n hub --no-headers 2>/dev/null | grep -v "Completed" || true)
+          if [ -n "$remaining" ]; then
+            echo "::warning::Resources still present in hub namespace after helm-uninstall:"
+            echo "$remaining"
+            exit 1
+          fi
+          echo "All resources cleaned up successfully"
+        shell: bash
