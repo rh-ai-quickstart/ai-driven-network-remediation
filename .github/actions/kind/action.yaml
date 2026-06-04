@@ -73,3 +73,8 @@ runs:
             --set kafka.resources.limits.memory=512Mi"
       shell: bash
 
+    - name: Wait for Kafka topics to be created
+      run: |
+        oc wait --for=condition=complete job/kafka-create-topics -n hub --timeout=120s
+      shell: bash
+

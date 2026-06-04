@@ -85,6 +85,21 @@ jobs:
       - name: Run integration tests
         run: make integration-tests
 
+      - name: Collect Kafka diagnostics
+        if: failure()
+        run: |
+          echo "=== Kafka pod status ==="
+          oc get pods -l app=kafka -n hub -o wide
+          echo "=== MCP Kafka pod status ==="
+          oc get pods -l app.kubernetes.io/name=noc-kafka -n hub -o wide
+          echo "=== kafka-create-topics job status ==="
+          oc get job kafka-create-topics -n hub -o wide 2>/dev/null || echo "Job not found"
+          echo "=== Kafka logs (last 50 lines) ==="
+          oc logs -l app=kafka -n hub --tail=50 2>/dev/null || echo "No logs"
+          echo "=== MCP Kafka logs (last 50 lines) ==="
+          oc logs -l app.kubernetes.io/name=noc-kafka -n hub --tail=50 2>/dev/null || echo "No logs"
+        shell: bash
+
       - name: Inspect Cluster - Hub
         if: always()
         uses: ./.github/actions/inspect-ns
