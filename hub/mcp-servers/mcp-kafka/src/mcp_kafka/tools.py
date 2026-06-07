@@ -212,7 +212,10 @@ def get_consumer_lag(
             request_timeout_ms=25_000,
         )
         try:
-            tp_list = [TopicPartition(topic, p) for p in consumer.partitions_for_topic(topic) or [0]]
+            partitions_set = consumer.partitions_for_topic(topic)
+            if not partitions_set:
+                return format_error(ValueError(f"Topic '{topic}' not found."))
+            tp_list = [TopicPartition(topic, p) for p in partitions_set]
             end_offsets = consumer.end_offsets(tp_list)
         finally:
             consumer.close()
@@ -254,12 +257,13 @@ def list_topics() -> dict:
         Dict with topics list: [{name, partitions}]
     """
     try:
+        allowed = set(config.KAFKA_CONSUME_TOPICS) | set(config.KAFKA_PRODUCE_TOPICS)
         consumer = KafkaConsumer(bootstrap_servers=config.KAFKA_BOOTSTRAP)
         try:
             result = [
                 {"name": t, "partitions": len(consumer.partitions_for_topic(t) or set())}
                 for t in sorted(consumer.topics())
-                if not t.startswith("_")
+                if not t.startswith("_") and (not allowed or t in allowed)
             ]
         finally:
             consumer.close()

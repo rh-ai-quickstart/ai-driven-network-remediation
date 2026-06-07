@@ -8,9 +8,7 @@ import uuid
 
 import pytest
 
-# Kafka tests are flaky in CI due to unstable Kind cluster environment
-# (resource-constrained broker, timing-sensitive connections).
-pytestmark = pytest.mark.flaky(reruns=10, reruns_delay=5)
+pytestmark = pytest.mark.flaky(reruns=5)
 
 MCP_HEADERS = {
     "Accept": "application/json, text/event-stream",

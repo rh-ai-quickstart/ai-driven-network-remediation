@@ -4,6 +4,12 @@ description: Install Kind and create a local Kubernetes cluster
 runs:
   using: composite
   steps:
+    - name: Clean up any pre-existing Kind cluster
+      run: |
+        kind delete cluster 2>/dev/null || true
+        docker rm -f kind-registry 2>/dev/null || true
+      shell: bash
+
     - name: Install oc client
       run: |
         curl -sSLo oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz
@@ -76,5 +82,13 @@ runs:
     - name: Wait for Kafka topics to be created
       run: |
         oc wait --for=condition=complete job/kafka-create-topics -n hub --timeout=120s
+      shell: bash
+
+    - name: Wait for MCP pods to be ready
+      run: |
+        for label in noc-kafka noc-openshift noc-aap noc-slack noc-servicenow; do
+          echo "Waiting for ${label}..."
+          oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=${label}" -n hub --timeout=120s
+        done
       shell: bash
 
