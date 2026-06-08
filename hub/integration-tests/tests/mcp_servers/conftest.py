@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -5,7 +6,72 @@ from dataclasses import dataclass
 import httpx
 import pytest
 
-_lokistack_enabled = os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
+MCP_HEADERS = {
+    "Accept": "application/json, text/event-stream",
+    "Content-Type": "application/json",
+}
+
+
+def parse_sse_json(response) -> dict:
+    """Parse a JSON-RPC result from either plain JSON or SSE response."""
+    content_type = response.headers.get("content-type", "")
+    if "text/event-stream" in content_type:
+        for line in response.text.splitlines():
+            if line.startswith("data:"):
+                data = line.removeprefix("data:").strip()
+                if data:
+                    return json.loads(data)
+        raise ValueError(f"No data line in SSE response: {response.text}")
+    return response.json()
+
+
+def mcp_call(client, tool_name: str, arguments=None) -> dict:
+    """Call an MCP tool via JSON-RPC and return the parsed result."""
+    response = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments or {},
+            },
+        },
+        headers=MCP_HEADERS,
+    )
+    assert response.status_code == 200, (
+        f"HTTP {response.status_code}: {response.text}"
+    )
+    data = parse_sse_json(response)
+    assert "result" in data, f"No result in response: {data}"
+    content = data["result"]["content"]
+    assert len(content) > 0
+    return json.loads(content[0]["text"])
+
+
+def mcp_list_tools(client) -> set[str]:
+    """Return the set of tool names from the MCP tools/list endpoint."""
+    response = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {},
+        },
+        headers=MCP_HEADERS,
+    )
+    assert response.status_code == 200
+    data = parse_sse_json(response)
+    return {
+        t["name"] for t in data.get("result", {}).get("tools", [])
+    }
+
+
+_lokistack_enabled = (
+    os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
+)
 
 _BASE_HOST = "http://localhost"
 _SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))

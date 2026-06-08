@@ -79,5 +79,5 @@ def find_error_patterns(
 
         return _collect_error_patterns(namespace, app, regex, tenant, duration, top_n)
 
-    except (ValueError, httpx.HTTPStatusError, httpx.HTTPError) as e:
+    except (ValueError, TypeError, KeyError, httpx.HTTPStatusError, httpx.HTTPError) as e:
         return format_error(e)

@@ -40,6 +40,32 @@ class TestSearchLogs:
         result = search_logs(namespace="default", pod="my.pod(name")
         assert r"my\.pod\(name" in result["query"]
 
+    @respx.mock
+    def test_container_quote_escaped(self):
+        respx.get(f"{BASE}/application/loki/api/v1/query_range").mock(
+            return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
+        )
+        result = search_logs(namespace="default", container='ng"inx')
+        assert 'container="ng\\"inx"' in result["query"]
+
+    @respx.mock
+    def test_label_value_quote_escaped(self):
+        respx.get(f"{BASE}/application/loki/api/v1/query_range").mock(
+            return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
+        )
+        result = search_logs(namespace="default", labels={"env": 'pr"od'})
+        assert 'env="pr\\"od"' in result["query"]
+
+    def test_label_key_with_quotes_rejected(self):
+        result = search_logs(namespace="default", labels={'bad"key': "val"})
+        assert result["success"] is False
+        assert "Invalid label key" in result["error"]
+
+    def test_label_key_with_equals_rejected(self):
+        result = search_logs(namespace="default", labels={"bad=key": "val"})
+        assert result["success"] is False
+        assert "Invalid label key" in result["error"]
+
     def test_invalid_tenant(self):
         result = search_logs(namespace="test", tenant="bad")
         assert result["success"] is False

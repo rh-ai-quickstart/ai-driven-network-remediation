@@ -176,6 +176,9 @@ endif
 ifeq ($(ENABLE_AAP_MOCK),true)
 	$(MAKE) deploy-aap-mock
 endif
+ifeq ($(ENABLE_LOKISTACK),true)
+	$(MAKE) lokistack-install
+endif
 ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	$(MAKE) deploy-servicenow-mock
 endif
@@ -205,9 +208,6 @@ else
 endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
-endif
-ifeq ($(ENABLE_LOKISTACK),true)
-	$(MAKE) lokistack-install
 endif
 ifeq ($(ENABLE_KAFKA),true)
 	$(MAKE) kafka-install

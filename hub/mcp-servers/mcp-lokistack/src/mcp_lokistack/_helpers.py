@@ -14,6 +14,19 @@ from .validators import (
     validate_tenant,
 )
 
+_INVALID_LABEL_KEY_RE = re.compile(r'["\s={}]')
+
+
+def _escape_logql_string(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _validate_label_key(key: str) -> None:
+    if not key or _INVALID_LABEL_KEY_RE.search(key):
+        raise ValueError(
+            f"Invalid label key '{key}'. " "Label keys must not contain quotes, spaces, " "equals signs, or braces."
+        )
+
 
 def _time_range_ns(duration: str) -> tuple[int, int]:
     end_ns = int(datetime.now(timezone.utc).timestamp() * 1_000_000_000)
@@ -35,10 +48,11 @@ def _build_logql(
         escaped = re.escape(pod)
         selectors.append(f'pod=~".*{escaped}.*"')
     if container:
-        selectors.append(f'container="{container}"')
+        selectors.append(f'container="{_escape_logql_string(container)}"')
     if labels:
         for k, v in labels.items():
-            selectors.append(f'{k}="{v}"')
+            _validate_label_key(k)
+            selectors.append(f'{k}="{_escape_logql_string(v)}"')
 
     if not selectors:
         raise ValueError(
@@ -53,9 +67,9 @@ def _build_logql(
 def _build_metric_selector(namespace: str, app: str) -> str:
     parts = []
     if namespace:
-        parts.append(f'kubernetes_namespace_name="{namespace}"')
+        parts.append(f'kubernetes_namespace_name="{_escape_logql_string(namespace)}"')
     if app:
-        parts.append(f'app="{app}"')
+        parts.append(f'app="{_escape_logql_string(app)}"')
     return "{" + ", ".join(parts) + "}"
 
 

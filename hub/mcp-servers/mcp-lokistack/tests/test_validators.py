@@ -117,6 +117,20 @@ class TestValidateLogql:
         with pytest.raises(ValueError, match="stream selector"):
             validate_logql('namespace="test"')
 
+    def test_reversed_braces(self):
+        with pytest.raises(ValueError, match="closing brace.*before"):
+            validate_logql("} bad {")
+
+    def test_no_leading_selector(self):
+        with pytest.raises(ValueError, match="must start with"):
+            validate_logql("random text {something}")
+
+    def test_aggregation_prefix_accepted(self):
+        validate_logql('sum by (ns) (count_over_time({namespace="test"} [5m]))')
+
+    def test_rate_prefix_accepted(self):
+        validate_logql('rate({namespace="test"} [5m])')
+
     def test_semicolon_allowed(self):
         validate_logql('{namespace="test"} |= "a;b"')
 

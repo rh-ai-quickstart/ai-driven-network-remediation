@@ -82,5 +82,5 @@ def query_metrics(
             "data_points": data_points,
         }
 
-    except (ValueError, httpx.HTTPStatusError, httpx.HTTPError) as e:
+    except (ValueError, TypeError, KeyError, httpx.HTTPStatusError, httpx.HTTPError) as e:
         return format_error(e)

@@ -50,7 +50,7 @@ def search_logs(
 
         return _query_logs(query, tenant, duration, limit)
 
-    except (ValueError, httpx.HTTPStatusError, httpx.HTTPError) as e:
+    except (ValueError, TypeError, KeyError, re.error, httpx.HTTPStatusError, httpx.HTTPError) as e:
         return format_error(e)
 
 
@@ -87,13 +87,12 @@ def search_logs_regex(
     try:
         query = _build_logql(namespace, pod, container, labels)
         if regex:
-            re.compile(regex)
             escaped_regex = regex.replace('"', '\\"')
             query += f' |~ "{escaped_regex}"'
 
         return _query_logs(query, tenant, duration, limit)
 
-    except (ValueError, re.error, httpx.HTTPStatusError, httpx.HTTPError) as e:
+    except (ValueError, TypeError, KeyError, re.error, httpx.HTTPStatusError, httpx.HTTPError) as e:
         return format_error(e)
 
 
@@ -123,5 +122,5 @@ def query_logql(
         validate_logql(logql_query)
         return _query_logs(logql_query, tenant, duration, limit)
 
-    except (ValueError, httpx.HTTPStatusError, httpx.HTTPError) as e:
+    except (ValueError, TypeError, KeyError, httpx.HTTPStatusError, httpx.HTTPError) as e:
         return format_error(e)

@@ -1,8 +1,9 @@
 """Integration tests verifying noc-openshift exposes and executes its MCP tools."""
 
-import json
 import os
 import subprocess
+
+from conftest import mcp_call, mcp_list_tools
 
 EDGE_NAMESPACE = os.environ.get("EDGE_NAMESPACE", "dark-noc-edge")
 
@@ -15,56 +16,16 @@ EXPECTED_TOOLS = {
     "get_pod_logs",
 }
 
-MCP_HEADERS = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
-
-
-def _parse_sse_json(response) -> dict:
-    """Parse a JSON-RPC result from either plain JSON or SSE response."""
-    content_type = response.headers.get("content-type", "")
-    if "text/event-stream" in content_type:
-        for line in response.text.splitlines():
-            if line.startswith("data: "):
-                return json.loads(line[6:])
-        raise ValueError(f"No data line in SSE response: {response.text}")
-    return response.json()
-
-
-def _call_tool(client, tool_name: str, arguments: dict | None = None) -> dict:
-    """Call an MCP tool via JSON-RPC and return the parsed result content."""
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments or {}},
-        },
-        headers=MCP_HEADERS,
-    )
-    assert response.status_code == 200, f"HTTP {response.status_code}: {response.text}"
-    data = _parse_sse_json(response)
-    assert "result" in data, f"No result in response: {data}"
-    content = data["result"]["content"]
-    assert len(content) > 0
-    return json.loads(content[0]["text"])
-
 
 def test_openshift_tools_list(mcp_openshift_client):
     """Verify the MCP tools/list endpoint returns all expected OpenShift tools."""
-    response = mcp_openshift_client.post(
-        "/mcp",
-        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
-        headers=MCP_HEADERS,
-    )
-    assert response.status_code == 200
-    data = _parse_sse_json(response)
-    tool_names = {t["name"] for t in data.get("result", {}).get("tools", [])}
+    tool_names = mcp_list_tools(mcp_openshift_client)
     assert EXPECTED_TOOLS.issubset(tool_names), f"Missing tools: {EXPECTED_TOOLS - tool_names}"
 
 
 def test_get_namespaces(mcp_openshift_client):
     """Call get_namespaces and verify dark-noc-edge is listed."""
-    result = _call_tool(mcp_openshift_client, "get_namespaces")
+    result = mcp_call(mcp_openshift_client, "get_namespaces")
     assert "namespaces" in result
     assert result.get("count", 0) >= 1
     names = [ns["name"] for ns in result["namespaces"]]
@@ -85,7 +46,7 @@ def _oc_pod_names(namespace: str) -> set[str]:
 
 def test_get_pods(mcp_openshift_client):
     """Call get_pods and verify the returned set matches a direct oc query."""
-    result = _call_tool(mcp_openshift_client, "get_pods", {"namespace": EDGE_NAMESPACE})
+    result = mcp_call(mcp_openshift_client, "get_pods", {"namespace": EDGE_NAMESPACE})
     assert "pods" in result
     mcp_names = {p["name"] for p in result["pods"]}
     oc_names = _oc_pod_names(EDGE_NAMESPACE)
@@ -94,19 +55,19 @@ def test_get_pods(mcp_openshift_client):
 
 def test_get_events(mcp_openshift_client):
     """Call get_events and verify it returns a list (may be empty on a fresh namespace)."""
-    result = _call_tool(mcp_openshift_client, "get_events", {"namespace": EDGE_NAMESPACE})
+    result = mcp_call(mcp_openshift_client, "get_events", {"namespace": EDGE_NAMESPACE})
     assert "events" in result
     assert isinstance(result["events"], list)
 
 
 def test_get_pod_logs(mcp_openshift_client):
     """Call get_pod_logs on the first running pod in the namespace."""
-    pods_result = _call_tool(mcp_openshift_client, "get_pods", {"namespace": EDGE_NAMESPACE})
+    pods_result = mcp_call(mcp_openshift_client, "get_pods", {"namespace": EDGE_NAMESPACE})
     running = [p for p in pods_result["pods"] if p["status"] == "Running"]
     assert running, "No running pods found in namespace"
     pod_name = running[0]["name"]
 
-    result = _call_tool(
+    result = mcp_call(
         mcp_openshift_client,
         "get_pod_logs",
         {"pod_name": pod_name, "namespace": EDGE_NAMESPACE, "tail_lines": 10},
