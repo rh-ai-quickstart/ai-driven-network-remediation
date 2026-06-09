@@ -5,14 +5,10 @@ from dataclasses import dataclass
 import httpx
 import pytest
 
-_lokistack_enabled = (
-    os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
-)
+_lokistack_enabled = os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
 
 _BASE_HOST = "http://localhost"
-_SERVICE_READY_TIMEOUT = int(
-    os.environ.get("SERVICE_READY_TIMEOUT", "90")
-)
+_SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))
 
 
 @dataclass(frozen=True)
@@ -42,9 +38,7 @@ def _wait_for_service(svc: _ServiceCfg, name: str) -> None:
     last_err: str | None = None
     while time.monotonic() < deadline:
         try:
-            resp = httpx.get(
-                f"{svc.base_url}/health", timeout=5
-            )
+            resp = httpx.get(f"{svc.base_url}/health", timeout=5)
             if resp.status_code == 200:
                 return
             last_err = f"HTTP {resp.status_code}"
@@ -52,10 +46,7 @@ def _wait_for_service(svc: _ServiceCfg, name: str) -> None:
             last_err = str(exc)
         time.sleep(backoff)
         backoff = min(backoff * 2, 8)
-    pytest.fail(
-        f"{name} ({svc.base_url}) not healthy "
-        f"after {_SERVICE_READY_TIMEOUT}s: {last_err}"
-    )
+    pytest.fail(f"{name} ({svc.base_url}) not healthy " f"after {_SERVICE_READY_TIMEOUT}s: {last_err}")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -77,7 +68,7 @@ def pytest_runtest_setup(item):
         return
     count = getattr(item, "execution_count", 0)
     if count > 0:
-        delay = min(2 ** count, _MAX_RERUN_DELAY)
+        delay = min(2**count, _MAX_RERUN_DELAY)
         time.sleep(delay)
 
 

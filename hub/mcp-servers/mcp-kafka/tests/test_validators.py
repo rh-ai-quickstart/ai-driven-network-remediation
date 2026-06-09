@@ -38,16 +38,16 @@ class TestClamp:
     @pytest.mark.parametrize(
         "value, lo, hi, expected_clamped, expected_original",
         [
-            (20, 1, 100, 20, None),       # within range — no clamping
-            (100, 1, 100, 100, None),      # upper boundary — no clamping
-            (500, 1, 100, 100, 500),       # above max — clamped, original preserved
-            (1, 1, 100, 1, None),          # lower boundary — no clamping
-            (0, 1, 100, 1, None),          # below min — clamped to 1
-            (-5, 1, 100, 1, None),         # negative — clamped to 1
-            (5000, 100, 15000, 5000, None),    # timeout within range
+            (20, 1, 100, 20, None),  # within range — no clamping
+            (100, 1, 100, 100, None),  # upper boundary — no clamping
+            (500, 1, 100, 100, 500),  # above max — clamped, original preserved
+            (1, 1, 100, 1, None),  # lower boundary — no clamping
+            (0, 1, 100, 1, None),  # below min — clamped to 1
+            (-5, 1, 100, 1, None),  # negative — clamped to 1
+            (5000, 100, 15000, 5000, None),  # timeout within range
             (15000, 100, 15000, 15000, None),  # timeout upper boundary
             (30000, 100, 15000, 15000, 30000),  # timeout above max
-            (50, 100, 15000, 100, None),       # timeout below min
+            (50, 100, 15000, 100, None),  # timeout below min
         ],
     )
     def test_clamping(self, value, lo, hi, expected_clamped, expected_original):

@@ -49,12 +49,14 @@ def _poll_messages(consumer, max_messages, timeout_ms):
     messages = []
     for tp_msgs in records.values():
         for msg in tp_msgs:
-            messages.append({
-                "partition": msg.partition,
-                "offset": msg.offset,
-                "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
-                "value": _parse_value(msg.value),
-            })
+            messages.append(
+                {
+                    "partition": msg.partition,
+                    "offset": msg.offset,
+                    "timestamp": datetime.fromtimestamp(msg.timestamp / 1000, tz=timezone.utc).isoformat(),
+                    "value": _parse_value(msg.value),
+                }
+            )
             if len(messages) >= max_messages:
                 return messages
     return messages
@@ -80,12 +82,14 @@ def _calculate_partition_lag(end_offsets, committed_offsets, tp_list):
         end_offset = end_offsets[tp]
         oam = committed_offsets.get(tp)
         committed_offset = oam.offset if oam is not None and oam.offset != -1 else 0
-        partitions.append({
-            "partition": tp.partition,
-            "end_offset": end_offset,
-            "committed_offset": committed_offset,
-            "lag": max(0, end_offset - committed_offset),
-        })
+        partitions.append(
+            {
+                "partition": tp.partition,
+                "end_offset": end_offset,
+                "committed_offset": committed_offset,
+                "lag": max(0, end_offset - committed_offset),
+            }
+        )
     total_lag = sum(p["lag"] for p in partitions)
     return partitions, total_lag
 
@@ -121,7 +125,11 @@ def consume_topic(
             tp_list = _seek_to_tail(consumer, topic, max_messages)
             if tp_list is None:
                 available = sorted(t for t in consumer.topics() if not t.startswith("_"))
-                pool = [t for t in available if t in config.KAFKA_CONSUME_TOPICS] if config.KAFKA_CONSUME_TOPICS else available
+                pool = (
+                    [t for t in available if t in config.KAFKA_CONSUME_TOPICS]
+                    if config.KAFKA_CONSUME_TOPICS
+                    else available
+                )
                 return format_error(
                     ValueError(f"Topic '{topic}' not found."),
                     suggestions=suggest_topics(topic, pool),

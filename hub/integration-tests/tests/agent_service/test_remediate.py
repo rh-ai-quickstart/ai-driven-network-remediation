@@ -1,5 +1,3 @@
-import pytest
-
 REMEDIATION_STATE_FIELDS = {
     "raw_event",
     "confidence_override",

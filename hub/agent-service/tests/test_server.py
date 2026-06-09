@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 from agent_service.server import app
+from agent_service.models import RemediationState
 
+REMEDIATION_STATE_FIELDS = set(RemediationState.model_fields.keys())
 
 client = TestClient(app)
 
@@ -18,11 +20,6 @@ class TestReadyEndpoint:
         response = client.get("/ready")
         assert response.status_code == 200
         assert response.json() == {"ready": True}
-
-
-from agent_service.models import RemediationState
-
-REMEDIATION_STATE_FIELDS = set(RemediationState.model_fields.keys())
 
 
 class TestRemediateEndpoint:

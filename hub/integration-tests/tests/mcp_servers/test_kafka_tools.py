@@ -30,9 +30,7 @@ def _call_tool(client, tool_name, arguments=None):
         },
         headers=MCP_HEADERS,
     )
-    assert response.status_code == 200, (
-        f"HTTP {response.status_code}: {response.text}"
-    )
+    assert response.status_code == 200, f"HTTP {response.status_code}: {response.text}"
     content_type = response.headers.get("content-type", "")
     if "text/event-stream" in content_type:
         data = None
@@ -60,9 +58,7 @@ def seeded_topic(mcp_kafka_client):
         {"topic": TEST_TOPIC, "message": {"_seed": True, "_marker": marker}},
     )
     if not result.get("success"):
-        pytest.skip(
-            f"Cannot seed topic: {result.get('message', '')}"
-        )
+        pytest.skip(f"Cannot seed topic: {result.get('message', '')}")
     yield TEST_TOPIC
 
 
@@ -105,17 +101,11 @@ class TestProduceConsumeRoundTrip:
         assert consume_result["count"] >= 1
 
         values = [m["value"] for m in consume_result["messages"]]
-        assert any(
-            v.get("test_id") == test_id
-            for v in values
-            if isinstance(v, dict)
-        )
+        assert any(v.get("test_id") == test_id for v in values if isinstance(v, dict))
 
 
 class TestGetConsumerLag:
-    def test_returns_structured_response(
-        self, mcp_kafka_client, seeded_topic
-    ):
+    def test_returns_structured_response(self, mcp_kafka_client, seeded_topic):
         # Fresh consumer group has no committed offsets, so lag equals
         # the total number of messages in the topic.
         group_id = f"test-group-{uuid.uuid4().hex[:8]}"
