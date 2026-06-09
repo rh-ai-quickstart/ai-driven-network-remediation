@@ -1,11 +1,9 @@
 """Unit tests for mcp_aap tools (AAP REST API is always mocked)."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from mcp_aap.tools import (
     _aap_client,
     get_job_output,
@@ -47,7 +45,7 @@ class TestAapClient:
 
     @patch("mcp_aap.tools.httpx.Client")
     def test_constructs_client(self, mock_client_cls):
-        client = _aap_client()
+        _ = _aap_client()
         mock_client_cls.assert_called_once()
         kwargs = mock_client_cls.call_args.kwargs
         assert "aap.aap.svc" in kwargs["base_url"]

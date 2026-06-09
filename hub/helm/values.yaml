@@ -5,6 +5,7 @@ image:
   registry: quay.io/rh-ai-quickstart
   chatbotService: hub-chatbot-service
   ingestionPipeline: hub-ingestion-pipeline
+  agentService: hub-agent-service
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "0.0.1"
@@ -80,6 +81,26 @@ chatbotService:
       path: /api/hello
       port: 8080
     initialDelaySeconds: 5
+    periodSeconds: 10
+
+agentService:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8001
+    targetPort: 8001
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8001
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8001
+    initialDelaySeconds: 10
     periodSeconds: 10
 
 lokistack:

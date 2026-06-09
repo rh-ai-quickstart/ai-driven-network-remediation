@@ -10,6 +10,7 @@ ROUTES_ENABLED  ?= true
 
 CHATBOT_IMG        := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG      := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
+AGENT_IMG          := $(REGISTRY)/noc-agent-service:$(VERSION)
 MCP_OPENSHIFT_IMG  := $(REGISTRY)/noc-mcp-openshift:$(VERSION)
 MCP_LOKISTACK_IMG  := $(REGISTRY)/noc-mcp-lokistack:$(VERSION)
 MCP_KAFKA_IMG      := $(REGISTRY)/noc-mcp-kafka:$(VERSION)
@@ -90,12 +91,16 @@ helm_aap_mock_args = \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,)
 
 .PHONY: build-all-images
-build-all-images: build-chatbot-image build-mcp-images
+build-all-images: build-chatbot-image build-agent-image build-mcp-images
 
 .PHONY: build-chatbot-image
 build-chatbot-image:
 	$(CONTAINER_TOOL) build -t $(CHATBOT_IMG) --platform=$(ARCH) -f hub/chatbot-service/Containerfile hub/chatbot-service
 	$(CONTAINER_TOOL) build -t $(INGESTION_IMG) --platform=$(ARCH) -f hub/ingestion-pipeline/Containerfile hub/ingestion-pipeline
+
+.PHONY: build-agent-image
+build-agent-image:
+	$(CONTAINER_TOOL) build -t $(AGENT_IMG) --platform=$(ARCH) -f hub/agent-service/Containerfile hub/agent-service
 
 .PHONY: build-mcp-images
 build-mcp-images:
@@ -110,6 +115,7 @@ build-mcp-images:
 push-all-images:
 	$(CONTAINER_TOOL) push $(CHATBOT_IMG) $(PUSH_EXTRA_ARGS)
 	$(CONTAINER_TOOL) push $(INGESTION_IMG) $(PUSH_EXTRA_ARGS)
+	$(CONTAINER_TOOL) push $(AGENT_IMG) $(PUSH_EXTRA_ARGS)
 	$(CONTAINER_TOOL) push $(MCP_OPENSHIFT_IMG) $(PUSH_EXTRA_ARGS)
 	$(CONTAINER_TOOL) push $(MCP_LOKISTACK_IMG) $(PUSH_EXTRA_ARGS)
 	$(CONTAINER_TOOL) push $(MCP_KAFKA_IMG) $(PUSH_EXTRA_ARGS)
@@ -158,6 +164,7 @@ ifeq ($(ENABLE_HUB),true)
 		--set image.registry=$(REGISTRY) \
 		--set image.chatbotService=noc-chatbot-service \
 		--set image.ingestionPipeline=noc-ingestion-pipeline \
+		--set image.agentService=noc-agent-service \
 		--set global.routes.enabled=$(ROUTES_ENABLED) \
 		--set image.tag=$(VERSION) \
 		$(helm_mcp_image_args) \
@@ -323,9 +330,11 @@ ifeq ($(ENABLE_HUB),true)
 	PF7_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
 	PF8_PID=$$!; \
-	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID" EXIT; \
+	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
+	PF9_PID=$$!; \
+	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
+	AGENT_SERVICE_URL=http://localhost:8007 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
 endif
