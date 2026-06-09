@@ -46,9 +46,11 @@ def _build_logql(
         selectors.append(f'kubernetes_namespace_name="{namespace}"')
     if pod:
         escaped = re.escape(pod)
-        selectors.append(f'pod=~".*{escaped}.*"')
+        selectors.append(f'kubernetes_pod_name=~".*{escaped}.*"')
     if container:
-        selectors.append(f'container="{_escape_logql_string(container)}"')
+        selectors.append(
+            f'kubernetes_container_name="{_escape_logql_string(container)}"'
+        )
     if labels:
         for k, v in labels.items():
             _validate_label_key(k)
@@ -78,10 +80,20 @@ def _build_metric_logql(metric_type: str, selector: str, step: str) -> str:
     return f"sum by (kubernetes_namespace_name) " f"(count_over_time({selector}{line_filter} [{step}]))"
 
 
-def _query_logs(query: str, tenant: str, duration: str, limit: int) -> dict:
-    validate_tenant(tenant)
+def _query_logs(
+    query: str,
+    tenant: str,
+    duration: str,
+    limit: int,
+    corrections: list[str] | None = None,
+) -> dict:
+    tenant, tenant_note = validate_tenant(tenant)
     validate_duration(duration)
     limit = validate_limit(limit)
+
+    all_corrections = list(corrections) if corrections else []
+    if tenant_note:
+        all_corrections.append(tenant_note)
 
     start_ns, end_ns = _time_range_ns(duration)
 
@@ -97,11 +109,24 @@ def _query_logs(query: str, tenant: str, duration: str, limit: int) -> dict:
     )
 
     log_lines = format_log_streams(data, limit)
+    count = len(log_lines)
 
-    return {
+    result = {
         "query": query,
         "tenant": tenant,
         "duration": duration,
-        "count": len(log_lines),
+        "count": count,
         "logs": log_lines,
     }
+
+    if all_corrections:
+        result["corrections"] = all_corrections
+
+    if count == 0:
+        result["hints"] = [
+            "No logs matched. The service may be healthy " "with no errors in this period.",
+            "Verify the namespace and tenant are correct.",
+            f"Try a longer duration (current: {duration}).",
+        ]
+
+    return result

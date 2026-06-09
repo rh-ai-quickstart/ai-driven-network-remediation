@@ -332,6 +332,7 @@ minio-uninstall:
 unit-tests:
 	cd hub/agent-service && uv run pytest
 	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
+	cd hub/mcp-servers/mcp-lokistack && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-aap && uv sync --group dev && AAP_USERNAME=test AAP_PASSWORD=test uv run pytest
 	cd hub/mcp-servers/mcp-kafka && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-servicenow && uv sync --group dev && SERVICENOW_API_KEY=test uv run pytest

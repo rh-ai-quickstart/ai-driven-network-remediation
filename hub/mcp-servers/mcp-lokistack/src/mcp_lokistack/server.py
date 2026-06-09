@@ -1,9 +1,9 @@
 """
 LokiStack MCP Server
 ======================
-MCP server for querying LokiStack via the LogQL API.
-Gives the AI remediation agent access to historical log data,
-error pattern analysis, and log-based metrics.
+MCP server for querying LokiStack via the LogQL API on OpenShift.
+Requires an OpenShift cluster with the LokiStack Operator deployed
+in the openshift-logging namespace.
 
 Tools:
     search_logs          - Search by namespace/pod/container/text or raw LogQL

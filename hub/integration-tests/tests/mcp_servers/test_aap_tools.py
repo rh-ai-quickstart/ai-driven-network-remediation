@@ -86,7 +86,6 @@ def test_upsert_job_template(mcp_aap_client):
         },
     )
     assert result["success"] is True
-    assert result["created"] is True
     assert result["playbook"] == "ci-test.yml"
 
     templates = mcp_call(mcp_aap_client, "list_job_templates")

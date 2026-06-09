@@ -123,3 +123,7 @@ def loki_query(tenant: str, params: dict) -> dict:
 
 def loki_label_values(tenant: str, label: str, params: dict) -> dict:
     return _loki_get("logs", tenant, f"/label/{label}/values", params)
+
+
+def get_label_values(tenant: str, label: str) -> list[str]:
+    return loki_label_values(tenant, label, {}).get("data", [])

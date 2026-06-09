@@ -9,7 +9,8 @@ from ._helpers import (
     _time_range_ns,
 )
 from .client import loki_query_range
-from .formatters import format_error, format_metric_series
+from .errors import raise_tool_error
+from .formatters import format_metric_series
 from .validators import (
     _duration_to_seconds,
     validate_duration,
@@ -46,9 +47,14 @@ def query_metrics(
         Dict with metric_type, data points, total, and average
     """
     try:
-        validate_tenant(tenant)
+        corrections = []
+        tenant, tenant_note = validate_tenant(tenant)
+        if tenant_note:
+            corrections.append(tenant_note)
         validate_duration(duration)
-        validate_metric_type(metric_type)
+        metric_type, mt_note = validate_metric_type(metric_type)
+        if mt_note:
+            corrections.append(mt_note)
         validate_step(step, duration)
         if namespace:
             validate_namespace(namespace)
@@ -70,7 +76,7 @@ def query_metrics(
         data_points = format_metric_series(data)
         total = sum(dp["value"] for dp in data_points)
 
-        return {
+        result = {
             "metric_type": metric_type,
             "namespace": namespace,
             "app": app,
@@ -82,5 +88,10 @@ def query_metrics(
             "data_points": data_points,
         }
 
+        if corrections:
+            result["corrections"] = corrections
+
+        return result
+
     except (ValueError, TypeError, KeyError, httpx.HTTPStatusError, httpx.HTTPError) as e:
-        return format_error(e)
+        raise_tool_error(e)

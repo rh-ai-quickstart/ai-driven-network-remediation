@@ -1,7 +1,5 @@
-import httpx
 from mcp_lokistack.formatters import (
     _normalize_message,
-    format_error,
     format_log_streams,
     format_metric_series,
     group_error_patterns,
@@ -74,46 +72,6 @@ class TestFormatMetricSeries:
     def test_empty(self):
         result = format_metric_series({"data": {"result": []}})
         assert result == []
-
-
-class TestFormatError:
-    def test_value_error(self):
-        result = format_error(ValueError("bad input"))
-        assert result["success"] is False
-        assert result["error"] == "bad input"
-
-    def test_http_status_error(self):
-        resp = httpx.Response(
-            status_code=429,
-            request=httpx.Request("GET", "http://test"),
-        )
-        exc = httpx.HTTPStatusError("rate limited", request=resp.request, response=resp)
-        result = format_error(exc)
-        assert result["success"] is False
-        assert "429" in result["error"]
-
-    def test_connect_error(self):
-        exc = httpx.ConnectError("connection refused")
-        result = format_error(exc)
-        assert result["success"] is False
-        assert "Cannot reach" in result["error"]
-
-    def test_read_timeout(self):
-        exc = httpx.ReadTimeout("timeout")
-        result = format_error(exc)
-        assert result["success"] is False
-        assert "timed out" in result["error"]
-
-    def test_generic_http_error(self):
-        exc = httpx.DecodingError("bad encoding")
-        result = format_error(exc)
-        assert result["success"] is False
-        assert "connection error" in result["error"]
-
-    def test_unknown_exception(self):
-        result = format_error(RuntimeError("unexpected"))
-        assert result["success"] is False
-        assert result["error"] == "unexpected"
 
 
 class TestNormalizeMessage:

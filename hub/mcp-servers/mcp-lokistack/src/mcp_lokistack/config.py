@@ -46,15 +46,13 @@ mcp = FastMCP(
     "noc-lokistack",
     instructions=(
         "LokiStack log query tools for the NOC remediation agent. "
-        "Tenant-aware: use tenant='application' for workload logs (default), "
-        "'infrastructure' for node/system logs, 'audit' for API audit logs.\n"
-        "Tools:\n"
-        "- search_logs: search by namespace/pod/container with literal text\n"
-        "- search_logs_regex: search with regex line filter\n"
-        "- query_logql: run a raw LogQL query\n"
-        "- query_metrics: error_rate or log_volume time series\n"
-        "- find_error_patterns: group recurring errors by message pattern\n"
-        "Time ranges: use relative durations like '30m', '1h', '6h', '24h'."
+        "Requires OpenShift with the LokiStack Operator "
+        "(openshift-logging namespace).\n"
+        "Tenants: application (workload logs, default), "
+        "infrastructure (node/system), audit (API audit).\n"
+        "Prefer search_logs/search_logs_regex over query_logql "
+        "— they build correct LogQL for you.\n"
+        "Time ranges: '30m', '1h', '6h', '24h'."
     ),
     host=MCP_HOST,
     port=MCP_PORT,

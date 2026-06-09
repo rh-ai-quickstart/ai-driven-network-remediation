@@ -5,10 +5,6 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 
-import httpx
-
-from . import config
-
 _UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-" r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 _IP_RE = re.compile(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
 _NUMERIC_ID_RE = re.compile(r"\b\d{6,}\b")
@@ -60,21 +56,6 @@ def format_metric_series(data: dict) -> list[dict]:
                 }
             )
     return data_points
-
-
-def format_error(exc: Exception) -> dict:
-    if isinstance(exc, httpx.HTTPStatusError):
-        body = exc.response.text[:200] if exc.response.text else ""
-        msg = f"LokiStack API error: HTTP {exc.response.status_code}. " f"{body}"
-    elif isinstance(exc, httpx.ConnectError):
-        msg = f"Cannot reach LokiStack at {config.LOKI_URL}. " "Check LOKI_URL configuration and network connectivity."
-    elif isinstance(exc, httpx.ReadTimeout):
-        msg = f"Query timed out after {config.LOKI_QUERY_TIMEOUT}s. " "Try a shorter duration or more specific filters."
-    elif isinstance(exc, httpx.HTTPError):
-        msg = f"LokiStack connection error: {exc}"
-    else:
-        msg = str(exc)
-    return {"success": False, "error": msg}
 
 
 def _normalize_message(line: str) -> str:

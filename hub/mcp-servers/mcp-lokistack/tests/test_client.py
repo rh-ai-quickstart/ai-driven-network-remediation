@@ -12,6 +12,7 @@ from mcp_lokistack.client import (
     _invalidate_client,
     _is_retryable,
     _tls_verify,
+    get_label_values,
     loki_label_values,
     loki_query,
     loki_query_range,
@@ -192,3 +193,29 @@ class TestLokiLabelValues:
         respx.get(url).mock(return_value=httpx.Response(200, json={"status": "success", "data": []}))
         result = loki_label_values("infrastructure", "namespace", {"start": 0, "end": 1})
         assert result["status"] == "success"
+
+
+class TestGetLabelValues:
+    @respx.mock
+    def test_returns_values(self):
+        url = "http://localhost:3100/api/logs/v1/application" "/loki/api/v1/label/kubernetes_namespace_name/values"
+        respx.get(url).mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success", "data": ["ns1", "ns2"]},
+            )
+        )
+        result = get_label_values("application", "kubernetes_namespace_name")
+        assert result == ["ns1", "ns2"]
+
+    @respx.mock
+    def test_empty_data(self):
+        url = "http://localhost:3100/api/logs/v1/application" "/loki/api/v1/label/pod/values"
+        respx.get(url).mock(
+            return_value=httpx.Response(
+                200,
+                json={"status": "success"},
+            )
+        )
+        result = get_label_values("application", "pod")
+        assert result == []

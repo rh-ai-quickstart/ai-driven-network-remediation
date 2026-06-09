@@ -13,12 +13,20 @@ from mcp_lokistack.validators import (
 class TestValidateTenant:
     @pytest.mark.parametrize("tenant", ["application", "infrastructure", "audit"])
     def test_valid(self, tenant):
-        validate_tenant(tenant)
+        corrected, note = validate_tenant(tenant)
+        assert corrected == tenant
+        assert note is None
 
-    @pytest.mark.parametrize("tenant", ["", "admin", "AUDIT", "app"])
+    @pytest.mark.parametrize("tenant", ["", "AUDIT", "app", "xyz"])
     def test_invalid(self, tenant):
         with pytest.raises(ValueError, match="Invalid tenant"):
             validate_tenant(tenant)
+
+    def test_auto_corrects_close_match(self):
+        corrected, note = validate_tenant("admin")
+        assert corrected == "audit"
+        assert note is not None
+        assert "'admin'" in note
 
 
 class TestValidateDuration:
@@ -141,12 +149,43 @@ class TestValidateLogql:
 class TestValidateMetricType:
     @pytest.mark.parametrize("mt", ["error_rate", "log_volume"])
     def test_valid(self, mt):
-        validate_metric_type(mt)
+        corrected, note = validate_metric_type(mt)
+        assert corrected == mt
+        assert note is None
 
-    @pytest.mark.parametrize("mt", ["", "errors", "rate", "count", "top_errors_by_count"])
+    @pytest.mark.parametrize("mt", ["", "rate", "count", "top_errors_by_count"])
     def test_invalid(self, mt):
         with pytest.raises(ValueError, match="Invalid metric_type"):
             validate_metric_type(mt)
+
+    def test_auto_corrects_close_match(self):
+        corrected, note = validate_metric_type("errors")
+        assert corrected == "error_rate"
+        assert note is not None
+
+
+class TestValidateTenantDidYouMean:
+    def test_hint_with_multiple_matches(self, monkeypatch):
+        from mcp_lokistack import validators
+
+        monkeypatch.setattr(
+            validators,
+            "VALID_TENANTS",
+            ("app_logs", "app_metrics", "audit"),
+        )
+        with pytest.raises(ValueError, match="Did you mean"):
+            validate_tenant("app_m")
+
+    def test_hint_metric_type_multiple_matches(self, monkeypatch):
+        from mcp_lokistack import validators
+
+        monkeypatch.setattr(
+            validators,
+            "_VALID_METRIC_TYPES",
+            ("error_rate", "error_count", "log_volume"),
+        )
+        with pytest.raises(ValueError, match="Did you mean"):
+            validate_metric_type("error_rat")
 
 
 class TestValidateStep:

@@ -45,9 +45,13 @@ def mcp_call(client, tool_name: str, arguments=None) -> dict:
     )
     data = parse_sse_json(response)
     assert "result" in data, f"No result in response: {data}"
-    content = data["result"]["content"]
+    result = data["result"]
+    content = result["content"]
     assert len(content) > 0
-    return json.loads(content[0]["text"])
+    text = content[0]["text"]
+    if result.get("isError"):
+        return {"success": False, "error": text}
+    return json.loads(text)
 
 
 def mcp_list_tools(client) -> set[str]:
