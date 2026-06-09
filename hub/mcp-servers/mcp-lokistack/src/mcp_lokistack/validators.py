@@ -95,7 +95,7 @@ _LOGQL_AGG_PREFIX = re.compile(
 def validate_logql(query: str) -> None:
     stripped = query.strip()
     if not stripped:
-        raise ValueError("LogQL query cannot be empty. " 'Provide a query like: {namespace="my-ns"} |= "error"')
+        raise ValueError("LogQL query cannot be empty. " 'Provide a query like: {kubernetes_namespace_name="my-ns"} |= "error"')
     if len(stripped) > 2048:
         raise ValueError(
             f"LogQL query is too long ({len(stripped)} chars, max 2048). "
@@ -103,17 +103,17 @@ def validate_logql(query: str) -> None:
         )
     if "{" not in stripped or "}" not in stripped:
         raise ValueError(
-            "LogQL query must include a stream selector " "in curly braces. " 'Example: {namespace="my-ns"} |= "error"'
+            "LogQL query must include a stream selector " "in curly braces. " 'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
         )
     if stripped.index("{") > stripped.index("}"):
         raise ValueError(
-            "Malformed LogQL: closing brace appears before " "opening brace. " 'Example: {namespace="my-ns"} |= "error"'
+            "Malformed LogQL: closing brace appears before " "opening brace. " 'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
         )
     if not stripped.startswith("{") and not _LOGQL_AGG_PREFIX.match(stripped):
         raise ValueError(
             "LogQL query must start with a stream selector "
             "'{...}' or an aggregation function. "
-            'Example: {namespace="my-ns"} |= "error"'
+            'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
         )
 
 
