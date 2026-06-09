@@ -3,56 +3,36 @@
 Requires a deployed kafka-mcp instance.
 """
 
-import json
 import uuid
 
 import pytest
 
-pytestmark = pytest.mark.flaky(reruns=5)
+from conftest import mcp_call, mcp_list_tools
 
-MCP_HEADERS = {
-    "Accept": "application/json, text/event-stream",
-    "Content-Type": "application/json",
-}
+pytestmark = pytest.mark.flaky(reruns=5)
 
 # Must be in both KAFKA_CONSUME_TOPICS and KAFKA_PRODUCE_TOPICS allowlists
 TEST_TOPIC = "remediation-jobs"
 
+EXPECTED_TOOLS = {
+    "list_topics",
+    "consume_topic",
+    "produce_message",
+    "get_consumer_lag",
+}
 
-def _call_tool(client, tool_name, arguments=None):
-    response = client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0",
-            "id": str(uuid.uuid4()),
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments or {}},
-        },
-        headers=MCP_HEADERS,
-    )
-    assert response.status_code == 200, f"HTTP {response.status_code}: {response.text}"
-    content_type = response.headers.get("content-type", "")
-    if "text/event-stream" in content_type:
-        data = None
-        for line in response.text.splitlines():
-            if line.startswith("data:"):
-                payload = line[5:].strip()
-                if payload:
-                    data = json.loads(payload)
-        assert data is not None, "No data in SSE response"
-    else:
-        data = response.json()
-    assert "result" in data, f"No result in response: {data}"
-    content = data["result"]["content"]
-    assert len(content) > 0
-    return json.loads(content[0]["text"])
+
+def test_kafka_tools_list(mcp_kafka_client):
+    """Verify the MCP tools/list endpoint returns all expected Kafka tools."""
+    tool_names = mcp_list_tools(mcp_kafka_client)
+    assert EXPECTED_TOOLS.issubset(tool_names), f"Missing tools: {EXPECTED_TOOLS - tool_names}"
 
 
 @pytest.fixture(scope="module")
 def seeded_topic(mcp_kafka_client):
     """Seed an allowed topic with a message so downstream tests have data."""
     marker = uuid.uuid4().hex[:8]
-    result = _call_tool(
+    result = mcp_call(
         mcp_kafka_client,
         "produce_message",
         {"topic": TEST_TOPIC, "message": {"_seed": True, "_marker": marker}},
@@ -64,7 +44,7 @@ def seeded_topic(mcp_kafka_client):
 
 class TestListTopics:
     def test_returns_topics(self, mcp_kafka_client, seeded_topic):
-        result = _call_tool(mcp_kafka_client, "list_topics")
+        result = mcp_call(mcp_kafka_client, "list_topics")
         assert result["success"] is True
         assert isinstance(result["topics"], list)
         assert result["count"] > 0
@@ -77,7 +57,7 @@ class TestProduceConsumeRoundTrip:
         # Produce a message then immediately consume from the same topic,
         # verifying the message survives the full MCP → Kafka → MCP path.
         test_id = f"integration-{uuid.uuid4().hex[:8]}"
-        produce_result = _call_tool(
+        produce_result = mcp_call(
             mcp_kafka_client,
             "produce_message",
             {
@@ -88,7 +68,7 @@ class TestProduceConsumeRoundTrip:
         assert produce_result["success"] is True
         assert produce_result["topic"] == seeded_topic
 
-        consume_result = _call_tool(
+        consume_result = mcp_call(
             mcp_kafka_client,
             "consume_topic",
             {
@@ -109,7 +89,7 @@ class TestGetConsumerLag:
         # Fresh consumer group has no committed offsets, so lag equals
         # the total number of messages in the topic.
         group_id = f"test-group-{uuid.uuid4().hex[:8]}"
-        result = _call_tool(
+        result = mcp_call(
             mcp_kafka_client,
             "get_consumer_lag",
             {"group_id": group_id, "topic": seeded_topic},
