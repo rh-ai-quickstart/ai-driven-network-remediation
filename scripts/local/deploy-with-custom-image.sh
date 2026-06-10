@@ -26,6 +26,9 @@ if [ "${ENABLE_HUB}" = "true" ]; then
     REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-push-aap-mock
   fi
 
+  echo "Building ServiceNow mock image"
+  REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-push-servicenow-mock
+
   echo "Pushing images"
   REGISTRY="${REGISTRY}" VERSION="${VERSION}" make push-all-images
 
