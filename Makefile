@@ -64,8 +64,8 @@ MINIO_HELM_EXTRA_ARGS  ?=
 ENABLE_AAP_MOCK        ?= false
 AAP_MOCK_IMG           := $(REGISTRY)/aap-mock:$(VERSION)
 
-# ── ServiceNow Mock (optional: ENABLE_SERVICENOW_MOCK=true) ────
-ENABLE_SERVICENOW_MOCK ?= false
+# ── ServiceNow Mock ──────────────────────────────────────────────
+ENABLE_SERVICENOW_MOCK ?= true
 SERVICENOW_MOCK_IMG    := $(REGISTRY)/servicenow-mock:$(VERSION)
 
 ADNR_LLM_ENABLED := $(and $(ADNR_LLM_ID),$(ADNR_LLM_URL),$(ADNR_LLM_TOKEN))
