@@ -60,25 +60,19 @@ runs:
         oc wait --for=condition=available deployment/aap-mock -n hub --timeout=60s
       shell: bash
 
-    - name: Deploy ServiceNow mock for mcp-servicenow integration tests
-      run: |
-        docker build -t localhost:5001/servicenow-mock:ci -f hub/infra/servicenow-mock/Containerfile hub/infra/servicenow-mock
-        docker push localhost:5001/servicenow-mock:ci
-        oc apply -n hub -f hub/infra/servicenow-mock/k8s.yaml
-        oc wait --for=condition=available deployment/servicenow-mock -n hub --timeout=60s
+    - name: Build and push ServiceNow mock image
+      run: make build-push-servicenow-mock REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
       shell: bash
 
     - name: Helm Install
       run: |
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_HUB=true ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
+          ENABLE_SERVICENOW_MOCK=true \
           HELM_EXTRA_ARGS="\
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
             --set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.hub.svc:8080 \
-            --set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false \
-            --set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.hub.svc:8080 \
-            --set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock \
-            --set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026" \
+            --set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false" \
           KAFKA_HELM_EXTRA_ARGS="\
             --set kafka.storage.storageClass=standard \
             --set kafka.storage.size=256Mi \
