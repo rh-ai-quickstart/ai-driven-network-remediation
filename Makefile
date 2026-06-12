@@ -61,7 +61,7 @@ MINIO_PORT             ?= 9000
 MINIO_HELM_EXTRA_ARGS  ?=
 
 # ── AAP Mock (optional: ENABLE_AAP_MOCK=true) ──────────────────
-ENABLE_AAP_MOCK        ?= false
+ENABLE_AAP_MOCK        ?= true
 AAP_MOCK_IMG           := $(REGISTRY)/aap-mock:$(VERSION)
 
 # ── ServiceNow Mock ──────────────────────────────────────────────
