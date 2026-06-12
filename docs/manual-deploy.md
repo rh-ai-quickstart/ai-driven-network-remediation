@@ -25,6 +25,14 @@ The deploy will use images from the $REGISTRY
 make helm-install
 ```
 
+For local development and demos, `make helm-install` enables the AAP mock by default.
+For environments that should use a real Ansible Automation Platform controller instead,
+disable the mock during deployment:
+
+```bash
+ENABLE_AAP_MOCK=false make helm-install
+```
+
 3. Run Integration Tests:
 
 ```bash
@@ -65,6 +73,13 @@ The deploy will use images from the $REGISTRY
 
 ```bash
 REGISTRY=quay.io/fercoli VERSION=0.0.1.Verify make helm-install
+```
+
+If this deployment should target a real AAP controller rather than the built-in mock,
+disable the mock explicitly:
+
+```bash
+REGISTRY=quay.io/fercoli VERSION=0.0.1.Verify ENABLE_AAP_MOCK=false make helm-install
 ```
 
 5. Run Integration Tests:
