@@ -18,7 +18,13 @@ oc port-forward -n $NAMESPACE svc/hub-ingestion-pipeline 8000:8000
 2. Get the models
 
 ```bash
-http GET http://localhost:8000/models
+http http://localhost:8000/models
+```
+
+3. Get the vector stores
+
+```bash
+http http://localhost:8000/vector-store
 ```
 
 ## AAP Tool
@@ -35,4 +41,50 @@ http POST http://localhost:8004/mcp \
   id:=1 \
   method=tools/call \
   params:='{"name":"list_job_templates","arguments":{}}'
+```
+
+## LlamaStack (OGX)
+
+```bash
+oc port-forward -n $NAMESPACE svc/llamastack 8321:8321
+```
+
+```bash
+http "http://localhost:8321/v1/models"
+```
+
+```bash
+http "http://localhost:8321/v1/vector_stores"
+```
+
+```bash
+http "http://localhost:8321/v1/toolgroups"
+```
+
+```bash
+http "http://localhost:8321/v1/tool-runtime/list-tools"
+```
+
+## Verify MCP Kube service binding
+
+```bash
+oc run mcp-reachability-check \
+  -n "$NAMESPACE" \
+  --rm -i --tty \
+  --restart=Never \
+  --image=curlimages/curl:8.8.0 \
+  --command -- sh -lc '
+    set -eu
+
+    echo "== Service health =="
+    curl -sS -i http://mcp-noc-openshift:8000/health
+
+    echo
+    echo "== MCP tools/list =="
+    curl -sS -i \
+      -H "Accept: application/json, text/event-stream" \
+      -H "Content-Type: application/json" \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}" \
+      http://mcp-noc-openshift:8000/mcp
+  '
 ```
