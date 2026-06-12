@@ -173,6 +173,9 @@ helm-depend:
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
+ifeq ($(ENABLE_KAFKA),true)
+	$(MAKE) kafka-install
+endif
 ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-install
 endif
@@ -212,9 +215,6 @@ else
 endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
-endif
-ifeq ($(ENABLE_KAFKA),true)
-	$(MAKE) kafka-install
 endif
 
 .PHONY: helm-uninstall
