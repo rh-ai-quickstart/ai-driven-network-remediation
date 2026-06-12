@@ -9,3 +9,10 @@ def ingestion_client():
     base_url = os.environ.get("INGESTION_PIPELINE_URL", "http://localhost:8000")
     with httpx.Client(base_url=base_url) as client:
         yield client
+
+
+@pytest.fixture(scope="session")
+def llamastack_client():
+    base_url = os.environ.get("LLAMASTACK_URL", "http://localhost:8321")
+    with httpx.Client(base_url=base_url) as client:
+        yield client

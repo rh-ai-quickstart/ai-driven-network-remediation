@@ -31,6 +31,10 @@ llama-stack:
   resources: {}
   pgvector:
     enabled: true
+  # Register MCP servers with LlamaStack one by one.
+  mcp-servers:
+    noc-openshift:
+      uri: http://mcp-noc-openshift:8000/mcp
   # `make helm-install` enables this model when ADNR_LLM_* vars are provided.
   # The upstream wait-for-models init container expands model URL and token
   # directly in Bash, so these fields must be concrete values.
