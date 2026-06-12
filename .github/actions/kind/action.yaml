@@ -51,13 +51,8 @@ runs:
         sed -i "s|https://127.0.0.1:[0-9]*|https://${CP_IP}:6443|g" /tmp/edge-kubeconfig
       shell: bash
 
-    - name: Deploy AAP mock for mcp-aap integration tests
-      run: |
-        docker build -t localhost:5001/aap-mock:ci -f hub/infra/aap-mock/Containerfile hub/infra/aap-mock
-        docker push localhost:5001/aap-mock:ci
-        oc create namespace hub 2>/dev/null || true
-        oc apply -n hub -f hub/infra/aap-mock/k8s.yaml
-        oc wait --for=condition=available deployment/aap-mock -n hub --timeout=60s
+    - name: Build and push AAP mock image
+      run: make build-push-aap-mock REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
       shell: bash
 
     - name: Build and push ServiceNow mock image
@@ -66,7 +61,7 @@ runs:
 
     - name: Helm Install
       run: |
-        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_HUB=true ENABLE_KAFKA=true ENABLE_KAFKA_UI=false \
+        make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true \
           HELM_EXTRA_ARGS="\
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
