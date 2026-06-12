@@ -99,6 +99,9 @@ helm_servicenow_mock_args = \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026,)
 
+helm_lokistack_registration_args = \
+	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
+
 .PHONY: build-all-images
 build-all-images: build-chatbot-image build-agent-image build-mcp-images
 
@@ -198,6 +201,7 @@ ifeq ($(ENABLE_HUB),true)
 		--set mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
 		--set-string lokistack.name='$(LOKISTACK_NAME)' \
 		--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
+		$(helm_lokistack_registration_args) \
 		$(helm_adnr_llm_args) \
 		$(helm_aap_mock_args) \
 		$(helm_servicenow_mock_args) \
