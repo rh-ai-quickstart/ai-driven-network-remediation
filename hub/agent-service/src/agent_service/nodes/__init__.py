@@ -6,4 +6,4 @@ from agent_service.nodes.lightspeed import lightspeed_node
 from agent_service.nodes.normalize import normalize_node
 from agent_service.nodes.notify import notify_node
 from agent_service.nodes.rag_retrieval import rag_retrieval_node
-from agent_service.nodes.remediate import remediate_node
+from agent_service.nodes.remediate import make_remediate_node
