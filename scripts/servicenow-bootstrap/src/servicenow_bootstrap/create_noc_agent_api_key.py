@@ -115,9 +115,7 @@ class ServiceNowAPIAutomation(ServiceNowClient):
                 print(f"Response: {e.response.text}")
             raise
 
-    def create_api_access_policy(
-        self, policy_name: str, api_name: str, auth_profiles: Dict[str, str]
-    ) -> str:
+    def create_api_access_policy(self, policy_name: str, api_name: str, auth_profiles: Dict[str, str]) -> str:
         """Create API access policy."""
         print(f"Creating API access policy: {policy_name}")
 
@@ -166,24 +164,18 @@ class ServiceNowAPIAutomation(ServiceNowClient):
                 print(f"Response: {e.response.text}")
             raise
 
-    def create_auth_profile_mapping(
-        self, policy_sys_id: str, auth_profiles: Dict[str, str]
-    ) -> None:
+    def create_auth_profile_mapping(self, policy_sys_id: str, auth_profiles: Dict[str, str]) -> None:
         """Create authentication profile mappings for the API access policy."""
         print("Creating authentication profile mappings...")
 
         mapping_url = f"{self.instance_url}/api/now/table/sys_auth_profile_mapping"
 
         if "basic_auth" in auth_profiles:
-            self._create_single_auth_mapping(
-                mapping_url, policy_sys_id, "basic_auth", auth_profiles["basic_auth"]
-            )
+            self._create_single_auth_mapping(mapping_url, policy_sys_id, "basic_auth", auth_profiles["basic_auth"])
 
         for auth_type, profile_sys_id in auth_profiles.items():
             if auth_type != "basic_auth":
-                self._create_single_auth_mapping(
-                    mapping_url, policy_sys_id, auth_type, profile_sys_id
-                )
+                self._create_single_auth_mapping(mapping_url, policy_sys_id, auth_type, profile_sys_id)
 
     def _create_single_auth_mapping(
         self,
@@ -202,10 +194,7 @@ class ServiceNowAPIAutomation(ServiceNowClient):
             response = self.session.post(mapping_url, json=payload)
             response.raise_for_status()
 
-            print(
-                f"{auth_type.replace('_', ' ').title()} authentication profile "
-                "mapping created successfully!"
-            )
+            print(f"{auth_type.replace('_', ' ').title()} authentication profile " "mapping created successfully!")
 
         except requests.RequestException as e:
             print(f"Error creating {auth_type} auth profile mapping: {e}")
@@ -230,9 +219,7 @@ class ServiceNowAPIAutomation(ServiceNowClient):
             "basic_auth": basic_auth_profile_sys_id,
         }
 
-        table_policy_sys_id = self.create_api_access_policy(
-            "NOC Agent - Tables", "Table API", results["auth_profiles"]
-        )
+        table_policy_sys_id = self.create_api_access_policy("NOC Agent - Tables", "Table API", results["auth_profiles"])
         results["table_policy"] = table_policy_sys_id
 
         print("API configuration setup completed!")
@@ -245,9 +232,7 @@ class ServiceNowAPIAutomation(ServiceNowClient):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Automate ServiceNow API configuration"
-    )
+    parser = argparse.ArgumentParser(description="Automate ServiceNow API configuration")
     parser.add_argument("--config", required=True, help="Path to configuration file")
     args = parser.parse_args()
 

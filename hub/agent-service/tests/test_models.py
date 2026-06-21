@@ -1,7 +1,13 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_service.models import GraphConfig, IncidentState, LogEvent, RemediationResult, RootCauseAnalysis
+from agent_service.models import (
+    GraphConfig,
+    IncidentState,
+    LogEvent,
+    RemediationResult,
+    RootCauseAnalysis,
+)
 
 
 class TestRootCauseAnalysis:

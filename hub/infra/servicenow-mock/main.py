@@ -112,9 +112,7 @@ async def create_incident(body: IncidentCreateBody, _: str = Depends(_verify_api
 
 
 @app.patch("/api/now/table/incident/{number}")
-async def update_incident(
-    number: str, body: IncidentUpdateBody, _: str = Depends(_verify_api_key)
-):
+async def update_incident(number: str, body: IncidentUpdateBody, _: str = Depends(_verify_api_key)):
     if number not in incidents:
         raise HTTPException(status_code=404, detail=f"Incident {number} not found")
 

@@ -8,8 +8,7 @@ def _find_toolgroup(toolgroups, identifier: str):
         (
             item
             for item in toolgroups
-            if item.get("identifier") == identifier
-            or item.get("provider_resource_id") == identifier
+            if item.get("identifier") == identifier or item.get("provider_resource_id") == identifier
         ),
         None,
     )

@@ -4,7 +4,12 @@ from click.testing import CliRunner
 
 from agent_service import main
 from agent_service.graph import build_graph
-from agent_service.models import GraphConfig, LogEvent, RemediationResult, RootCauseAnalysis
+from agent_service.models import (
+    GraphConfig,
+    LogEvent,
+    RemediationResult,
+    RootCauseAnalysis,
+)
 
 
 def _make_analyze_stub(confidence: float, failure_type: str = "CrashLoopBackOff"):

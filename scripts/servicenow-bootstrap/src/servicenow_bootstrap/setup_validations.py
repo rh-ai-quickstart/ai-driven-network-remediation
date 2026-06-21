@@ -81,8 +81,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
             self._created_number = result.get("number", "")
             return (
                 True,
-                f"  CREATE passed — {self._created_number} "
-                f"(sys_id: {self._created_sys_id})",
+                f"  CREATE passed — {self._created_number} " f"(sys_id: {self._created_sys_id})",
             )
         else:
             return False, f"  CREATE failed — {error}"
@@ -96,8 +95,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
 
         success, data, error = self._make_request(
             "GET",
-            f"table/incident?sysparm_query=number={self._created_number}"
-            f"&sysparm_limit=1",
+            f"table/incident?sysparm_query=number={self._created_number}" f"&sysparm_limit=1",
         )
 
         if success:
@@ -125,9 +123,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
             "state": "2",
         }
 
-        success, data, error = self._make_request(
-            "PATCH", f"table/incident/{self._created_sys_id}", payload
-        )
+        success, data, error = self._make_request("PATCH", f"table/incident/{self._created_sys_id}", payload)
 
         if success:
             return True, "  UPDATE passed — added work notes, moved to In Progress"
@@ -147,9 +143,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
             "close_notes": "Validation: resolved by servicenow-bootstrap",
         }
 
-        success, data, error = self._make_request(
-            "PATCH", f"table/incident/{self._created_sys_id}", payload
-        )
+        success, data, error = self._make_request("PATCH", f"table/incident/{self._created_sys_id}", payload)
 
         if success:
             return True, "  RESOLVE passed — incident marked as Resolved"
@@ -162,8 +156,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
 
         success, data, error = self._make_request(
             "GET",
-            "table/sys_user?sysparm_query=name=NOC Agent"
-            "&sysparm_limit=1&sysparm_fields=sys_id,name,user_name",
+            "table/sys_user?sysparm_query=name=NOC Agent" "&sysparm_limit=1&sysparm_fields=sys_id,name,user_name",
         )
 
         if success:
@@ -172,8 +165,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
                 user = results[0]
                 return (
                     True,
-                    f"  CALLER passed — found '{user.get('name')}' "
-                    f"(user_name: {user.get('user_name')})",
+                    f"  CALLER passed — found '{user.get('name')}' " f"(user_name: {user.get('user_name')})",
                 )
             else:
                 return False, "  CALLER failed — 'NOC Agent' user not found in sys_user"
@@ -185,9 +177,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
         if not self._created_sys_id:
             return
         print("Cleaning up validation incident...")
-        success, _, error = self._make_request(
-            "DELETE", f"table/incident/{self._created_sys_id}"
-        )
+        success, _, error = self._make_request("DELETE", f"table/incident/{self._created_sys_id}")
         if success:
             print(f"  Deleted {self._created_number}")
         else:
@@ -234,10 +224,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
         print(f"Passed: {passed}/{total}")
 
         if passed == total:
-            print(
-                "\nAll tests passed! Your ServiceNow instance is ready for "
-                "incident management."
-            )
+            print("\nAll tests passed! Your ServiceNow instance is ready for " "incident management.")
             print("\nYou can now deploy with a real ServiceNow instance:")
             print(
                 f"  SERVICENOW_URL={self.instance_url}\n"
@@ -248,10 +235,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
         elif passed > 0:
             print("\nSome tests passed. Check the failed tests above.")
         else:
-            print(
-                "\nAll tests failed. Verify credentials, roles (itil, rest_service), "
-                "and API access policies."
-            )
+            print("\nAll tests failed. Verify credentials, roles (itil, rest_service), " "and API access policies.")
 
         self._cleanup_incident()
 

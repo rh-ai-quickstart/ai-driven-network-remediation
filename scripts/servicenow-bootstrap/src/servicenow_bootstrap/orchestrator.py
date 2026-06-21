@@ -101,23 +101,15 @@ Examples:
     )
 
     parser.add_argument("--config", required=True, help="Path to configuration file")
-    parser.add_argument(
-        "--skip-user", action="store_true", help="Skip user creation step"
-    )
-    parser.add_argument(
-        "--skip-api", action="store_true", help="Skip API configuration step"
-    )
-    parser.add_argument(
-        "--skip-data", action="store_true", help="Skip incident test data step"
-    )
+    parser.add_argument("--skip-user", action="store_true", help="Skip user creation step")
+    parser.add_argument("--skip-api", action="store_true", help="Skip API configuration step")
+    parser.add_argument("--skip-data", action="store_true", help="Skip incident test data step")
     parser.add_argument(
         "--skip-validation",
         action="store_true",
         help="Skip validation step",
     )
-    parser.add_argument(
-        "--no-confirm", action="store_true", help="Skip confirmation prompts"
-    )
+    parser.add_argument("--no-confirm", action="store_true", help="Skip confirmation prompts")
 
     args = parser.parse_args()
 
@@ -138,9 +130,7 @@ Examples:
     print(f"\nTarget instance : {config['servicenow']['instance_url']}")
     print(f"Admin user      : {config['servicenow']['admin_username']}")
     print(f"Agent user      : {config['servicenow']['agent_user']['user_id']}")
-    print(
-        f"Assignment groups: " f"{', '.join(config['incident']['assignment_groups'])}"
-    )
+    print(f"Assignment groups: " f"{', '.join(config['incident']['assignment_groups'])}")
 
     steps_to_run = []
     if not args.skip_user:
@@ -199,9 +189,7 @@ Examples:
             agent_pass = user_result.get("password")
             if agent_user and agent_pass and agent_pass != "existing_user":
                 print(f"Validating as '{agent_user}' (newly created agent)...")
-                tester = ServiceNowIncidentTester(
-                    username=agent_user, password=agent_pass
-                )
+                tester = ServiceNowIncidentTester(username=agent_user, password=agent_pass)
             else:
                 print("Validating with credentials from environment...")
                 tester = ServiceNowIncidentTester()
@@ -223,10 +211,7 @@ Examples:
 
         if results.get("api", {}).get("api_key"):
             print(f"  API Key: {config['servicenow']['api_key_name']}")
-            print(
-                "  Token: log into ServiceNow -> All -> Search 'REST API Key' "
-                "to retrieve it"
-            )
+            print("  Token: log into ServiceNow -> All -> Search 'REST API Key' " "to retrieve it")
 
         if results.get("incident_data", {}).get("sample_incident"):
             inc = results["incident_data"]["sample_incident"]
@@ -244,8 +229,7 @@ Examples:
         print("  1. Verify the setup in your ServiceNow instance")
         print("  2. Retrieve the API key token from the ServiceNow UI")
         print(
-            "  3. Set the REST API dropdown on 'NOC Agent - Tables' access "
-            "policy to 'Table API' (if not auto-set)"
+            "  3. Set the REST API dropdown on 'NOC Agent - Tables' access " "policy to 'Table API' (if not auto-set)"
         )
         print(
             "  4. Deploy with: make helm-install "

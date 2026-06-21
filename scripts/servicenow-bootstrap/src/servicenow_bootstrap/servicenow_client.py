@@ -55,9 +55,7 @@ class ServiceNowClient:
 
         self.session = requests.Session()
         self.session.auth = (self.username, self.password)
-        self.session.headers.update(
-            {"Content-Type": "application/json", "Accept": "application/json"}
-        )
+        self.session.headers.update({"Content-Type": "application/json", "Accept": "application/json"})
         adapter = _TimeoutAdapter(timeout=timeout)
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)

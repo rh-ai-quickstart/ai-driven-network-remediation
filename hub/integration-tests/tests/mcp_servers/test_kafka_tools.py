@@ -6,7 +6,6 @@ Requires a deployed kafka-mcp instance.
 import uuid
 
 import pytest
-
 from conftest import mcp_call, mcp_list_tools
 
 pytestmark = pytest.mark.flaky(reruns=5)

@@ -40,9 +40,7 @@ def mcp_call(client, tool_name: str, arguments=None) -> dict:
         },
         headers=MCP_HEADERS,
     )
-    assert response.status_code == 200, (
-        f"HTTP {response.status_code}: {response.text}"
-    )
+    assert response.status_code == 200, f"HTTP {response.status_code}: {response.text}"
     data = parse_sse_json(response)
     assert "result" in data, f"No result in response: {data}"
     result = data["result"]
@@ -68,14 +66,10 @@ def mcp_list_tools(client) -> set[str]:
     )
     assert response.status_code == 200
     data = parse_sse_json(response)
-    return {
-        t["name"] for t in data.get("result", {}).get("tools", [])
-    }
+    return {t["name"] for t in data.get("result", {}).get("tools", [])}
 
 
-_lokistack_enabled = (
-    os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
-)
+_lokistack_enabled = os.environ.get("ENABLE_LOKISTACK", "false").lower() == "true"
 
 _BASE_HOST = "http://localhost"
 _SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))

@@ -4,7 +4,6 @@ import time
 import httpx
 import pytest
 
-
 _SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))
 
 

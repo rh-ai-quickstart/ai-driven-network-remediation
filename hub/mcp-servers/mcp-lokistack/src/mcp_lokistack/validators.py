@@ -38,10 +38,7 @@ def _validate_enum(
     if len(matches) == 1:
         note = f"{param_name}: '{value}' → '{matches[0]}'"
         return matches[0], note
-    msg = (
-        f"Invalid {param_name} '{value}'. Must be one of: "
-        f"{', '.join(valid_values)}. {usage_hint}"
-    )
+    msg = f"Invalid {param_name} '{value}'. Must be one of: " f"{', '.join(valid_values)}. {usage_hint}"
     if matches:
         msg += f" Did you mean: {', '.join(matches)}?"
     raise ValueError(msg)
@@ -52,9 +49,7 @@ def validate_tenant(tenant: str) -> tuple[str, str | None]:
         "tenant",
         tenant,
         list(VALID_TENANTS),
-        "Use 'application' for workload logs, "
-        "'infrastructure' for node/system logs, "
-        "'audit' for API audit logs.",
+        "Use 'application' for workload logs, " "'infrastructure' for node/system logs, " "'audit' for API audit logs.",
     )
 
 
@@ -95,7 +90,9 @@ _LOGQL_AGG_PREFIX = re.compile(
 def validate_logql(query: str) -> None:
     stripped = query.strip()
     if not stripped:
-        raise ValueError("LogQL query cannot be empty. " 'Provide a query like: {kubernetes_namespace_name="my-ns"} |= "error"')
+        raise ValueError(
+            "LogQL query cannot be empty. " 'Provide a query like: {kubernetes_namespace_name="my-ns"} |= "error"'
+        )
     if len(stripped) > 2048:
         raise ValueError(
             f"LogQL query is too long ({len(stripped)} chars, max 2048). "
@@ -103,11 +100,15 @@ def validate_logql(query: str) -> None:
         )
     if "{" not in stripped or "}" not in stripped:
         raise ValueError(
-            "LogQL query must include a stream selector " "in curly braces. " 'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
+            "LogQL query must include a stream selector "
+            "in curly braces. "
+            'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
         )
     if stripped.index("{") > stripped.index("}"):
         raise ValueError(
-            "Malformed LogQL: closing brace appears before " "opening brace. " 'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
+            "Malformed LogQL: closing brace appears before "
+            "opening brace. "
+            'Example: {kubernetes_namespace_name="my-ns"} |= "error"'
         )
     if not stripped.startswith("{") and not _LOGQL_AGG_PREFIX.match(stripped):
         raise ValueError(
@@ -122,8 +123,7 @@ def validate_metric_type(metric_type: str) -> tuple[str, str | None]:
         "metric_type",
         metric_type,
         list(_VALID_METRIC_TYPES),
-        "Use 'error_rate' for error trend analysis, "
-        "'log_volume' for total log throughput.",
+        "Use 'error_rate' for error trend analysis, " "'log_volume' for total log throughput.",
     )
 
 

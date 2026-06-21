@@ -57,9 +57,7 @@ def set_cookies(page: Page) -> None:
     logging.info("Cookies set successfully")
 
 
-def wake_up_instance(
-    username: str, password: str, headless: bool = True, timeout: int = 60
-) -> None:
+def wake_up_instance(username: str, password: str, headless: bool = True, timeout: int = 60) -> None:
     """Wake up ServiceNow PDI by automating the login process.
 
     Args:
@@ -121,19 +119,13 @@ def wake_up_instance(
             logging.info("Waiting for wake-up trigger to process...")
             page.wait_for_timeout(5000)
 
-            logging.info(
-                "Instance wakeup initiated successfully, "
-                "your instance should be awake pretty soon!"
-            )
+            logging.info("Instance wakeup initiated successfully, " "your instance should be awake pretty soon!")
 
         except Exception as e:
             debug_path = "debug-wake-up.png"
             try:
                 page.screenshot(path=debug_path)
-                logging.error(
-                    f"Error during wake-up process: {e}  "
-                    f"(screenshot saved to {debug_path})"
-                )
+                logging.error(f"Error during wake-up process: {e}  " f"(screenshot saved to {debug_path})")
             except Exception:
                 logging.error(f"Error during wake-up process: {e}")
             raise
@@ -144,9 +136,7 @@ def wake_up_instance(
 
 def main() -> None:
     """Main entry point for the wake-up script."""
-    parser = argparse.ArgumentParser(
-        description="Wake up your ServiceNow developer instance from hibernation"
-    )
+    parser = argparse.ArgumentParser(description="Wake up your ServiceNow developer instance from hibernation")
 
     parser.add_argument(
         "--no-headless",
@@ -180,10 +170,7 @@ def main() -> None:
     username = get_env_var("SERVICENOW_DEV_PORTAL_USERNAME")
     password = get_env_var("SERVICENOW_DEV_PORTAL_PASSWORD")
 
-    logging.info(
-        f"Starting wake-up with debug={args.debug}/"
-        f"headless={args.headless}/account={username}"
-    )
+    logging.info(f"Starting wake-up with debug={args.debug}/" f"headless={args.headless}/account={username}")
 
     try:
         wake_up_instance(

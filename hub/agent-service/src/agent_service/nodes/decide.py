@@ -2,13 +2,15 @@ from loguru import logger
 
 from agent_service.models import GraphConfig
 
-KNOWN_PLAYBOOK_TYPES = frozenset({
-    "OOMKilled",
-    "CrashLoopBackOff",
-    "ConfigError",
-    "NetworkTimeout",
-    "StorageFull",
-})
+KNOWN_PLAYBOOK_TYPES = frozenset(
+    {
+        "OOMKilled",
+        "CrashLoopBackOff",
+        "ConfigError",
+        "NetworkTimeout",
+        "StorageFull",
+    }
+)
 
 
 def make_decide_node(config: GraphConfig):

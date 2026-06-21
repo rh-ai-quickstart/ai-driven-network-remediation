@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from agent_service.server import app
 from agent_service.models import IncidentState
+from agent_service.server import app
 
 INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 

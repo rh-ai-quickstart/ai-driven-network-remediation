@@ -295,13 +295,9 @@ class TestFindErrorPatternsValidation:
     @respx.mock
     def test_corrections_passed_through(self):
         respx.get(f"{BASE}/audit/loki/api/v1/query_range").mock(
-            return_value=httpx.Response(
-                200, json=SAMPLE_STREAMS_RESPONSE
-            ),
+            return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE),
         )
-        result = find_error_patterns(
-            namespace="dark-noc-edge", tenant="admin"
-        )
+        result = find_error_patterns(namespace="dark-noc-edge", tenant="admin")
         assert result["tenant"] == "audit"
         assert "corrections" in result
 
@@ -447,9 +443,7 @@ class TestSemanticChecks:
         respx.get(f"{BASE}/application/loki/api/v1/query_range").mock(
             return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
         )
-        result = query_logql(
-            logql_query='{kubernetes_pod_name="my-pod"} |= "error"'
-        )
+        result = query_logql(logql_query='{kubernetes_pod_name="my-pod"} |= "error"')
         assert result["count"] == 3
 
     @respx.mock
@@ -457,7 +451,5 @@ class TestSemanticChecks:
         respx.get(f"{BASE}/application/loki/api/v1/query_range").mock(
             return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
         )
-        result = query_logql(
-            logql_query='{kubernetes_namespace_name="test"} |= "{namespace=foo}"'
-        )
+        result = query_logql(logql_query='{kubernetes_namespace_name="test"} |= "{namespace=foo}"')
         assert result["count"] == 3

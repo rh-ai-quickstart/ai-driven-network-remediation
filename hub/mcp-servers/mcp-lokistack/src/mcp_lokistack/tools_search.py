@@ -186,13 +186,10 @@ def query_logql(
         validate_logql(logql_query)
         selector_start = logql_query.index("{")
         selector_end = logql_query.index("}", selector_start)
-        stream_selector = logql_query[selector_start:selector_end + 1]
+        stream_selector = logql_query[selector_start : selector_end + 1]
         for pattern, correct, bare in _BARE_LABEL_CHECKS:
             if pattern.search(stream_selector):
-                raise ValueError(
-                    f"LogQL uses '{correct}' not '{bare}'. "
-                    f'Example: {{{correct}="value"}}'
-                )
+                raise ValueError(f"LogQL uses '{correct}' not '{bare}'. " f'Example: {{{correct}="value"}}')
         return _query_logs(logql_query, tenant, duration, limit)
 
     except (ValueError, TypeError, KeyError, httpx.HTTPStatusError, httpx.HTTPError) as e:

@@ -48,9 +48,7 @@ def _build_logql(
         escaped = re.escape(pod)
         selectors.append(f'kubernetes_pod_name=~".*{escaped}.*"')
     if container:
-        selectors.append(
-            f'kubernetes_container_name="{_escape_logql_string(container)}"'
-        )
+        selectors.append(f'kubernetes_container_name="{_escape_logql_string(container)}"')
     if labels:
         for k, v in labels.items():
             _validate_label_key(k)

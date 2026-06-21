@@ -138,9 +138,7 @@ class ServiceNowUserAutomation(ServiceNowClient):
                     "sysparm_fields": "sys_id",
                 }
 
-                has_role_response = self.session.get(
-                    has_role_url, params=has_role_params
-                )
+                has_role_response = self.session.get(has_role_url, params=has_role_params)
                 has_role_response.raise_for_status()
                 has_role_data = has_role_response.json()
 
@@ -151,9 +149,7 @@ class ServiceNowUserAutomation(ServiceNowClient):
                 assignment_data = {"user": user_sys_id, "role": role_sys_id}
 
                 assignment_url = f"{self.instance_url}/api/now/table/sys_user_has_role"
-                assignment_response = self.session.post(
-                    assignment_url, json=assignment_data
-                )
+                assignment_response = self.session.post(assignment_url, json=assignment_data)
                 assignment_response.raise_for_status()
 
                 print(f"Assigned role '{role_name}' to user")

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from mcp_servicenow.tools import (
     _is_real_servicenow,
     _snow_client,
@@ -244,9 +243,7 @@ class TestUpdateIncidentMockMode:
         ctx.patch.return_value = _mock_response(json_data={"record": incident_record})
         mock_client.return_value = ctx
 
-        result = update_incident(
-            ticket_number="INC0000001", work_notes="Starting work", state="in_progress"
-        )
+        result = update_incident(ticket_number="INC0000001", work_notes="Starting work", state="in_progress")
         assert result["success"] is True
         assert result["updated_state"] == "in_progress"
 
@@ -283,9 +280,7 @@ class TestUpdateIncidentRealMode:
     """Tests for update_incident in real ServiceNow mode."""
 
     def test_success_uses_sys_id(self, mock_client, _mock_real):
-        lookup_data = {
-            "result": [{"sys_id": "real-sys-001", "number": "INC0010001"}]
-        }
+        lookup_data = {"result": [{"sys_id": "real-sys-001", "number": "INC0010001"}]}
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)
         ctx.__exit__ = MagicMock(return_value=False)
@@ -487,9 +482,7 @@ class TestResolveIncidentRealMode:
     """Tests for resolve_incident in real ServiceNow mode."""
 
     def test_success_uses_sys_id(self, mock_client, _mock_real):
-        lookup_data = {
-            "result": [{"sys_id": "real-sys-001", "number": "INC0010001"}]
-        }
+        lookup_data = {"result": [{"sys_id": "real-sys-001", "number": "INC0010001"}]}
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)
         ctx.__exit__ = MagicMock(return_value=False)
@@ -497,9 +490,7 @@ class TestResolveIncidentRealMode:
         ctx.patch.return_value = _mock_response(json_data={"result": {}})
         mock_client.return_value = ctx
 
-        result = resolve_incident(
-            ticket_number="INC0010001", resolution_notes="Fixed the root cause"
-        )
+        result = resolve_incident(ticket_number="INC0010001", resolution_notes="Fixed the root cause")
         assert result["success"] is True
 
         patch_url = ctx.patch.call_args[0][0]

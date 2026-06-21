@@ -53,10 +53,7 @@ class ServiceNowIncidentDataAutomation(ServiceNowClient):
             url = f"{self.instance_url}/api/now/table/sys_user_group"
             group_data = {
                 "name": group_name,
-                "description": (
-                    f"Auto-created by servicenow-bootstrap for "
-                    f"AI-driven network remediation"
-                ),
+                "description": (f"Auto-created by servicenow-bootstrap for " f"AI-driven network remediation"),
                 "active": "true",
             }
 
@@ -65,9 +62,7 @@ class ServiceNowIncidentDataAutomation(ServiceNowClient):
                 response.raise_for_status()
 
                 result = response.json()["result"]
-                print(
-                    f"Assignment group '{group_name}' created (sys_id: {result['sys_id']})"
-                )
+                print(f"Assignment group '{group_name}' created (sys_id: {result['sys_id']})")
                 created.append(
                     {
                         "name": group_name,
@@ -102,9 +97,7 @@ class ServiceNowIncidentDataAutomation(ServiceNowClient):
 
         return ""
 
-    _SAMPLE_SHORT_DESC = (
-        "[Bootstrap Test] Edge cluster nginx OOMKilled — auto-remediation " "validation"
-    )
+    _SAMPLE_SHORT_DESC = "[Bootstrap Test] Edge cluster nginx OOMKilled — auto-remediation " "validation"
 
     def _sample_incident_exists(self) -> bool:
         """Check if the bootstrap sample incident already exists.

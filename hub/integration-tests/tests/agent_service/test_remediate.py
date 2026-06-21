@@ -41,7 +41,11 @@ class TestRemediateRouting:
     def test_high_confidence_generation_type_routes_to_lightspeed(self, agent_service_client):
         response = agent_service_client.post(
             "/remediate",
-            json={"raw_event": "high confidence event", "confidence_override": 0.9, "failure_type_override": "KafkaLag"},
+            json={
+                "raw_event": "high confidence event",
+                "confidence_override": 0.9,
+                "failure_type_override": "KafkaLag",
+            },
         )
         _assert_valid_remediation_response(response, "high confidence event", "lightspeed")
 

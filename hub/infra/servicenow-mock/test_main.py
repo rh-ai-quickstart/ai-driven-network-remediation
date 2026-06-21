@@ -8,7 +8,6 @@ Also included in: make unit-tests
 
 import pytest
 from fastapi.testclient import TestClient
-
 from main import app
 
 HEADERS = {"X-API-Key": "demo-api-key-2026"}
