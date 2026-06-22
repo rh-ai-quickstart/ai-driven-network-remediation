@@ -26,5 +26,8 @@ ODH_CRD_BASE="https://raw.githubusercontent.com/redhat-openshift-ecosystem/commu
 oc apply --server-side -f "${ODH_CRD_BASE}/datasciencecluster.opendatahub.io_datascienceclusters.yaml"
 oc apply --server-side -f "${ODH_CRD_BASE}/dscinitialization.opendatahub.io_dscinitializations.yaml"
 
+echo "==> Installing LlamaStackDistribution CRD (for AutoRAG)"
+oc apply --server-side -f "https://raw.githubusercontent.com/llamastack/llama-stack-k8s-operator/main/config/crd/bases/llamastack.io_llamastackdistributions.yaml"
+
 echo "==> OpenShift AI components installed successfully"
-oc get crd | grep -E "kserve|opendatahub" || true
+oc get crd | grep -E "kserve|opendatahub|llamastack" || true

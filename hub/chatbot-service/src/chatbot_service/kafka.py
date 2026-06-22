@@ -66,8 +66,6 @@ def fetch_recent_audits() -> tuple[list[dict[str, Any]], bool]:
             ts = parse_iso(normalized.get("timestamp"))
             if ts and ts.timestamp() >= cutoff:
                 records.append(normalized)
-            elif not ts:
-                records.append(normalized)
             if len(records) >= AUDIT_MAX_MESSAGES:
                 break
     except Exception:

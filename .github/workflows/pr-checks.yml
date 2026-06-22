@@ -110,7 +110,7 @@ jobs:
       - name: Verify helm-uninstall cleanup
         if: always()
         run: |
-          make helm-uninstall 2>/dev/null || true
+          make helm-uninstall ENABLE_AUTORAG=true 2>/dev/null || true
           oc wait --for=delete pod -l app.kubernetes.io/instance=hub -n hub --timeout=30s 2>/dev/null || true
 
           remaining=$(oc get all -n hub --no-headers 2>/dev/null | grep -v "Completed" || true)

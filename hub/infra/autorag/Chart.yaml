@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 3.4.0
+description: LlamaStackDistribution configured for AutoRAG optimization runs
+name: autorag
+type: application
+version: 0.1.0

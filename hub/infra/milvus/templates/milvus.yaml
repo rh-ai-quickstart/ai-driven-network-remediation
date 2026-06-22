@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: milvus-pvc
+  labels:
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.milvus.storage.size }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: milvus-standalone
+  labels:
+    app: milvus-standalone
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: milvus-standalone
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: milvus-standalone
+    spec:
+      containers:
+        - name: milvus-standalone
+          image: {{ .Values.milvus.image.repository }}:{{ .Values.milvus.image.tag }}
+          imagePullPolicy: {{ .Values.milvus.image.pullPolicy }}
+          args: ["milvus", "run", "standalone"]
+          env:
+            - name: DEPLOY_MODE
+              value: standalone
+            - name: ETCD_ENDPOINTS
+              value: etcd-service:2379
+            - name: COMMON_STORAGETYPE
+              value: local
+            - name: MILVUS_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: milvus-secret
+                  key: root-password
+          livenessProbe:
+            exec:
+              command: ["curl", "-f", "http://localhost:9091/healthz"]
+            initialDelaySeconds: 90
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 5
+          ports:
+            - containerPort: 19530
+              protocol: TCP
+            - containerPort: 9091
+              protocol: TCP
+          volumeMounts:
+            - name: milvus-data
+              mountPath: /var/lib/milvus
+          resources:
+            {{- toYaml .Values.milvus.resources | nindent 12 }}
+      volumes:
+        - name: milvus-data
+          persistentVolumeClaim:
+            claimName: milvus-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: milvus-service
+  labels:
+    app.kubernetes.io/name: milvus
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  selector:
+    app: milvus-standalone
+  ports:
+    - name: grpc
+      port: 19530
+      targetPort: 19530
+    - name: http
+      port: 9091
+      targetPort: 9091

@@ -1,0 +1,242 @@
+[
+  {
+    "question": "How do I retrieve the stdout output for a failed AAP job?",
+    "correct_answers": [
+      "Use the AAP API GET endpoint /api/v2/jobs/<job-id>/stdout/?format=txt with admin credentials",
+      "curl -s -u admin:<token> https://<aap-url>/api/v2/jobs/<job-id>/stdout/?format=txt"
+    ],
+    "correct_answer_document_ids": ["aap-job-failure.md"]
+  },
+  {
+    "question": "What are the common root causes when an Ansible Automation Platform job fails?",
+    "correct_answers": [
+      "Unreachable target host, credential error, missing variable, or underlying resource not in expected state",
+      "Playbook task failure due to unreachable host, bad credentials, missing variable, or resource state mismatch"
+    ],
+    "correct_answer_document_ids": ["aap-job-failure.md"]
+  },
+  {
+    "question": "How do I re-launch a failed AAP job via the API?",
+    "correct_answers": [
+      "POST to /api/v2/jobs/<job-id>/relaunch/ with an empty JSON body {}",
+      "curl -s -u admin:<token> -X POST https://<aap-url>/api/v2/jobs/<job-id>/relaunch/ -H 'Content-Type: application/json' -d '{}'"
+    ],
+    "correct_answer_document_ids": ["aap-job-failure.md"]
+  },
+  {
+    "question": "What command checks the expiry date of a TLS certificate stored in an OpenShift secret?",
+    "correct_answers": [
+      "oc get secret <tls-secret> -n <namespace> -o jsonpath='{.data.tls\\.crt}' | base64 -d | openssl x509 -noout -enddate",
+      "Decode tls.crt from the secret with base64 -d and run openssl x509 -noout -enddate"
+    ],
+    "correct_answer_document_ids": ["certificate-expired.md"]
+  },
+  {
+    "question": "How do I force cert-manager to re-issue an expired certificate?",
+    "correct_answers": [
+      "Annotate the Certificate resource with cert-manager.io/issue-once set to the current Unix timestamp",
+      "oc annotate certificate <cert-name> -n <namespace> cert-manager.io/issue-once=\"$(date +%s)\""
+    ],
+    "correct_answer_document_ids": ["certificate-expired.md"]
+  },
+  {
+    "question": "After manually rotating a TLS secret, what deployment must be restarted?",
+    "correct_answers": [
+      "oc rollout restart deployment/nginx -n <namespace>",
+      "Rollout restart deployment/nginx in the namespace after applying the new tls secret"
+    ],
+    "correct_answer_document_ids": ["certificate-expired.md"]
+  },
+  {
+    "question": "Which namespace and pods should I check when DNS resolution fails in the cluster?",
+    "correct_answers": [
+      "Check pods in openshift-dns with oc get pods -n openshift-dns and oc logs -l dns.operator.openshift.io/daemonset-dns -n openshift-dns --tail=50",
+      "Inspect CoreDNS in the openshift-dns namespace using the dns-default daemonset label selector"
+    ],
+    "correct_answer_document_ids": ["dns-failure.md"]
+  },
+  {
+    "question": "How do I restart CoreDNS on OpenShift?",
+    "correct_answers": [
+      "oc rollout restart daemonset/dns-default -n openshift-dns",
+      "Rollout restart the dns-default daemonset in openshift-dns"
+    ],
+    "correct_answer_document_ids": ["dns-failure.md"]
+  },
+  {
+    "question": "What dnsPolicy should pods use for cluster DNS resolution?",
+    "correct_answers": [
+      "dnsPolicy: ClusterFirst",
+      "ClusterFirst (the default pod DNS policy)"
+    ],
+    "correct_answer_document_ids": ["dns-failure.md"]
+  },
+  {
+    "question": "How do I check consumer group lag for a Kafka consumer group?",
+    "correct_answers": [
+      "oc exec -it <kafka-pod> -n <namespace> -- bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group <group-id>",
+      "Run kafka-consumer-groups.sh with --describe --group against localhost:9092 inside the kafka pod"
+    ],
+    "correct_answer_document_ids": ["kafka-consumer-lag.md"]
+  },
+  {
+    "question": "When scaling Kafka consumers to reduce lag, what constraint must not be exceeded?",
+    "correct_answers": [
+      "Consumer replicas must not exceed the topic partition count",
+      "Do not scale deployment/<consumer> above the number of partitions on the topic"
+    ],
+    "correct_answer_document_ids": ["kafka-consumer-lag.md"]
+  },
+  {
+    "question": "How do I increase partitions on a Kafka topic to 6?",
+    "correct_answers": [
+      "oc exec -it <kafka-pod> -n <namespace> -- bin/kafka-topics.sh --bootstrap-server localhost:9092 --alter --topic <topic> --partitions 6",
+      "Use kafka-topics.sh --alter --topic <topic> --partitions 6 on the kafka pod"
+    ],
+    "correct_answer_document_ids": ["kafka-consumer-lag.md"]
+  },
+  {
+    "question": "What nginx log message indicates an upstream connection timeout?",
+    "correct_answers": [
+      "upstream timed out (110: Connection timed out)",
+      "Logs showing upstream timed out with error 110 Connection timed out"
+    ],
+    "correct_answer_document_ids": ["network-timeout.md"]
+  },
+  {
+    "question": "What commands verify that a Kubernetes service has healthy endpoints?",
+    "correct_answers": [
+      "oc get endpoints <service> -n <namespace> and oc describe service <service> -n <namespace>",
+      "Check endpoints and describe the service in the namespace"
+    ],
+    "correct_answer_document_ids": ["network-timeout.md"]
+  },
+  {
+    "question": "What temporary nginx proxy timeout values can be added to nginx.conf?",
+    "correct_answers": [
+      "proxy_read_timeout 120s; proxy_connect_timeout 30s;",
+      "Set proxy_read_timeout to 120s and proxy_connect_timeout to 30s"
+    ],
+    "correct_answer_document_ids": ["network-timeout.md"]
+  },
+  {
+    "question": "How do I validate nginx configuration inside a running pod?",
+    "correct_answers": [
+      "oc exec <pod> -n <namespace> -- nginx -t",
+      "Run nginx -t via oc exec on the pod in the namespace"
+    ],
+    "correct_answer_document_ids": ["nginx-config-error.md"]
+  },
+  {
+    "question": "What is the rollback procedure when nginx fails to reload due to bad config?",
+    "correct_answers": [
+      "oc rollout undo deployment/nginx -n <namespace> followed by oc rollout status deployment/nginx -n <namespace>",
+      "Rollout undo deployment/nginx and wait for rollout status to complete"
+    ],
+    "correct_answer_document_ids": ["nginx-config-error.md"]
+  },
+  {
+    "question": "Which ConfigMap holds nginx configuration and how is it applied after editing?",
+    "correct_answers": [
+      "nginx-config ConfigMap — edit it and rollout restart deployment/nginx",
+      "Edit configmap nginx-config with oc edit configmap nginx-config -n <namespace>, then oc rollout restart deployment/nginx -n <namespace>"
+    ],
+    "correct_answer_document_ids": ["nginx-config-error.md"]
+  },
+  {
+    "question": "What backoff pattern does CrashLoopBackOff follow for nginx pods?",
+    "correct_answers": [
+      "Exponential backoff from 10s to 20s to 40s up to 5 minutes",
+      "Restart backoff increases exponentially: 10s, 20s, 40s, capped at 5m"
+    ],
+    "correct_answer_document_ids": ["nginx-crashloop.md"]
+  },
+  {
+    "question": "Which commands diagnose a nginx pod in CrashLoopBackOff?",
+    "correct_answers": [
+      "oc logs <pod> --previous -n <namespace> and oc describe pod <pod> -n <namespace>",
+      "Check previous container logs and describe the pod"
+    ],
+    "correct_answer_document_ids": ["nginx-crashloop.md"]
+  },
+  {
+    "question": "What exit codes appear in previous container state for a crashlooping nginx pod?",
+    "correct_answers": [
+      "Exit code 1 or 137",
+      "Previous container exited with code 1 (error) or 137 (OOM/signal kill)"
+    ],
+    "correct_answer_document_ids": ["nginx-crashloop.md"]
+  },
+  {
+    "question": "What pod status and exit code indicate nginx was OOMKilled?",
+    "correct_answers": [
+      "Pod status OOMKilled with exit code 137",
+      "Last State shows OOMKilled and exit code 137 in oc describe pod"
+    ],
+    "correct_answer_document_ids": ["nginx-oomkilled.md"]
+  },
+  {
+    "question": "What immediate memory limits should be set on the nginx deployment after OOMKill?",
+    "correct_answers": [
+      "oc set resources deployment nginx --limits=memory=512Mi --requests=memory=256Mi -n <namespace>",
+      "Set limits to 512Mi and requests to 256Mi on deployment nginx"
+    ],
+    "correct_answer_document_ids": ["nginx-oomkilled.md"]
+  },
+  {
+    "question": "What nginx.conf worker settings are recommended for permanent OOM prevention?",
+    "correct_answers": [
+      "worker_processes auto, worker_connections 1024, and a memory alert at 80% of limit",
+      "Tune worker_processes to auto and worker_connections to 1024; alert at 80% of the memory limit; add HPA to scale out"
+    ],
+    "correct_answer_document_ids": ["nginx-oomkilled.md"]
+  },
+  {
+    "question": "What PostgreSQL error messages indicate the connection pool is exhausted?",
+    "correct_answers": [
+      "remaining connection slots are reserved for replication and FATAL: sorry, too many clients already",
+      "Too many clients already or remaining connection slots reserved for replication"
+    ],
+    "correct_answer_document_ids": ["postgres-connection-pool.md"]
+  },
+  {
+    "question": "How do I kill idle PostgreSQL connections older than 10 minutes?",
+    "correct_answers": [
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state='idle' AND query_start < now()-interval '10 min';",
+      "Run pg_terminate_backend on idle connections where query_start is more than 10 minutes ago"
+    ],
+    "correct_answer_document_ids": ["postgres-connection-pool.md"]
+  },
+  {
+    "question": "How do I increase max_connections to 200 in a CloudNativePG cluster?",
+    "correct_answers": [
+      "Edit the CloudNativePG cluster CR and set postgresql.parameters.max_connections: \"200\" (requires restart)",
+      "Set max_connections to 200 in the CloudNativePG cluster postgresql.parameters; a restart is required"
+    ],
+    "correct_answer_document_ids": ["postgres-connection-pool.md"]
+  },
+  {
+    "question": "What error message and symptom indicate a PVC or disk is full?",
+    "correct_answers": [
+      "no space left on device with PVC usage at 100% visible via oc exec df -h or oc get pvc",
+      "Pod logs show no space left on device; df -h inside the pod shows 100% usage"
+    ],
+    "correct_answer_document_ids": ["storage-full.md"]
+  },
+  {
+    "question": "How do I clear old nginx log files to free disk space?",
+    "correct_answers": [
+      "oc exec <pod> -n <namespace> -- find /var/log/nginx -name '*.log' -mtime +7 -delete, then oc rollout restart deployment/nginx -n <namespace>",
+      "Delete nginx logs older than 7 days under /var/log/nginx and restart deployment/nginx"
+    ],
+    "correct_answer_document_ids": ["storage-full.md"]
+  },
+  {
+    "question": "How do I expand a PVC to 20Gi when the storage class supports expansion?",
+    "correct_answers": [
+      "oc patch pvc <pvc-name> -n <namespace> -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"20Gi\"}}}}'",
+      "Patch the PVC spec.resources.requests.storage to 20Gi"
+    ],
+    "correct_answer_document_ids": ["storage-full.md"]
+  }
+]

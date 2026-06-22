@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 2.6.0
+description: Milvus standalone with etcd for AutoRAG vector storage
+name: milvus
+type: application
+version: 0.1.0

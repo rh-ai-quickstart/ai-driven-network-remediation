@@ -60,6 +60,14 @@ MINIO_NAMESPACE        ?= $(NAMESPACE)
 MINIO_PORT             ?= 9000
 MINIO_HELM_EXTRA_ARGS  ?=
 
+# ── AutoRAG (optional: ENABLE_AUTORAG=false to skip) ─────────────
+ENABLE_AUTORAG         ?= true
+MILVUS_RELEASE         := milvus
+MILVUS_CHART           := hub/infra/milvus
+AUTORAG_RELEASE        := autorag
+AUTORAG_CHART          := hub/infra/autorag
+AUTORAG_HELM_EXTRA_ARGS ?=
+
 # ── AAP Mock (optional: ENABLE_AAP_MOCK=true) ──────────────────
 ENABLE_AAP_MOCK        ?= true
 AAP_MOCK_IMG           := $(REGISTRY)/noc-aap-mock:$(VERSION)
@@ -215,6 +223,9 @@ endif
 ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-install
 endif
+ifeq ($(ENABLE_AUTORAG),true)
+	$(MAKE) milvus-install
+endif
 ifeq ($(ENABLE_AAP_MOCK),true)
 	$(MAKE) deploy-aap-mock
 endif
@@ -250,6 +261,9 @@ ifeq ($(ENABLE_HUB),true)
 else
 	@echo "ENABLE_HUB is not true — skipping hub chart deployment"
 endif
+ifeq ($(ENABLE_AUTORAG),true)
+	$(MAKE) autorag-install
+endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
 endif
@@ -281,6 +295,10 @@ ifeq ($(ENABLE_AAP_MOCK),true)
 endif
 ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	oc delete -n $(NAMESPACE) -f hub/infra/servicenow-mock/k8s.yaml --ignore-not-found
+endif
+ifeq ($(ENABLE_AUTORAG),true)
+	$(MAKE) autorag-uninstall
+	$(MAKE) milvus-uninstall
 endif
 endif
 	$(MAKE) edge-rbac-teardown
@@ -483,6 +501,51 @@ langfuse-status:
 	@echo ""
 	@echo "=== Secrets ==="
 	oc get secret langfuse-secrets --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
+
+# ── AutoRAG / Milvus targets ─────────────────────────────────────
+
+.PHONY: milvus-install
+milvus-install:
+	helm upgrade --install $(MILVUS_RELEASE) $(MILVUS_CHART) \
+		--namespace $(NAMESPACE) \
+		--wait --timeout 10m
+
+.PHONY: milvus-uninstall
+milvus-uninstall:
+	helm uninstall $(MILVUS_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc milvus-pvc --namespace $(NAMESPACE) --ignore-not-found
+
+.PHONY: autorag-install
+autorag-install:
+	@test -n "$(ADNR_LLM_ID)" || { echo "ERROR: ADNR_LLM_ID is required for AutoRAG. Export it before running."; exit 1; }
+	@test -n "$(ADNR_LLM_URL)" || { echo "ERROR: ADNR_LLM_URL is required for AutoRAG. Export it before running."; exit 1; }
+	@test -n "$(ADNR_LLM_TOKEN)" || { echo "ERROR: ADNR_LLM_TOKEN is required for AutoRAG. Export it before running."; exit 1; }
+	helm upgrade --install $(AUTORAG_RELEASE) $(AUTORAG_CHART) \
+		--namespace $(NAMESPACE) \
+		--set-string inference.model='$(ADNR_LLM_ID)' \
+		--set-string inference.url='$(ADNR_LLM_URL)' \
+		--set-string inference.apiToken='$(ADNR_LLM_TOKEN)' \
+		--wait --timeout 10m \
+		$(AUTORAG_HELM_EXTRA_ARGS)
+
+.PHONY: autorag-uninstall
+autorag-uninstall:
+	helm uninstall $(AUTORAG_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+	oc delete llamastackdistribution adnr-autorag --namespace $(NAMESPACE) --ignore-not-found
+
+.PHONY: autorag-status
+autorag-status:
+	@echo "=== Milvus ==="
+	oc get pods -l app=milvus-standalone --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
+	@echo ""
+	@echo "=== etcd ==="
+	oc get pods -l app=etcd --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
+	@echo ""
+	@echo "=== LlamaStackDistribution ==="
+	oc get llamastackdistribution --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
+	@echo ""
+	@echo "=== Llama Stack Pod ==="
+	oc get pods -l app.kubernetes.io/managed-by=llamastack-operator --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
 
 # ── ServiceNow PDI Bootstrap ────────────────────────────────
 

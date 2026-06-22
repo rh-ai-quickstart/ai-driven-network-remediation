@@ -64,6 +64,8 @@ runs:
       run: |
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true \
+          ENABLE_AUTORAG=true \
+          AUTORAG_HELM_EXTRA_ARGS="--wait=false" \
           HELM_EXTRA_ARGS="\
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
@@ -79,6 +81,18 @@ runs:
             --set kafka.resources.limits.cpu=500m \
             --set kafka.resources.limits.memory=512Mi \
             --set-string kafka.jvmHeapOpts='-Xmx384m -Xms256m'"
+      shell: bash
+
+    - name: Verify AutoRAG resources deployed
+      run: |
+        echo "=== Milvus pods ==="
+        oc get pods -l app=milvus-standalone -n hub
+        oc wait --for=condition=Ready pod -l app=milvus-standalone -n hub --timeout=180s
+        echo "=== etcd pods ==="
+        oc get pods -l app=etcd -n hub
+        oc wait --for=condition=Ready pod -l app=etcd -n hub --timeout=180s
+        echo "=== LlamaStackDistribution CR ==="
+        oc get llamastackdistribution -n hub
       shell: bash
 
     - name: Wait for Kafka topics to be created
