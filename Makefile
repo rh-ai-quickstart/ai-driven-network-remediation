@@ -173,21 +173,6 @@ helm-depend:
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
-ifeq ($(ENABLE_KAFKA),true)
-	$(MAKE) kafka-install
-endif
-ifeq ($(ENABLE_MINIO),true)
-	$(MAKE) minio-install
-endif
-ifeq ($(ENABLE_AAP_MOCK),true)
-	$(MAKE) deploy-aap-mock
-endif
-ifeq ($(ENABLE_LOKISTACK),true)
-	$(MAKE) lokistack-install
-endif
-ifeq ($(ENABLE_SERVICENOW_MOCK),true)
-	$(MAKE) deploy-servicenow-mock
-endif
 ifeq ($(ENABLE_HUB),true)
 	@oc get secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) > /dev/null 2>&1 || \
 		hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
@@ -204,6 +189,19 @@ ifeq ($(ENABLE_HUB),true)
 		--set mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
 		--set-string lokistack.name='$(LOKISTACK_NAME)' \
 		--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
+		--set kafka.enabled=$(ENABLE_KAFKA) \
+		--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
+		--set kafka.kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
+		--set minio.enabled=$(ENABLE_MINIO) \
+		--set lokistack.enabled=$(ENABLE_LOKISTACK) \
+		--set-string lokistack.lokistack.name='$(LOKISTACK_NAME)' \
+		--set lokistack.testLogGenerator.enabled=$(ENABLE_LOKISTACK_TEST) \
+		--set aapMock.enabled=$(ENABLE_AAP_MOCK) \
+		--set aapMock.image.repository=$(REGISTRY)/aap-mock \
+		--set aapMock.image.tag=$(VERSION) \
+		--set servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
+		--set servicenowMock.image.repository=$(REGISTRY)/servicenow-mock \
+		--set servicenowMock.image.tag=$(VERSION) \
 		$(helm_lokistack_registration_args) \
 		$(helm_adnr_llm_args) \
 		$(helm_aap_mock_args) \
@@ -222,29 +220,16 @@ helm-uninstall:
 ifeq ($(ENABLE_HUB),true)
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
-ifeq ($(ENABLE_LOKISTACK),true)
-	$(MAKE) lokistack-uninstall
-endif
-ifeq ($(ENABLE_MINIO),true)
-	$(MAKE) minio-uninstall
+	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc -n $(LOKISTACK_NAMESPACE) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
+	oc delete secret kafka-tls kafka-client-tls --namespace $(NAMESPACE) --ignore-not-found
+	oc delete job kafka-create-topics --namespace $(NAMESPACE) --ignore-not-found
 endif
 ifeq ($(ENABLE_LANGFUSE),true)
-	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
-	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
-	oc delete secret langfuse-secrets --namespace $(NAMESPACE) || true
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete secret langfuse-secrets --namespace $(NAMESPACE) --ignore-not-found
-endif
-ifeq ($(ENABLE_KAFKA),true)
-	$(MAKE) kafka-uninstall
-endif
-ifeq ($(ENABLE_AAP_MOCK),true)
-	oc delete -n $(NAMESPACE) -f hub/infra/aap-mock/k8s.yaml --ignore-not-found
-endif
-ifeq ($(ENABLE_SERVICENOW_MOCK),true)
-	oc delete -n $(NAMESPACE) -f hub/infra/servicenow-mock/k8s.yaml --ignore-not-found
-endif
 endif
 
 .PHONY: edge-rbac-teardown

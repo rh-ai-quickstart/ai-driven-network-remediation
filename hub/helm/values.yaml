@@ -3,9 +3,9 @@
 # https://kubernetes.io/docs/concepts/containers/images/
 image:
   registry: quay.io/rh-ai-quickstart
-  chatbotService: hub-chatbot-service
-  ingestionPipeline: hub-ingestion-pipeline
-  agentService: hub-agent-service
+  chatbotService: noc-chatbot-service
+  ingestionPipeline: noc-ingestion-pipeline
+  agentService: noc-agent-service
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "0.0.1"
@@ -130,15 +130,47 @@ agentService:
     initialDelaySeconds: 10
     periodSeconds: 10
 
-lokistack:
-  name: logging-loki
-  namespace: ""   # empty = release namespace; set to e.g. "openshift-logging" if different
+# ── Kafka (subchart: hub/infra/kafka) ─────────────────────────────
+kafka:
+  enabled: true
 
-# ── MinIO connection (must match hub/infra/minio values) ─────────
+# ── MinIO (subchart: hub/infra/minio) ─────────────────────────────
+# Connection settings (host, port, secretName) are used by hub chart templates.
+# Subchart values (image, storage, etc.) use defaults from hub/infra/minio/values.yaml.
 minio:
+  enabled: true
   host: minio
   port: "9000"
   secretName: minio
+
+# ── LokiStack (subchart: hub/infra/lokistack/chart) ──────────────
+# name/namespace are used by hub chart templates (lokistack-config.yaml).
+# Subchart values use defaults from hub/infra/lokistack/chart/values.yaml.
+# fallbackCredentials are used on first install when the minio secret
+# does not yet exist for the s3-secret template lookup.
+lokistack:
+  enabled: false
+  name: logging-loki
+  namespace: ""
+  minio:
+    fallbackCredentials:
+      accessKeyId: minio_user
+      secretAccessKey: minio_password
+
+# ── AAP Mock ──────────────────────────────────────────────────────
+aapMock:
+  enabled: true
+  image:
+    repository: quay.io/rh-ai-quickstart/aap-mock
+    tag: "0.1.0"
+
+# ── ServiceNow Mock ──────────────────────────────────────────────
+servicenowMock:
+  enabled: true
+  image:
+    repository: quay.io/rh-ai-quickstart/servicenow-mock
+    tag: "0.1.0"
+  apiKey: "demo-api-key-2026"
 
 # ── MCP Secrets ───────────────────────────────────────────────────
 # Credentials for MCP servers injected via secretKeyRef.

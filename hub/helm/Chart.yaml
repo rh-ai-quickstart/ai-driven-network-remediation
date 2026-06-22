@@ -16,3 +16,15 @@ dependencies:
     version: 0.5.17
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
     condition: mcp-servers.enabled
+  - name: kafka
+    version: 0.1.0
+    repository: "file://../infra/kafka"
+    condition: kafka.enabled
+  - name: minio
+    version: 0.5.5
+    repository: "file://../infra/minio"
+    condition: minio.enabled
+  - name: lokistack
+    version: 0.1.0
+    repository: "file://../infra/lokistack/chart"
+    condition: lokistack.enabled
