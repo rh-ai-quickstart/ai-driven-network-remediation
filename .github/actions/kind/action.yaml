@@ -29,6 +29,10 @@ runs:
       run: oc cluster-info
       shell: bash
 
+    - name: Install OpenShift AI components (KServe + ODH CRDs)
+      run: bash ./scripts/ci/install-openshift-ai.sh
+      shell: bash
+
     - name: Build local images
       run: make build-all-images REGISTRY=localhost:5001
       shell: bash
