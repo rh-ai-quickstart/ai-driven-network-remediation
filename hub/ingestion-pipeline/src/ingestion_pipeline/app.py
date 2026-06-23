@@ -22,6 +22,9 @@ def _get_client() -> LlamaStackVectorStoreClient:
     return LlamaStackVectorStoreClient(
         base_url=settings.llamastack_base_url,
         vector_store_name=settings.vector_store_name,
+        embedding_model=settings.embedding_model,
+        chunk_size_tokens=settings.chunk_size_tokens,
+        chunk_overlap_tokens=settings.chunk_overlap_tokens,
     )
 
 

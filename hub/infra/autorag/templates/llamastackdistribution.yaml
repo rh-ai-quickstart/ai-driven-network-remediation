@@ -83,6 +83,10 @@ spec:
       name: llama-stack
       port: 8321
     distribution:
-      name: rh-dev
+      {{- if .Values.llamaStack.distributionImage }}
+      image: {{ .Values.llamaStack.distributionImage }}
+      {{- else }}
+      name: {{ .Values.llamaStack.distributionName }}
+      {{- end }}
     storage:
       size: {{ .Values.llamaStack.storage.size }}

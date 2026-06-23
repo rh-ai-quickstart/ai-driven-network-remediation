@@ -1,5 +1,7 @@
 llamaStack:
   name: adnr-autorag
+  distributionName: rh-dev
+  distributionImage: ""
   replicas: 1
   resources:
     requests:

@@ -11,3 +11,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: integration tests requiring deployed services",
+    "e2e: end-to-end tests requiring full RAG stack",
+]

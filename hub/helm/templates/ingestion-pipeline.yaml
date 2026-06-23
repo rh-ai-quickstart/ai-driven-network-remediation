@@ -27,11 +27,17 @@ spec:
               protocol: TCP
           env:
             - name: LLAMASTACK_HOST
-              value: {{ index .Values "llama-stack" "host" | quote }}
+              value: {{ .Values.ingestionPipeline.llamastackHost | quote }}
             - name: LLAMASTACK_PORT
               value: {{ index .Values "llama-stack" "port" | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
+            - name: EMBEDDING_MODEL
+              value: {{ .Values.ingestionPipeline.embeddingModel | quote }}
+            - name: CHUNK_SIZE_TOKENS
+              value: {{ .Values.ingestionPipeline.chunkSizeTokens | quote }}
+            - name: CHUNK_OVERLAP_TOKENS
+              value: {{ .Values.ingestionPipeline.chunkOverlapTokens | quote }}
             - name: MINIO_ENDPOINT
               value: {{ printf "%s:%s" .Values.minio.host .Values.minio.port | quote }}
             - name: MINIO_ACCESS_KEY

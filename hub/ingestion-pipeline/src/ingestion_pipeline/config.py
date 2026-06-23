@@ -12,6 +12,9 @@ class Settings:
     llamastack_host: str
     llamastack_port: int
     vector_store_name: str
+    embedding_model: str
+    chunk_size_tokens: int
+    chunk_overlap_tokens: int
     runbooks_dir: Path
     minio_endpoint: str
     minio_access_key: str
@@ -26,6 +29,9 @@ class Settings:
             llamastack_host=os.environ.get("LLAMASTACK_HOST", "llamastack"),
             llamastack_port=int(os.environ.get("LLAMASTACK_PORT", "8321")),
             vector_store_name=os.environ.get("VECTOR_STORE_NAME", ""),
+            embedding_model=os.environ.get("EMBEDDING_MODEL", "BAAI/bge-m3"),
+            chunk_size_tokens=int(os.environ.get("CHUNK_SIZE_TOKENS", "800")),
+            chunk_overlap_tokens=int(os.environ.get("CHUNK_OVERLAP_TOKENS", "80")),
             runbooks_dir=Path(os.environ.get("RUNBOOKS_DIR", "/app/runbooks")),
             minio_endpoint=os.environ.get("MINIO_ENDPOINT", ""),
             minio_access_key=os.environ.get("MINIO_ACCESS_KEY", ""),

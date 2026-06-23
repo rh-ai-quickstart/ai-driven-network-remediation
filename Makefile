@@ -60,8 +60,8 @@ MINIO_NAMESPACE        ?= $(NAMESPACE)
 MINIO_PORT             ?= 9000
 MINIO_HELM_EXTRA_ARGS  ?=
 
-# ── AutoRAG (optional: ENABLE_AUTORAG=false to skip) ─────────────
-ENABLE_AUTORAG         ?= true
+# ── AutoRAG (always enabled) ─────────────────────────────────────
+ENABLE_AUTORAG         := true
 MILVUS_RELEASE         := milvus
 MILVUS_CHART           := hub/infra/milvus
 AUTORAG_RELEASE        := autorag
@@ -223,9 +223,7 @@ endif
 ifeq ($(ENABLE_MINIO),true)
 	$(MAKE) minio-install
 endif
-ifeq ($(ENABLE_AUTORAG),true)
 	$(MAKE) milvus-install
-endif
 ifeq ($(ENABLE_AAP_MOCK),true)
 	$(MAKE) deploy-aap-mock
 endif
@@ -237,8 +235,7 @@ ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
-	@oc get secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) > /dev/null 2>&1 || \
-		hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
+	hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		--set image.registry=$(REGISTRY) \
@@ -261,9 +258,7 @@ ifeq ($(ENABLE_HUB),true)
 else
 	@echo "ENABLE_HUB is not true — skipping hub chart deployment"
 endif
-ifeq ($(ENABLE_AUTORAG),true)
 	$(MAKE) autorag-install
-endif
 ifeq ($(ENABLE_LANGFUSE),true)
 	$(MAKE) _langfuse-deploy
 endif
@@ -296,14 +291,12 @@ endif
 ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	oc delete -n $(NAMESPACE) -f hub/infra/servicenow-mock/k8s.yaml --ignore-not-found
 endif
-ifeq ($(ENABLE_AUTORAG),true)
 	$(MAKE) autorag-uninstall
 	$(MAKE) milvus-uninstall
-endif
-endif
 	$(MAKE) edge-rbac-teardown
 	oc delete namespace $(EDGE_NAMESPACE) --ignore-not-found
 	oc delete namespace $(NAMESPACE) --ignore-not-found
+endif
 
 .PHONY: edge-rbac-teardown
 edge-rbac-teardown:
@@ -421,6 +414,8 @@ ifeq ($(ENABLE_HUB),true)
 	PF3_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/llamastack 8321:8321 & \
 	PF10_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/adnr-autorag-service 8322:8321 & \
+	PF11_PID=$$!; \
 	PF4_PID=""; \
 	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
 		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
@@ -436,9 +431,9 @@ ifeq ($(ENABLE_HUB),true)
 	PF8_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
 	PF9_PID=$$!; \
-	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID $$PF10_PID" EXIT; \
+	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID $$PF10_PID $$PF11_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
+	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 AUTORAG_URL=http://localhost:8322 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
 endif

@@ -57,6 +57,10 @@ llama-stack:
 ingestionPipeline:
   replicaCount: 1
   vectorStoreName: noc_runbooks
+  llamastackHost: adnr-autorag-service
+  embeddingModel: sentence-transformers/nomic-ai/nomic-embed-text-v1.5
+  chunkSizeTokens: 800
+  chunkOverlapTokens: 80
   minio:
     bucket: runbooks
     secure: false

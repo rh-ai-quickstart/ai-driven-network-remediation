@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from llama_stack_client import LlamaStackClient
+from ogx_client import OgxClient
 
 
 @dataclass(frozen=True)
@@ -39,12 +39,26 @@ class VectorStoreFileContentSummary:
 
 
 class LlamaStackVectorStoreClient:
-    def __init__(self, *, base_url: str, vector_store_name: str, timeout_seconds: float = 30) -> None:
-        self._client = LlamaStackClient(base_url=base_url, timeout=timeout_seconds)
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        vector_store_name: str,
+        embedding_model: str | None = None,
+        chunk_size_tokens: int = 800,
+        chunk_overlap_tokens: int = 80,
+        timeout_seconds: float = 30,
+    ) -> None:
+        self._client = OgxClient(base_url=base_url, timeout=timeout_seconds)
         self._vector_store_name = vector_store_name
+        self._embedding_model = embedding_model
+        self._chunk_size_tokens = chunk_size_tokens
+        self._chunk_overlap_tokens = chunk_overlap_tokens
 
     def list_models(self) -> list[dict[str, Any]]:
-        return [model.model_dump() for model in self._client.models.list()]
+        response = self._client.models.list()
+        models = response.data if hasattr(response, "data") else list(response)
+        return [model.model_dump() for model in models]
 
     def get_vector_store(self) -> VectorStoreSummary | None:
         vector_store = self._find_vector_store_by_name(self._vector_store_name)
@@ -63,7 +77,10 @@ class LlamaStackVectorStoreClient:
         if existing is not None:
             return existing
 
-        created = self._client.vector_stores.create(name=self._vector_store_name)
+        create_kwargs: dict[str, Any] = {"name": self._vector_store_name}
+        if self._embedding_model:
+            create_kwargs["extra_body"] = {"embedding_model": self._embedding_model}
+        created = self._client.vector_stores.create(**create_kwargs)
         return VectorStoreSummary(
             id=created.id,
             name=created.name,
@@ -77,9 +94,13 @@ class LlamaStackVectorStoreClient:
         filename: str,
         content: str,
         attributes: dict[str, str | float | bool] | None = None,
-        chunk_size_tokens: int = 800,
-        chunk_overlap_tokens: int = 80,
+        chunk_size_tokens: int | None = None,
+        chunk_overlap_tokens: int | None = None,
     ) -> VectorStoreFileSummary:
+        chunk_size_tokens = chunk_size_tokens if chunk_size_tokens is not None else self._chunk_size_tokens
+        chunk_overlap_tokens = (
+            chunk_overlap_tokens if chunk_overlap_tokens is not None else self._chunk_overlap_tokens
+        )
         vector_store = self.ensure_vector_store()
         created_file = self._client.files.create(
             file=(filename, content.encode("utf-8"), "text/markdown"),

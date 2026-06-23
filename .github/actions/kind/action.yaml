@@ -29,8 +29,12 @@ runs:
       run: oc cluster-info
       shell: bash
 
-    - name: Install OpenShift AI components (KServe + ODH CRDs)
-      run: bash ./scripts/ci/install-openshift-ai.sh
+    - name: Install Llama Stack K8s operator
+      run: |
+        oc apply -k "https://github.com/ogx-ai/ogx-k8s-operator/config/default?ref=v0.9.0"
+        oc wait --for=condition=Available \
+          deployment/llama-stack-k8s-operator-controller-manager \
+          -n llama-stack-k8s-operator-system --timeout=180s
       shell: bash
 
     - name: Build local images
@@ -65,7 +69,7 @@ runs:
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true \
           ENABLE_AUTORAG=true \
-          AUTORAG_HELM_EXTRA_ARGS="--wait=false" \
+          AUTORAG_HELM_EXTRA_ARGS="--set llamaStack.distributionImage=docker.io/ogxai/distribution-starter:1.1.2 --wait=false" \
           HELM_EXTRA_ARGS="\
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
@@ -93,6 +97,8 @@ runs:
         oc wait --for=condition=Ready pod -l app=etcd -n hub --timeout=180s
         echo "=== LlamaStackDistribution CR ==="
         oc get llamastackdistribution -n hub
+        echo "=== AutoRAG pod ==="
+        oc wait --for=condition=Ready pod -l app.kubernetes.io/instance=adnr-autorag -n hub --timeout=300s
       shell: bash
 
     - name: Wait for Kafka topics to be created
