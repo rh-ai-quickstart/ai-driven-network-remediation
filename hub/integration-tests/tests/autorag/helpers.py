@@ -115,9 +115,3 @@ def search_vector_store(
 def document_id_in_hit(hit: dict, document_ids: list[str]) -> bool:
     haystack = json.dumps(hit).lower()
     return any(doc_id.lower() in haystack for doc_id in document_ids)
-
-
-def sync_runbooks(ingestion_client):
-    response = ingestion_client.post("/runbooks/sync", timeout=30.0)
-    assert response.status_code == 200
-    return response.json()

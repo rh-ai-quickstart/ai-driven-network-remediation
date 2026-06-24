@@ -291,12 +291,12 @@ endif
 ifeq ($(ENABLE_SERVICENOW_MOCK),true)
 	oc delete -n $(NAMESPACE) -f hub/infra/servicenow-mock/k8s.yaml --ignore-not-found
 endif
+endif
 	$(MAKE) autorag-uninstall
 	$(MAKE) milvus-uninstall
 	$(MAKE) edge-rbac-teardown
 	oc delete namespace $(EDGE_NAMESPACE) --ignore-not-found
 	oc delete namespace $(NAMESPACE) --ignore-not-found
-endif
 
 .PHONY: edge-rbac-teardown
 edge-rbac-teardown:
@@ -522,6 +522,9 @@ autorag-install:
 		--set-string inference.apiToken='$(ADNR_LLM_TOKEN)' \
 		--wait --timeout 10m \
 		$(AUTORAG_HELM_EXTRA_ARGS)
+	oc wait --for=condition=Ready pod -l app=milvus-standalone -n $(NAMESPACE) --timeout=180s
+	oc wait --for=condition=Ready pod -l app=etcd -n $(NAMESPACE) --timeout=180s
+	oc wait --for=condition=Ready pod -l app.kubernetes.io/instance=adnr-autorag -n $(NAMESPACE) --timeout=300s
 
 .PHONY: autorag-uninstall
 autorag-uninstall:

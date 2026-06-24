@@ -6,7 +6,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from helpers import discover_sentence_transformers_model, sync_runbooks
+from common_helpers import sync_runbooks
+from helpers import discover_sentence_transformers_model
 
 _AUTORAG_URL = os.environ.get("AUTORAG_URL", "http://localhost:8322")
 _INGESTION_URL = os.environ.get("INGESTION_PIPELINE_URL", "http://localhost:8000")

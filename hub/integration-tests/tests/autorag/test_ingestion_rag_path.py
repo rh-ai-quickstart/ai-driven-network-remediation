@@ -2,7 +2,8 @@ import os
 
 import pytest
 
-from helpers import is_sentence_transformers_model, sync_runbooks
+from common_helpers import sync_runbooks
+from helpers import is_sentence_transformers_model
 
 
 @pytest.mark.integration

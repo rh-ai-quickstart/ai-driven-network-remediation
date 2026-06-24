@@ -28,4 +28,5 @@ etcd:
 
 secret:
   create: true
+  # Override in production: --set secret.rootPassword=<real-password>
   rootPassword: "milvus-root-password"
