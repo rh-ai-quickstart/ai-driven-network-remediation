@@ -68,7 +68,6 @@ runs:
       run: |
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true \
-          ENABLE_AUTORAG=true \
           AUTORAG_HELM_EXTRA_ARGS="--set llamaStack.distributionImage=docker.io/ogxai/distribution-starter:1.1.2 --wait=false" \
           HELM_EXTRA_ARGS="\
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \

@@ -60,8 +60,7 @@ MINIO_NAMESPACE        ?= $(NAMESPACE)
 MINIO_PORT             ?= 9000
 MINIO_HELM_EXTRA_ARGS  ?=
 
-# ── AutoRAG (always enabled) ─────────────────────────────────────
-ENABLE_AUTORAG         := true
+# ── AutoRAG ──────────────────────────────────────────────────────
 MILVUS_RELEASE         := milvus
 MILVUS_CHART           := hub/infra/milvus
 AUTORAG_RELEASE        := autorag

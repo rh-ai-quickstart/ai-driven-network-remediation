@@ -52,7 +52,7 @@ export ADNR_LLM_URL="https://your-vllm-endpoint/v1"
 export ADNR_LLM_TOKEN="your-token"
 
 # Deploy everything (includes Milvus + LlamaStackDistribution)
-ENABLE_AUTORAG=true make helm-install
+make helm-install
 
 # Or deploy AutoRAG components standalone
 make milvus-install

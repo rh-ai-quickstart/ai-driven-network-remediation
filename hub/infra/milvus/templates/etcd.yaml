@@ -45,7 +45,7 @@ spec:
             {{- toYaml .Values.etcd.resources | nindent 12 }}
       volumes:
         - name: etcd-data
-          emptyDir: {}
+          emptyDir: {} # This can fall Use PVC if it not a qucisktart
 ---
 apiVersion: v1
 kind: Service
