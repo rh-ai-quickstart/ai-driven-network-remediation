@@ -56,6 +56,10 @@ spec:
               value: {{ .Values.ingestionPipeline.minio.secure | quote }}
             - name: MINIO_RUNBOOK_PREFIX
               value: {{ .Values.ingestionPipeline.minio.runbookPrefix | quote }}
+            {{- if .Values.ingestionPipeline.ragas.inferenceModel }}
+            - name: RAGAS_INFERENCE_MODEL
+              value: {{ .Values.ingestionPipeline.ragas.inferenceModel | quote }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.ingestionPipeline.livenessProbe | nindent 12 }}
           readinessProbe:

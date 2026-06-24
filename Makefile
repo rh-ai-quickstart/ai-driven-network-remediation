@@ -107,7 +107,8 @@ helm_adnr_llm_args = \
 	$(if $(ADNR_LLM_ENABLED),--set llama-stack.models.adnr-llm.enabled=true,) \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.id='$(ADNR_LLM_ID)',) \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.url='$(ADNR_LLM_URL)',) \
-	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',)
+	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',) \
+	$(if $(ADNR_LLM_ENABLED),--set-string ingestionPipeline.ragas.inferenceModel='$(ADNR_LLM_ID)',)
 
 helm_mcp_image_args = \
 	--set mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
@@ -541,6 +542,20 @@ autorag-status:
 	@echo ""
 	@echo "=== Llama Stack Pod ==="
 	oc get pods -l app.kubernetes.io/managed-by=llamastack-operator --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
+
+# ── RAGAS Evaluation ────────────────────────────────────────
+
+.PHONY: ragas-evaluate
+ragas-evaluate:
+	@test -n "$(NAMESPACE)" || { echo "ERROR: NAMESPACE is required."; exit 1; }
+	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
+	PF_PID=$$!; \
+	trap "kill $$PF_PID 2>/dev/null" EXIT; \
+	sleep 2 && \
+	python3 -c "import json,sys; d=json.load(open('hub/autorag/test-data.json')); json.dump({'scoring_functions':['answer_relevancy'],'data':d},sys.stdout)" \
+		| curl -sf --fail-with-body -X POST http://localhost:8000/evaluate \
+			-H "Content-Type: application/json" \
+			-d @- | python3 -m json.tool
 
 # ── ServiceNow PDI Bootstrap ────────────────────────────────
 

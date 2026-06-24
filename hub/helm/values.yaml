@@ -61,6 +61,8 @@ ingestionPipeline:
   embeddingModel: sentence-transformers/nomic-ai/nomic-embed-text-v1.5
   chunkSizeTokens: 800
   chunkOverlapTokens: 80
+  ragas:
+    inferenceModel: ""
   minio:
     bucket: runbooks
     secure: false

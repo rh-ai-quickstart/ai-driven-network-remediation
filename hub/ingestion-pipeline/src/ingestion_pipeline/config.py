@@ -22,6 +22,7 @@ class Settings:
     minio_bucket: str
     minio_secure: bool
     minio_runbook_prefix: str
+    ragas_inference_model: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -39,6 +40,7 @@ class Settings:
             minio_bucket=os.environ.get("MINIO_BUCKET", ""),
             minio_secure=_get_bool_env("MINIO_SECURE"),
             minio_runbook_prefix=os.environ.get("MINIO_RUNBOOK_PREFIX", "runbooks/"),
+            ragas_inference_model=os.environ.get("RAGAS_INFERENCE_MODEL", ""),
         )
 
     @property

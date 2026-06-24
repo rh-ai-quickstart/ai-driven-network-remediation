@@ -24,6 +24,9 @@ embedding:
   provider: sentence-transformers
   model: BAAI/bge-m3
 
+ragas:
+  embeddingModel: all-MiniLM-L6-v2
+
 postgres:
   host: pgvector
   port: "5432"

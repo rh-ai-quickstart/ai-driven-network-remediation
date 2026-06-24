@@ -303,6 +303,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "llama-stack-client" },
     { name = "minio" },
     { name = "ogx-client" },
     { name = "uvicorn" },
@@ -311,9 +312,36 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "llama-stack-client", specifier = ">=0.2" },
     { name = "minio", specifier = ">=7.2.20" },
     { name = "ogx-client", specifier = "~=1.1" },
     { name = "uvicorn", specifier = ">=0.32" },
+]
+
+[[package]]
+name = "llama-stack-client"
+version = "0.7.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "click" },
+    { name = "distro" },
+    { name = "fire" },
+    { name = "httpx" },
+    { name = "pandas" },
+    { name = "prompt-toolkit" },
+    { name = "pyaml" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "rich" },
+    { name = "sniffio" },
+    { name = "termcolor" },
+    { name = "tqdm" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/ff/bf0de61f7b5dc96a34a8a876d23c5d16bdca84935acd3a9b7af068bc3f66/llama_stack_client-0.7.4.tar.gz", hash = "sha256:4b13d65ee1f5a1be5e628672596b36616b3212526e7d2dbc4179dbcb6860c167", size = 372959 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/90/a1149e962a89a8ecf0fdcf7dd621dff2a1937bc6fe77ca988e3d1b0cf22c/llama_stack_client-0.7.4-py3-none-any.whl", hash = "sha256:8001e13ba81f9421e22134b99ed8e43f8842a63773039e3b17ab6bf13b57a20b", size = 375337 },
 ]
 
 [[package]]

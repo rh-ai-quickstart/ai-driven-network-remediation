@@ -35,6 +35,8 @@ spec:
           value: "true"
         - name: EMBEDDING_PROVIDER
           value: {{ .Values.embedding.provider | quote }}
+        - name: TRUSTYAI_EMBEDDING_MODEL
+          value: {{ .Values.ragas.embeddingModel | quote }}
 
         - name: INFERENCE_MODEL
           valueFrom:
