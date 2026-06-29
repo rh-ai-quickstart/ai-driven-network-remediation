@@ -1,0 +1,31 @@
+suite: TRUSTYAI_EMBEDDING_MODEL tests
+templates:
+  - templates/llamastackdistribution.yaml
+tests:
+  - it: should set TRUSTYAI_EMBEDDING_MODEL to default embedding.model
+    asserts:
+      - contains:
+          path: spec.server.containerSpec.env
+          content:
+            name: TRUSTYAI_EMBEDDING_MODEL
+            value: "BAAI/bge-m3"
+
+  - it: should reflect embedding.model override in TRUSTYAI_EMBEDDING_MODEL
+    set:
+      embedding.model: all-MiniLM-L6-v2
+    asserts:
+      - contains:
+          path: spec.server.containerSpec.env
+          content:
+            name: TRUSTYAI_EMBEDDING_MODEL
+            value: "all-MiniLM-L6-v2"
+
+  - it: should keep TRUSTYAI_EMBEDDING_MODEL consistent with EMBEDDING_PROVIDER's model
+    set:
+      embedding.model: intfloat/multilingual-e5-large
+    asserts:
+      - contains:
+          path: spec.server.containerSpec.env
+          content:
+            name: TRUSTYAI_EMBEDDING_MODEL
+            value: "intfloat/multilingual-e5-large"

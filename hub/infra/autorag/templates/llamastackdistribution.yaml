@@ -78,6 +78,9 @@ spec:
               name: {{ .Values.milvus.secret.name }}
               key: MILVUS_CONSISTENCY_LEVEL
 
+        - name: TRUSTYAI_EMBEDDING_MODEL
+          value: {{ .Values.embedding.model | quote }}
+
         - name: FMS_ORCHESTRATOR_URL
           value: "http://localhost"
       name: llama-stack
