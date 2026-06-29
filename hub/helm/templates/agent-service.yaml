@@ -44,6 +44,11 @@ spec:
             - name: http
               containerPort: 8001
               protocol: TCP
+          env:
+            - name: LLAMASTACK_HOST
+              value: {{ index .Values "llama-stack" "host" | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ index .Values "llama-stack" "port" | quote }}
           livenessProbe:
             {{- toYaml .Values.agentService.livenessProbe | nindent 12 }}
           readinessProbe:

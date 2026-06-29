@@ -329,7 +329,28 @@ class TestRemediateNode:
         assert result["remediation_result"].success is True
         assert result["remediation_result"].job_id == "42"
         assert result["remediation_result"].action_taken == "restart-pod"
-        assert "should_retry" not in result
+        assert result["should_retry"] is False
+
+    async def test_success_after_failure_clears_should_retry(self):
+        config = GraphConfig()
+        node = make_remediate_node(config)
+        state = IncidentState(
+            raw_event="test",
+            log_event=_STUB_LOG_EVENT,
+            root_cause_analysis=_STUB_RCA,
+            failed_attempts=[
+                {"action": "remediate", "template": "x", "error": "prev"},
+            ],
+            should_retry=True,
+        )
+        with patch(
+            "agent_service.nodes.remediate._invoke_tool",
+            _mock_invoke_tool(),
+        ):
+            result = await node(state)
+
+        assert result["remediation_result"].success is True
+        assert result["should_retry"] is False
 
     async def test_launch_failure_sets_should_retry(self):
         config = GraphConfig()
@@ -399,7 +420,38 @@ class TestRemediateNode:
 
         assert result["remediation_result"].success is False
         assert result["remediation_result"].timed_out is True
-        assert "should_retry" not in result
+        assert result["should_retry"] is True
+        assert len(result["failed_attempts"]) == 1
+
+    async def test_failure_then_timeout_stops_retrying(self):
+        config = GraphConfig(max_retries=1, job_timeout=0.1)
+        node = make_remediate_node(config)
+        state = IncidentState(
+            raw_event="test",
+            log_event=_STUB_LOG_EVENT,
+            root_cause_analysis=_STUB_RCA,
+            failed_attempts=[
+                {"action": "remediate", "template": "x", "error": "prev"},
+            ],
+            should_retry=True,
+        )
+
+        async def _slow_invoke(tool_name, kwargs):
+            if tool_name == "launch_job":
+                return {"success": True, "job_id": 99}
+            if tool_name == "get_job_status":
+                return {"success": True, "status": "running"}
+            return {}
+
+        with patch(
+            "agent_service.nodes.remediate._invoke_tool", _slow_invoke
+        ), patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01):
+            result = await node(state)
+
+        assert result["remediation_result"].success is False
+        assert result["remediation_result"].timed_out is True
+        assert result["should_retry"] is False
+        assert len(result["failed_attempts"]) == 2
 
     async def test_max_retries_exceeded_no_retry(self):
         config = GraphConfig(max_retries=1)
@@ -444,4 +496,5 @@ class TestRemediateNode:
             result = await node(state)
 
         assert result["remediation_result"].success is False
-        assert result["should_retry"] is True
+        assert result["should_retry"] is False
+        assert "failed_attempts" not in result

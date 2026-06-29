@@ -32,18 +32,10 @@ async def _handle_completion(template: str, job_id: int, state, config):
     status = await _poll_job(job_id, config.job_timeout)
 
     if status is None or status.get("status") not in TERMINAL_STATUSES:
-        return {
-            "remediation_result": RemediationResult(
-                action_taken=template,
-                tool_used="aap",
-                success=False,
-                timed_out=True,
-                job_id=str(job_id),
-                duration_seconds=config.job_timeout,
-                output_summary=f"Job {job_id} timed out",
-                timestamp=_now_iso(),
-            ),
-        }
+        return _failure(
+            state, config, template, f"Job {job_id} timed out",
+            job_id, elapsed=config.job_timeout, timed_out=True,
+        )
 
     output_text = await _get_output(job_id)
     elapsed = status.get("elapsed", 0)
@@ -58,6 +50,7 @@ async def _handle_completion(template: str, job_id: int, state, config):
         )
 
     return {
+        "should_retry": False,
         "remediation_result": RemediationResult(
             action_taken=template,
             tool_used="aap",
@@ -82,9 +75,18 @@ def make_remediate_node(config: GraphConfig):
         )
         if not template:
             logger.warning("No recommended actions in RCA")
-            return _failure(
-                state, config, "none", "No recommended actions in RCA",
-            )
+            return {
+                "should_retry": False,
+                "remediation_result": RemediationResult(
+                    action_taken="none",
+                    tool_used="aap",
+                    success=False,
+                    job_id="",
+                    duration_seconds=0,
+                    output_summary="No recommended actions in RCA",
+                    timestamp=_now_iso(),
+                ),
+            }
 
         try:
             launch = await _launch_job(template, state.log_event)
@@ -137,7 +139,7 @@ async def _get_output(job_id: int) -> str:
 
 def _failure(
     state, config: GraphConfig, template: str, error: str,
-    job_id=None, *, elapsed=0, timestamp=None,
+    job_id=None, *, elapsed=0, timestamp=None, timed_out=False,
 ) -> dict:
     entry = {"action": "remediate", "template": template, "error": error[:500]}
     if job_id is not None:
@@ -150,6 +152,7 @@ def _failure(
             action_taken=template,
             tool_used="aap",
             success=False,
+            timed_out=timed_out,
             job_id=str(job_id or ""),
             duration_seconds=float(elapsed),
             output_summary=error[:1000],

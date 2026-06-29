@@ -19,6 +19,8 @@ INCIDENT_STATE_FIELDS = {
     "langfuse_trace_id",
     "total_duration_ms",
     "error_message",
+    "failed_attempts",
+    "should_retry",
 }
 
 
