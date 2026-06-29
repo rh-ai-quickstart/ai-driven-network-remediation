@@ -46,7 +46,8 @@ def ingestion_client():
 @pytest.fixture(scope="session")
 def autorag_client():
     _wait_for_health(_AUTORAG_URL, "/v1/health", "autorag")
-    with httpx.Client(base_url=_AUTORAG_URL, timeout=60.0) as client:
+    transport = httpx.HTTPTransport(retries=3)
+    with httpx.Client(base_url=_AUTORAG_URL, timeout=60.0, transport=transport) as client:
         yield client
 
 
