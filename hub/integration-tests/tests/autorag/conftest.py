@@ -5,7 +5,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-
 from common_helpers import sync_runbooks
 from helpers import discover_sentence_transformers_model
 

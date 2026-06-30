@@ -1,5 +1,4 @@
 import pytest
-
 from helpers import is_sentence_transformers_model, list_models
 
 

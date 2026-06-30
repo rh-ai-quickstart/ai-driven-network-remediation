@@ -1,5 +1,4 @@
 import pytest
-
 from helpers import document_id_in_hit, search_vector_store
 
 

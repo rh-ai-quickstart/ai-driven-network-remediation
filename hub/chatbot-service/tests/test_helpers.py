@@ -1,7 +1,6 @@
 """Unit tests for helper functions: SLO computation, demo events, normalization."""
 
 import pytest
-
 from chatbot_service import (
     build_demo_event,
     build_incident_movie,

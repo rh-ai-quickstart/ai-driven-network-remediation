@@ -6,7 +6,11 @@ import statistics
 from datetime import datetime, timezone
 from typing import Any
 
-from .config import AUDIT_LOOKBACK_HOURS, BASELINE_MANUAL_MTTR_SECONDS, OPS_HOURLY_COST_USD
+from .config import (
+    AUDIT_LOOKBACK_HOURS,
+    BASELINE_MANUAL_MTTR_SECONDS,
+    OPS_HOURLY_COST_USD,
+)
 from .utils import parse_iso
 
 
@@ -20,22 +24,14 @@ def normalize_incident_record(payload: dict[str, Any]) -> dict[str, Any]:
 
     labels = event.get("labels") if isinstance(event.get("labels"), dict) else {}
     message = str(event.get("message", "") or payload.get("message", "") or "")
-    scenario = str(
-        event.get("failure_type") or labels.get("dark_noc_scenario") or "unknown"
-    )
-    remediation_action = str(
-        event.get("remediation_action") or payload.get("remediation_action") or "detected"
-    )
-    remediation_success = bool(
-        event.get("remediation_success", payload.get("remediation_success", False))
-    )
+    scenario = str(event.get("failure_type") or labels.get("dark_noc_scenario") or "unknown")
+    remediation_action = str(event.get("remediation_action") or payload.get("remediation_action") or "detected")
+    remediation_success = bool(event.get("remediation_success", payload.get("remediation_success", False)))
     servicenow_ticket = str(event.get("servicenow_ticket") or payload.get("servicenow_ticket") or "")
     aap_job_id = str(event.get("aap_job_id") or payload.get("aap_job_id") or "")
     confidence = float(event.get("ai_confidence") or payload.get("ai_confidence") or 0)
     duration_ms = float(event.get("total_duration_ms") or payload.get("total_duration_ms") or 0)
-    edge_site = str(
-        event.get("edge_site_id") or payload.get("edge_site_id") or labels.get("edge_site_id") or "edge-01"
-    )
+    edge_site = str(event.get("edge_site_id") or payload.get("edge_site_id") or labels.get("edge_site_id") or "edge-01")
 
     ts_raw = ""
     for key in ("timestamp", "@timestamp", "time", "ts"):
@@ -48,9 +44,9 @@ def normalize_incident_record(payload: dict[str, Any]) -> dict[str, Any]:
         event.get("incident_id") or payload.get("incident_id") or f"evt-{abs(hash(ts_raw + message)) % 10_000_000}"
     )
     severity = str(
-        event.get("severity") or payload.get("severity") or (
-            "high" if "error" in str(event.get("level", "")).lower() else "medium"
-        )
+        event.get("severity")
+        or payload.get("severity")
+        or ("high" if "error" in str(event.get("level", "")).lower() else "medium")
     )
 
     return {
@@ -114,11 +110,7 @@ def compute_slo_metrics(records: list[dict[str, Any]], up_count: int, total_coun
     mttr = statistics.mean(durations) if durations else None
     # Synthetic estimate — real MTTD requires separate detection timestamps from the agent
     mttd = statistics.mean([max(1.0, d * 0.2) for d in durations]) if durations else None
-    p95 = (
-        statistics.quantiles(durations, n=20)[18]
-        if len(durations) >= 20
-        else (max(durations) if durations else None)
-    )
+    p95 = statistics.quantiles(durations, n=20)[18] if len(durations) >= 20 else (max(durations) if durations else None)
 
     return {
         "window_hours": AUDIT_LOOKBACK_HOURS,
@@ -135,7 +127,9 @@ def compute_slo_metrics(records: list[dict[str, Any]], up_count: int, total_coun
     }
 
 
-def build_incident_movie(records: list[dict[str, Any]], slo: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def build_incident_movie(
+    records: list[dict[str, Any]], slo: dict[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Build incident timeline and business impact from audit records."""
     ordered = sorted(
         records,
@@ -175,17 +169,19 @@ def build_incident_movie(records: list[dict[str, Any]], slo: dict[str, Any]) -> 
         else:
             stage = "Escalated"
 
-        movie.append({
-            "timestamp": ts.isoformat() if ts else str(rec.get("timestamp", "")),
-            "incident_id": str(rec.get("incident_id", "n/a")),
-            "title": f"{rec.get('failure_type', 'unknown')} on {rec.get('edge_site_id', 'edge-01')}",
-            "stage": stage,
-            "summary": f"Action: {action} · Result: {'success' if success else 'failed'}",
-            "artifacts": {
-                "aap_job_id": rec.get("aap_job_id") or None,
-                "servicenow_ticket": servicenow_ticket or None,
-            },
-        })
+        movie.append(
+            {
+                "timestamp": ts.isoformat() if ts else str(rec.get("timestamp", "")),
+                "incident_id": str(rec.get("incident_id", "n/a")),
+                "title": f"{rec.get('failure_type', 'unknown')} on {rec.get('edge_site_id', 'edge-01')}",
+                "stage": stage,
+                "summary": f"Action: {action} · Result: {'success' if success else 'failed'}",
+                "artifacts": {
+                    "aap_job_id": rec.get("aap_job_id") or None,
+                    "servicenow_ticket": servicenow_ticket or None,
+                },
+            }
+        )
 
     total = len(records)
     mttr = float(slo.get("mttr_seconds") or 0)

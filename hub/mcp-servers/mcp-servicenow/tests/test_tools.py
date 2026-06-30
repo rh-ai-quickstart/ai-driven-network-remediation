@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, patch
 
 import httpx
-import pytest
 from mcp_servicenow.tools import (
     _is_real_servicenow,
     _snow_client,

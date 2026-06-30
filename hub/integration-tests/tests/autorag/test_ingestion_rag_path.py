@@ -1,7 +1,6 @@
 import os
 
 import pytest
-
 from common_helpers import sync_runbooks
 from helpers import is_sentence_transformers_model
 

@@ -2,8 +2,6 @@
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 
 def test_health(client):
     resp = client.get("/health")

@@ -53,7 +53,7 @@ class ServiceNowIncidentDataAutomation(ServiceNowClient):
             url = f"{self.instance_url}/api/now/table/sys_user_group"
             group_data = {
                 "name": group_name,
-                "description": (f"Auto-created by servicenow-bootstrap for " f"AI-driven network remediation"),
+                "description": ("Auto-created by servicenow-bootstrap for " "AI-driven network remediation"),
                 "active": "true",
             }
 

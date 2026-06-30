@@ -89,10 +89,13 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
         "lightspeed": ("Ansible playbook generation requested for edge recovery", "nginx-edge-lightspeed"),
         "escalation": ("Kernel panic and persistent data corruption - requires human escalation", "edge-core-critical"),
     }
-    message, pod_name = scenarios.get(normalized, (
-        "CrashLoopBackOff: nginx configuration test failed",
-        "nginx-edge-crashloop",
-    ))
+    message, pod_name = scenarios.get(
+        normalized,
+        (
+            "CrashLoopBackOff: nginx configuration test failed",
+            "nginx-edge-crashloop",
+        ),
+    )
     if normalized not in scenarios:
         normalized = "crashloop"
 

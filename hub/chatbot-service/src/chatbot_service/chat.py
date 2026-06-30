@@ -7,7 +7,13 @@ from typing import Any
 
 import httpx
 
-from .config import MODEL_API_URL, MODEL_MAX_TOKENS, MODEL_NAME, MODEL_TIMEOUT_SECONDS, SSL_VERIFY
+from .config import (
+    MODEL_API_URL,
+    MODEL_MAX_TOKENS,
+    MODEL_NAME,
+    MODEL_TIMEOUT_SECONDS,
+    SSL_VERIFY,
+)
 from .utils import get_mcp_items
 
 logger = logging.getLogger(__name__)
@@ -101,7 +107,7 @@ def format_chat_reply(
     total = integrations_data.get("total", 0)
 
     if raw_reply:
-        lines = [l.strip() for l in raw_reply.splitlines() if l.strip()]
+        lines = [line.strip() for line in raw_reply.splitlines() if line.strip()]
         model_insight = lines[0][:220] if lines else "Model inference completed."
     else:
         model_insight = "Live model unavailable; using deterministic operational fallback."
@@ -111,8 +117,7 @@ def format_chat_reply(
         f"- Site: {site} | Open incidents: {incidents}\n"
         f"- Integrations: {up}/{total} up\n"
         f"- Request: {user_message}\n\n"
-        "MCP Status:\n"
-        + "\n".join(mcp_lines) + "\n\n"
+        "MCP Status:\n" + "\n".join(mcp_lines) + "\n\n"
         "Model Output:\n"
         f"- {model_insight}\n\n"
         "Next Action:\n"

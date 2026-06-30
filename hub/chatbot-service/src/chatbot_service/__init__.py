@@ -24,21 +24,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
-
 from .chat import build_chat_context, call_model, format_chat_reply
 from .config import (
     APP_VERSION,
     CORS_ORIGINS,
     DEMO_TOPIC,
-    INTEGRATIONS_CACHE_TTL,
     INTEGRATION_TARGETS,
+    INTEGRATIONS_CACHE_TTL,
     MODEL_NAME,
 )
 from .kafka import build_demo_event, fetch_recent_audits, publish_demo_event
 from .probes import fetch_servicenow_incident_count, probe_http
 from .slo import build_incident_movie, compute_slo_metrics, normalize_incident_record
 from .utils import build_deps, get_mcp_items, normalize_session_id, utc_now
+
+logger = logging.getLogger(__name__)
 
 # ── App State ─────────────────────────────────────────────────────
 MAX_CHAT_SESSIONS = 100
@@ -84,13 +84,15 @@ async def _build_integrations() -> dict[str, Any]:
     for target, probe in zip(INTEGRATION_TARGETS, probes):
         if probe["status"] == "up":
             up_count += 1
-        integrations.append({
-            "id": target["id"],
-            "name": target["name"],
-            "group": target["group"],
-            "status": probe["status"],
-            "http_code": probe["http_code"],
-        })
+        integrations.append(
+            {
+                "id": target["id"],
+                "name": target["name"],
+                "group": target["group"],
+                "status": probe["status"],
+                "http_code": probe["http_code"],
+            }
+        )
 
     audits, kafka_ok = await asyncio.to_thread(fetch_recent_audits)
     slo = compute_slo_metrics(audits, up_count, len(integrations))
@@ -191,14 +193,17 @@ async def trigger_demo(req: DemoTriggerRequest) -> dict:
         offset = await asyncio.to_thread(publish_demo_event, event)
     except Exception as exc:
         logger.exception("Failed to publish demo event for scenario=%s", req.scenario)
-        return JSONResponse(status_code=502, content={
-            "timestamp": utc_now(),
-            "status": "error",
-            "error": str(exc),
-            "incident_id": incident_id,
-            "scenario": req.scenario,
-            "site": req.site,
-        })
+        return JSONResponse(
+            status_code=502,
+            content={
+                "timestamp": utc_now(),
+                "status": "error",
+                "error": str(exc),
+                "incident_id": incident_id,
+                "scenario": req.scenario,
+                "site": req.site,
+            },
+        )
 
     scenario = event["labels"]["dark_noc_scenario"]
     return {

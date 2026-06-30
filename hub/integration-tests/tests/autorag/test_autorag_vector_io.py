@@ -1,7 +1,6 @@
 import uuid
 
 import pytest
-
 from helpers import (
     attach_file_to_vector_store,
     create_vector_store,

@@ -98,9 +98,7 @@ class LlamaStackVectorStoreClient:
         chunk_overlap_tokens: int | None = None,
     ) -> VectorStoreFileSummary:
         chunk_size_tokens = chunk_size_tokens if chunk_size_tokens is not None else self._chunk_size_tokens
-        chunk_overlap_tokens = (
-            chunk_overlap_tokens if chunk_overlap_tokens is not None else self._chunk_overlap_tokens
-        )
+        chunk_overlap_tokens = chunk_overlap_tokens if chunk_overlap_tokens is not None else self._chunk_overlap_tokens
         vector_store = self.ensure_vector_store()
         created_file = self._client.files.create(
             file=(filename, content.encode("utf-8"), "text/markdown"),
