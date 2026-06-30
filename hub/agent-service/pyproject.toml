@@ -29,10 +29,21 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov --cov-report=term-missing"
 
 [dependency-groups]
 dev = [
     "httpx2>=0.1",
     "pytest>=7.4.0",
     "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.0",
 ]
+
+[tool.coverage.run]
+source = ["agent_service"]
+
+[tool.coverage.report]
+fail_under = 65
+show_missing = true
+skip_empty = true
