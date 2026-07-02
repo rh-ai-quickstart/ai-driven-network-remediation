@@ -14,14 +14,8 @@ dependencies:
 - name: minio
   repository: file://charts/minio
   version: 0.5.5
-- name: milvus
-  repository: file://charts/milvus
-  version: 0.1.0
-- name: autorag
-  repository: file://charts/autorag
-  version: 0.1.0
 - name: lokistack
   repository: file://charts/lokistack
   version: 0.1.0
-digest: sha256:96fd132b9e6ba8e2f11894ac457438c7095665320bfaebf3914b9555b90be45f
-generated: "2026-07-02T20:50:30.537824+02:00"
+digest: sha256:8fe8f12a44c6774630ca217fa02d6528e7b02abf70ae4dd530fe834794aeea45
+generated: "2026-07-03T06:16:58.021636+02:00"

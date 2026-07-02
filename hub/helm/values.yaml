@@ -77,48 +77,6 @@ minio:
   port: "9000"
   secretName: minio
 
-# ── Milvus (subchart: charts/milvus) ──────────────────────────────
-# Defaults live in charts/milvus/values.yaml; no overrides needed here.
-# Milvus deploys when autorag.enabled=true (see Chart.yaml condition).
-
-# ── AutoRAG (subchart: charts/autorag) ────────────────────────────
-autorag:
-  enabled: true
-  llamaStack:
-    name: adnr-autorag
-    distributionName: rh-dev
-    distributionImage: ""
-    replicas: 1
-    resources:
-      requests:
-        cpu: 250m
-        memory: 500Mi
-      limits:
-        cpu: "4"
-        memory: 12Gi
-    storage:
-      size: 5Gi
-  inference:
-    model: ""
-    url: ""
-    apiToken: ""
-    tlsVerify: "false"
-    maxTokens: "4096"
-  embedding:
-    provider: sentence-transformers
-    model: BAAI/bge-m3
-  postgres:
-    host: pgvector
-    port: "5432"
-    db: postgres
-    user: postgres
-    passwordSecret:
-      name: pgvector
-      key: password
-  milvus:
-    secret:
-      name: milvus-secret
-
 # ── LokiStack (subchart: charts/lokistack) ────────────────────────
 lokistack:
   enabled: false
@@ -283,7 +241,7 @@ edgeRbac:
 ingestionPipeline:
   replicaCount: 1
   vectorStoreName: noc_runbooks
-  llamastackHost: adnr-autorag-service
+  llamastackHost: llamastack-service
   embeddingModel: sentence-transformers/nomic-ai/nomic-embed-text-v1.5
   chunkSizeTokens: 800
   chunkOverlapTokens: 80

@@ -27,13 +27,13 @@ spec:
                 echo "Waiting for MinIO..."
                 sleep 3
               done
-        - name: wait-for-autorag
+        - name: wait-for-llamastack
           image: "curlimages/curl:8.13.0"
           command: ["sh", "-c"]
           args:
             - |
               until curl -sf http://{{ .Values.ingestionPipeline.llamastackHost }}:{{ index .Values "llama-stack" "port" }}/v1/models; do
-                echo "Waiting for AutoRAG LlamaStack..."
+                echo "Waiting for LlamaStack..."
                 sleep 5
               done
       containers:

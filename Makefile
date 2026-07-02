@@ -89,11 +89,6 @@ helm_adnr_llm_args = \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.url='$(ADNR_LLM_URL)',) \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',)
 
-helm_autorag_args = \
-	$(if $(ADNR_LLM_ENABLED),--set-string autorag.inference.model='$(ADNR_LLM_ID)',) \
-	$(if $(ADNR_LLM_ENABLED),--set-string autorag.inference.url='$(ADNR_LLM_URL)',) \
-	$(if $(ADNR_LLM_ENABLED),--set-string autorag.inference.apiToken='$(ADNR_LLM_TOKEN)',)
-
 helm_mcp_image_args = \
 	--set mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
 	--set mcp-servers.mcp-servers.noc-openshift.image.tag=$(VERSION) \
@@ -151,7 +146,6 @@ helm_all_args = \
 	$(helm_mcp_image_args) \
 	$(helm_mock_args) \
 	$(helm_adnr_llm_args) \
-	$(helm_autorag_args) \
 	$(HELM_EXTRA_ARGS)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -395,8 +389,6 @@ ifeq ($(ENABLE_HUB),true)
 	PF3_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
 	PF10_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/adnr-autorag-service 8322:8321 & \
-	PF11_PID=$$!; \
 	PF4_PID=""; \
 	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
 		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
@@ -412,9 +404,9 @@ ifeq ($(ENABLE_HUB),true)
 	PF8_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
 	PF9_PID=$$!; \
-	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID $$PF10_PID $$PF11_PID" EXIT; \
+	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID $$PF10_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 AUTORAG_URL=http://localhost:8322 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
+	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 AUTORAG_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
 endif

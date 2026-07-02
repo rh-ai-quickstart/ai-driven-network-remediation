@@ -26,14 +26,6 @@ dependencies:
     version: 0.5.5
     repository: "file://charts/minio"
     condition: minio.enabled
-  - name: milvus
-    version: 0.1.0
-    repository: "file://charts/milvus"
-    condition: autorag.enabled
-  - name: autorag
-    version: 0.1.0
-    repository: "file://charts/autorag"
-    condition: autorag.enabled
   - name: lokistack
     version: 0.1.0
     repository: "file://charts/lokistack"
