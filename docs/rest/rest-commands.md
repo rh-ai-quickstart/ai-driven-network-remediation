@@ -46,7 +46,7 @@ http POST http://localhost:8004/mcp \
 ## LlamaStack (OGX)
 
 ```bash
-oc port-forward -n $NAMESPACE svc/llamastack 8321:8321
+oc port-forward -n $NAMESPACE svc/llamastack-service 8321:8321
 ```
 
 ```bash

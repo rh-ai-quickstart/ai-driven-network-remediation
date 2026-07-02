@@ -26,7 +26,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            llamastack_host=os.environ.get("LLAMASTACK_HOST", "llamastack"),
+            llamastack_host=os.environ.get("LLAMASTACK_HOST", "llamastack-service"),
             llamastack_port=int(os.environ.get("LLAMASTACK_PORT", "8321")),
             vector_store_name=os.environ.get("VECTOR_STORE_NAME", ""),
             embedding_model=os.environ.get("EMBEDDING_MODEL", "BAAI/bge-m3"),

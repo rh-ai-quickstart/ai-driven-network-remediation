@@ -393,7 +393,7 @@ ifeq ($(ENABLE_HUB),true)
 	PF2_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-openshift 8001:8000 & \
 	PF3_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack 8321:8321 & \
+	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
 	PF10_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/adnr-autorag-service 8322:8321 & \
 	PF11_PID=$$!; \

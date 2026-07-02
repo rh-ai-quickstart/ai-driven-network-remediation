@@ -207,7 +207,7 @@ hub/chatbot-service/src/chatbot_service/
 | `KAFKA_BOOTSTRAP` | `kafka:9092` | Kafka broker address |
 | `DEMO_TOPIC` | `system-alerts` | Topic for demo trigger events |
 | `AUDIT_TOPIC` | `incident-audit` | Topic for agent audit records |
-| `MODEL_API_URL` | `http://llamastack:8321/v1/completions` | LLM endpoint |
+| `MODEL_API_URL` | `http://llamastack-service:8321/v1/completions` | LLM endpoint |
 | `SERVICENOW_URL` | `http://servicenow-mock:8080` | ServiceNow instance URL |
 | `SERVICENOW_MODE` | `mock` | `mock` or `real` |
 | `BASELINE_MANUAL_MTTR_SECONDS` | `900` | Manual MTTR baseline for cost savings calc |

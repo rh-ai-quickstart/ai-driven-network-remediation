@@ -25,9 +25,12 @@ pgvector:
     port: "5432"
 
 llama-stack:
-  host: llamastack
+  host: llamastack-service
   port: "8321"
   replicaCount: 1
+  managedByOperator: true
+  network:
+    exposeRoute: false
   initContainers:
     enabled: true
   resources: {}
@@ -317,7 +320,7 @@ chatbotService:
     mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
     servicenowUrl: "http://servicenow-mock:8080"
     kafkaBootstrap: "kafka:9092"
-    modelApiUrl: "http://llamastack:8321/v1/completions"
+    modelApiUrl: "http://llamastack-service:8321/v1/completions"
     modelName: "granite-4-h-tiny"
     demoTopic: "system-alerts"
     auditTopic: "incident-audit"

@@ -9,7 +9,7 @@ Endpoints:
     GET /vector-store/files/{file_id}/content  - Fetch ingested file content
 
 Environment Variables:
-    LLAMASTACK_HOST: Llama Stack hostname (default: llamastack)
+    LLAMASTACK_HOST: Llama Stack hostname (default: llamastack-service)
     LLAMASTACK_PORT: Llama Stack port (default: 8321)
 """
 
