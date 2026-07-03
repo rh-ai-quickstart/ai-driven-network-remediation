@@ -100,6 +100,35 @@ jobs:
           oc logs -l app.kubernetes.io/name=noc-kafka -n hub --tail=50 2>/dev/null || echo "No logs"
         shell: bash
 
+      - name: Collect LlamaStack diagnostics
+        if: failure()
+        run: |
+          echo "=== All pod statuses ==="
+          oc get pods -n hub -o wide
+          echo ""
+          echo "=== Non-running pods describe ==="
+          for pod in $(oc get pods -n hub --no-headers | grep -v "Running\|Completed" | awk '{print $1}'); do
+            echo "--- Describe: $pod ---"
+            oc describe pod "$pod" -n hub | tail -30
+          done
+          echo ""
+          echo "=== Init container logs ==="
+          for pod in $(oc get pods -n hub --no-headers | grep "Init" | awk '{print $1}'); do
+            echo "--- Init logs: $pod ---"
+            oc logs "$pod" -n hub --all-containers --ignore-errors --tail=20 2>&1 || true
+          done
+          echo ""
+          echo "=== LlamaStackDistribution status ==="
+          oc get llamastackdistribution -n hub -o yaml 2>/dev/null || echo "No CRD found"
+          echo ""
+          echo "=== Operator logs (last 30 lines) ==="
+          oc logs deployment/llama-stack-k8s-operator-controller-manager \
+            -n llama-stack-k8s-operator-system --tail=30 2>/dev/null || echo "No operator logs"
+          echo ""
+          echo "=== Namespace events (last 20) ==="
+          oc get events -n hub --sort-by='.lastTimestamp' | tail -20
+        shell: bash
+
       - name: Inspect Cluster - Hub
         if: always()
         uses: ./.github/actions/inspect-ns
