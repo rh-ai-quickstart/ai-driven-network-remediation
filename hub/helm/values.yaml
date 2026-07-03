@@ -31,6 +31,21 @@ llama-stack:
   managedByOperator: true
   network:
     exposeRoute: false
+  volumes:
+    - configMap:
+        defaultMode: 420
+        name: run-config
+      name: run-config-volume
+    - name: dot-llama
+      persistentVolumeClaim:
+        claimName: llama-stack-data
+    - emptyDir: {}
+      name: cache
+  volumeMounts:
+    - mountPath: /app-config
+      name: run-config-volume
+    - mountPath: /.cache
+      name: cache
   initContainers:
     enabled: true
   resources: {}

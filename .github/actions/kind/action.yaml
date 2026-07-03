@@ -64,6 +64,12 @@ runs:
       run: make build-push-servicenow-mock REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
       shell: bash
 
+    - name: Pre-load LlamaStack image into Kind
+      run: |
+        docker pull ogxai/distribution-starter:0.6.1
+        kind load docker-image ogxai/distribution-starter:0.6.1
+      shell: bash
+
     - name: Helm Install
       run: |
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
