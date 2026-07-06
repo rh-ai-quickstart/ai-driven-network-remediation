@@ -1,5 +1,5 @@
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -37,8 +37,16 @@ def _rag_stub(state: dict) -> dict:
     return {"context_snippets": ["stub snippet"], "rag_query_used": query}
 
 
-def _mock_invoke_tool(launch=None, status=None, output=None):
+def _mock_invoke_tool(launch=None, status=None, output=None, upsert=None):
     async def _invoke(tool_name, kwargs):
+        if tool_name == "upsert_job_template":
+            return upsert or {
+                "success": True,
+                "template_id": 99,
+                "created": True,
+                "template_name": kwargs.get("template_name", ""),
+                "playbook": kwargs.get("playbook", ""),
+            }
         if tool_name == "launch_job":
             return launch or {
                 "success": True,
@@ -98,6 +106,22 @@ _STUB_RCA = RootCauseAnalysis(
     runbook_reference="runbook-001",
 )
 
+_OLS_STUB_RESPONSE = {
+    "conversation_id": "stub-conv-id",
+    "response": "- hosts: all\n  tasks: []",
+}
+
+
+_ols_mock = AsyncMock(return_value=_OLS_STUB_RESPONSE)
+
+_OLS_STUB_RESPONSE = {
+    "conversation_id": "stub-conv-id",
+    "response": "- hosts: all\n  tasks: []",
+}
+
+
+_ols_mock = AsyncMock(return_value=_OLS_STUB_RESPONSE)
+
 
 async def _mock_escalate_invoke(tool_name, kwargs):
     if tool_name == "create_incident":
@@ -107,11 +131,15 @@ async def _mock_escalate_invoke(tool_name, kwargs):
 
 @pytest.fixture
 def _patch_graph_nodes():
+    _ols_mock.reset_mock()
     with (
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
         patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke),
+        patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
+        patch("agent_service.nodes.lightspeed._call_ols", _ols_mock),
+        patch("agent_service.nodes.lightspeed._invoke_tool", _mock_invoke_tool()),
     ):
         yield
 
@@ -131,7 +159,7 @@ class TestGraphCompilation:
     def test_expected_nodes_present(self):
         for name in ("remediate", "lightspeed", "audit"):
             assert name in self.nodes
-        assert "execute" not in self.nodes
+        assert "lightspeed_execute" not in self.nodes
         assert "request_approval" not in self.nodes
 
     def test_audit_is_terminal_node_before_end(self):
@@ -224,6 +252,7 @@ class TestConditionalRouting:
         assert isinstance(result["remediation_result"], RemediationResult)
         assert result["remediation_result"].generated_template_name is not None
         assert result["remediation_result"].generated_playbook_name is not None
+        assert result["remediation_result"].job_id != ""
 
     async def test_low_confidence_routes_through_escalate(self, graph):
         result = await graph.ainvoke(
@@ -267,6 +296,7 @@ class TestConditionalRouting:
 
         assert result["decision"] == "lightspeed"
         assert result["remediation_result"].generated_template_name is not None
+        assert result["remediation_result"].job_id != ""
 
 
 @pytest.mark.usefixtures("_patch_graph_nodes")

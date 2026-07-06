@@ -1,6 +1,6 @@
 import json
 
-from agent_service.models import IncidentState, LogEvent
+from agent_service.models import IncidentState, LogEvent, RootCauseAnalysis
 
 CANONICAL_RAW_EVENT = json.dumps(
     {
@@ -33,6 +33,20 @@ def make_log_event(**overrides):
     )
     defaults.update(overrides)
     return LogEvent(**defaults)
+
+
+def make_rca(**overrides):
+    defaults = dict(
+        failure_type="OOMKilled",
+        confidence=0.92,
+        summary="Container killed by OOM",
+        evidence=["memory spike at 14:32"],
+        recommended_actions=["increase memory limit"],
+        estimated_severity="high",
+        runbook_reference="runbook-oom-001",
+    )
+    defaults.update(overrides)
+    return RootCauseAnalysis(**defaults)
 
 
 def make_state(**overrides):

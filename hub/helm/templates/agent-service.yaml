@@ -40,6 +40,25 @@ spec:
               value: {{ .Values.agentService.env.kafkaAuditTopic | quote }}
             - name: KAFKA_CONSUMER_ENABLED
               value: {{ .Values.agentService.env.kafkaConsumerEnabled | quote }}
+            - name: LIGHTSPEED_URL
+              value: {{ .Values.agentService.lightspeed.url | quote }}
+            {{- if and .Values.agentService.lightspeed.url (not .Values.agentService.lightspeed.token) }}
+            - name: LIGHTSPEED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: noc-lightspeed-token
+                  key: token
+            {{- else if .Values.agentService.lightspeed.token }}
+            - name: LIGHTSPEED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: noc-lightspeed-secret
+                  key: LIGHTSPEED_TOKEN
+            {{- end }}
+            - name: LIGHTSPEED_WRAPPER_PLAYBOOK
+              value: {{ .Values.agentService.lightspeed.wrapperPlaybook | quote }}
+            - name: AAP_LIGHTSPEED_TEMPLATE
+              value: {{ .Values.agentService.lightspeed.baseTemplateName | quote }}
           ports:
             - name: http
               containerPort: 8001

@@ -1,16 +1,15 @@
 import asyncio
 import time
-from datetime import datetime, timezone
 
 from loguru import logger
 
-from agent_service.config import POLL_INTERVAL_SECONDS, TERMINAL_STATUSES
+from agent_service.config import (
+    POLL_INTERVAL_SECONDS,
+    TERMINAL_STATUSES,
+    now_iso,
+)
 from agent_service.models import GraphConfig, RemediationResult
 from agent_service.utils import invoke_tool as _invoke_tool
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 async def _launch_job(template: str, log_event) -> dict:
@@ -44,7 +43,7 @@ async def _handle_completion(template: str, job_id: int, state, config):
 
     output_text = await _get_output(job_id)
     elapsed = status.get("elapsed", 0)
-    finished = status.get("finished") or _now_iso()
+    finished = status.get("finished") or now_iso()
 
     if status.get("failed"):
         traceback = status.get("result_traceback", "")
@@ -93,7 +92,7 @@ def make_remediate_node(config: GraphConfig):
                     job_id="",
                     duration_seconds=0,
                     output_summary="No recommended actions in RCA",
-                    timestamp=_now_iso(),
+                    timestamp=now_iso(),
                 ),
             }
 
@@ -171,6 +170,6 @@ def _failure(
             job_id=str(job_id or ""),
             duration_seconds=float(elapsed),
             output_summary=error[:1000],
-            timestamp=timestamp or _now_iso(),
+            timestamp=timestamp or now_iso(),
         ),
     }

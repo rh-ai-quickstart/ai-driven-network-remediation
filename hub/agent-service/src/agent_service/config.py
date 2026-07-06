@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 import httpx
 
@@ -34,7 +35,37 @@ KAFKA_CONSUMER_ENABLED = _env_bool("KAFKA_CONSUMER_ENABLED", True)
 LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
 LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
 
+# Lightspeed (Ansible Lightspeed playbook generation)
+LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")
+LIGHTSPEED_TOKEN = os.getenv("LIGHTSPEED_TOKEN", "")
+
+# Configurable via env var to allow prompt experimentation without redeploying
+LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
+    "LIGHTSPEED_PROMPT_TEMPLATE",
+    "The following issue was detected in an OpenShift cluster. "
+    "Analyze the problem based on the description and findings below, "
+    "then generate an Ansible playbook that REMEDIATES (fixes) the issue. "
+    "Do NOT generate an investigation or diagnostic playbook.\n\n"
+    "Failure type: {failure_type}\n"
+    "Severity: {severity}\n"
+    "Namespace: {namespace}\n"
+    "Pod: {pod_name}\n"
+    "Summary: {summary}\n\n"
+    "Problem description and findings:\n{evidence}\n\n"
+    "Recommended actions: {recommended_actions}\n\n"
+    "Return ONLY a valid Ansible YAML playbook, no explanation.",
+)
+
+LIGHTSPEED_WRAPPER_PLAYBOOK = os.getenv(
+    "LIGHTSPEED_WRAPPER_PLAYBOOK",
+    "playbooks/lightspeed-generate-and-run.yaml",
+)
+AAP_LIGHTSPEED_TEMPLATE = os.getenv(
+    "AAP_LIGHTSPEED_TEMPLATE", "lightspeed-runner",
+)
+
 HTTP_TIMEOUT_SECONDS = 30
+LIGHTSPEED_TIMEOUT_SECONDS = 60
 
 _http_client: httpx.AsyncClient | None = None
 
@@ -52,3 +83,7 @@ def get_http_client() -> httpx.AsyncClient:
 # AAP job polling
 TERMINAL_STATUSES = frozenset({"successful", "failed", "error", "canceled"})
 POLL_INTERVAL_SECONDS = 5
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

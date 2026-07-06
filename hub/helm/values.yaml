@@ -335,6 +335,11 @@ agentService:
   replicaCount: 1
   granite:
     modelName: "granite-4.0-8b"
+  lightspeed:
+    url: ""
+    token: ""
+    wrapperPlaybook: "playbooks/lightspeed-generate-and-run.yaml"
+    baseTemplateName: "lightspeed-runner"
   env:
     kafkaBootstrap: "kafka:9092"
     kafkaGroupId: "dark-noc-agent"

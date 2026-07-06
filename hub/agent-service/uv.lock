@@ -23,6 +23,7 @@ dependencies = [
     { name = "llama-stack-client" },
     { name = "loguru" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 
@@ -44,6 +45,7 @@ requires-dist = [
     { name = "llama-stack-client", specifier = ">=0.7.4" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
 

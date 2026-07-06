@@ -36,12 +36,14 @@ _MAX_CONTEXT_CHARS = 5000
 async def analyze_node(state: dict) -> dict:
     logger.info("Analyze node invoked")
 
+    # For testing
     if state.confidence_override is not None and state.failure_type_override is not None:
+        log_event = state.log_event
         rca = RootCauseAnalysis(
             failure_type=state.failure_type_override,
             confidence=state.confidence_override,
-            summary="synthetic override",
-            evidence=["override"],
+            summary=log_event.message if log_event else "synthetic override",
+            evidence=[log_event.raw] if log_event else ["override"],
             recommended_actions=["manual review"],
             estimated_severity="medium",
             runbook_reference="n/a",
