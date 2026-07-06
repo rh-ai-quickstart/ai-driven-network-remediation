@@ -1,10 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from agent_service.models import RootCauseAnalysis
 from helpers import make_state
 
+from agent_service.models import RootCauseAnalysis
 
 _VALID_RCA_JSON = (
     '{"failure_type": "OOMKilled", "confidence": 0.92, '
@@ -71,9 +70,7 @@ class TestTokenAndLatencyTracking:
     @pytest.mark.asyncio
     async def test_sets_token_count_and_latency(self):
         mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(
-            return_value=_make_llm_response(input_tokens=200, output_tokens=80)
-        )
+        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response(input_tokens=200, output_tokens=80))
 
         with patch("agent_service.nodes.analyze._llm", mock_llm):
             from agent_service.nodes.analyze import analyze_node

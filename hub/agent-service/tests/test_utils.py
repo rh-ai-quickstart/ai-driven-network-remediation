@@ -9,7 +9,8 @@ from agent_service.utils import invoke_tool
 
 def _response(data, status=200):
     return httpx.Response(
-        status, json=data,
+        status,
+        json=data,
         request=httpx.Request("POST", "http://test/v1/tool-runtime/invoke"),
     )
 
@@ -22,25 +23,19 @@ def _mock_client():
 
 
 async def test_success_json_string(_mock_client):
-    _mock_client.post.return_value = _response(
-        {"content": json.dumps({"success": True, "job_id": 1})}
-    )
+    _mock_client.post.return_value = _response({"content": json.dumps({"success": True, "job_id": 1})})
     result = await invoke_tool("launch_job", {"template": "x"})
     assert result == {"success": True, "job_id": 1}
 
 
 async def test_success_content_block(_mock_client):
-    _mock_client.post.return_value = _response(
-        {"content": [{"type": "text", "text": '{"ok": true}'}]}
-    )
+    _mock_client.post.return_value = _response({"content": [{"type": "text", "text": '{"ok": true}'}]})
     result = await invoke_tool("get_job_output", {})
     assert result == {"ok": True}
 
 
 async def test_error_message(_mock_client):
-    _mock_client.post.return_value = _response(
-        {"error_message": "boom"}
-    )
+    _mock_client.post.return_value = _response({"error_message": "boom"})
     result = await invoke_tool("launch_job", {})
     assert result == {"success": False, "error": "boom"}
 

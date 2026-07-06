@@ -48,6 +48,7 @@ def get_http_client() -> httpx.AsyncClient:
         )
     return _http_client
 
+
 # AAP job polling
 TERMINAL_STATUSES = frozenset({"successful", "failed", "error", "canceled"})
 POLL_INTERVAL_SECONDS = 5

@@ -1,7 +1,7 @@
 import json
-import pytest
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from agent_service import main
@@ -79,6 +79,7 @@ _STUB_LOG_EVENT = LogEvent(
     raw="raw log",
 )
 
+
 async def _slow_invoke(tool_name, kwargs):
     if tool_name == "launch_job":
         return {"success": True, "job_id": 99}
@@ -100,9 +101,11 @@ _STUB_RCA = RootCauseAnalysis(
 
 @pytest.fixture
 def _patch_graph_nodes():
-    with patch("agent_service.graph.rag_retrieval_node", _rag_stub), \
-         patch("agent_service.graph.analyze_node", _analyze_stub), \
-         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()):
+    with (
+        patch("agent_service.graph.rag_retrieval_node", _rag_stub),
+        patch("agent_service.graph.analyze_node", _analyze_stub),
+        patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
+    ):
         yield
 
 
@@ -141,17 +144,19 @@ class TestGraphCompilation:
 
 class TestNormalizeNode:
     async def test_normalize_extracts_canonical_json_fields(self, _patch_graph_nodes):
-        canonical = json.dumps({
-            "@timestamp": "2024-01-15T10:30:00Z",
-            "message": "nginx CrashLoopBackOff in namespace prod",
-            "level": "error",
-            "kubernetes": {
-                "namespace_name": "prod",
-                "pod_name": "nginx-abc123",
-                "container_name": "nginx",
-            },
-            "labels": {"edge_site_id": "edge-site-01"},
-        })
+        canonical = json.dumps(
+            {
+                "@timestamp": "2024-01-15T10:30:00Z",
+                "message": "nginx CrashLoopBackOff in namespace prod",
+                "level": "error",
+                "kubernetes": {
+                    "namespace_name": "prod",
+                    "pod_name": "nginx-abc123",
+                    "container_name": "nginx",
+                },
+                "labels": {"edge_site_id": "edge-site-01"},
+            }
+        )
         graph = build_graph()
         result = await graph.ainvoke({"raw_event": canonical})
         log_event = result["log_event"]
@@ -201,10 +206,12 @@ class TestConditionalRouting:
         assert result["remediation_result"].generated_template_name is None
 
     async def test_high_confidence_generation_type_routes_through_lightspeed(self, graph):
-        result = await graph.ainvoke({
-            "raw_event": "test event",
-            "failure_type_override": "KafkaLag",
-        })
+        result = await graph.ainvoke(
+            {
+                "raw_event": "test event",
+                "failure_type_override": "KafkaLag",
+            }
+        )
 
         assert result["decision"] == "lightspeed"
         assert isinstance(result["remediation_result"], RemediationResult)
@@ -212,19 +219,23 @@ class TestConditionalRouting:
         assert result["remediation_result"].generated_playbook_name is not None
 
     async def test_low_confidence_routes_through_escalate(self, graph):
-        result = await graph.ainvoke({
-            "raw_event": "test event",
-            "confidence_override": 0.5,
-        })
+        result = await graph.ainvoke(
+            {
+                "raw_event": "test event",
+                "confidence_override": 0.5,
+            }
+        )
 
         assert result["decision"] == "escalate"
 
     async def test_low_confidence_escalates_regardless_of_failure_type(self, graph):
-        result = await graph.ainvoke({
-            "raw_event": "test event",
-            "confidence_override": 0.5,
-            "failure_type_override": "KafkaLag",
-        })
+        result = await graph.ainvoke(
+            {
+                "raw_event": "test event",
+                "confidence_override": 0.5,
+                "failure_type_override": "KafkaLag",
+            }
+        )
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
@@ -239,11 +250,13 @@ class TestConditionalRouting:
     async def test_custom_thresholds_route_to_lightspeed(self, _patch_graph_nodes):
         config = GraphConfig(remediate_threshold=0.7, escalate_threshold=0.5)
         graph = build_graph(config)
-        result = await graph.ainvoke({
-            "raw_event": "test event",
-            "confidence_override": 0.75,
-            "failure_type_override": "DNSFailure",
-        })
+        result = await graph.ainvoke(
+            {
+                "raw_event": "test event",
+                "confidence_override": 0.75,
+                "failure_type_override": "DNSFailure",
+            }
+        )
 
         assert result["decision"] == "lightspeed"
         assert result["remediation_result"].generated_template_name is not None
@@ -338,9 +351,7 @@ class TestRemediateNode:
             log_event=_STUB_LOG_EVENT,
             root_cause_analysis=_STUB_RCA,
         )
-        mock = _mock_invoke_tool(
-            launch={"success": False, "error": "template not found"}
-        )
+        mock = _mock_invoke_tool(launch={"success": False, "error": "template not found"})
         with patch("agent_service.nodes.remediate._invoke_tool", mock):
             result = await node(state)
 
@@ -383,9 +394,10 @@ class TestRemediateNode:
             log_event=_STUB_LOG_EVENT,
             root_cause_analysis=_STUB_RCA,
         )
-        with patch(
-            "agent_service.nodes.remediate._invoke_tool", _slow_invoke
-        ), patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01):
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
+            patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01),
+        ):
             result = await node(state)
 
         assert result["remediation_result"].success is False
@@ -405,9 +417,10 @@ class TestRemediateNode:
             ],
             should_retry=True,
         )
-        with patch(
-            "agent_service.nodes.remediate._invoke_tool", _slow_invoke
-        ), patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01):
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
+            patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01),
+        ):
             result = await node(state)
 
         assert result["remediation_result"].success is False
@@ -424,9 +437,7 @@ class TestRemediateNode:
             root_cause_analysis=_STUB_RCA,
             failed_attempts=[{"action": "remediate", "template": "x", "error": "prev"}],
         )
-        mock = _mock_invoke_tool(
-            launch={"success": False, "error": "still broken"}
-        )
+        mock = _mock_invoke_tool(launch={"success": False, "error": "still broken"})
         with patch("agent_service.nodes.remediate._invoke_tool", mock):
             result = await node(state)
 

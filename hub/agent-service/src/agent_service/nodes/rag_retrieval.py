@@ -7,9 +7,7 @@ _LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
 _LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
 _VECTOR_STORE_NAME = os.environ.get("VECTOR_STORE_NAME", "noc_runbooks")
 
-_client = AsyncLlamaStackClient(
-    base_url=f"http://{_LLAMASTACK_HOST}:{_LLAMASTACK_PORT}"
-)
+_client = AsyncLlamaStackClient(base_url=f"http://{_LLAMASTACK_HOST}:{_LLAMASTACK_PORT}")
 _vector_store_id: str | None = None
 
 
@@ -43,11 +41,7 @@ async def rag_retrieval_node(state: dict) -> dict:
             max_num_results=5,
             ranking_options={"score_threshold": 0.3},
         )
-        snippets = [
-            content.text
-            for item in response.data
-            for content in item.content
-        ]
+        snippets = [content.text for item in response.data for content in item.content]
         return {"context_snippets": snippets, "rag_query_used": query}
     except Exception:
         logger.exception("LlamaStack search failed")

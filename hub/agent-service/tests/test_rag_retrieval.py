@@ -1,8 +1,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from helpers import make_log_event, make_state
+from helpers import make_state
 
 
 class TestRagQueryConstruction:
@@ -10,12 +9,12 @@ class TestRagQueryConstruction:
     async def test_query_built_from_log_event_fields(self):
         mock_client = MagicMock()
         mock_client.vector_stores.list = AsyncMock(return_value=MagicMock(data=[]))
-        mock_client.vector_stores.search = AsyncMock(
-            return_value=MagicMock(data=[])
-        )
+        mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             state = make_state()
@@ -38,8 +37,10 @@ class TestRagSuccessfulSearch:
         mock_client = MagicMock()
         mock_client.vector_stores.search = AsyncMock(return_value=mock_response)
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             result = await rag_retrieval_node(make_state())
@@ -55,12 +56,12 @@ class TestRagEmptyResults:
     @pytest.mark.asyncio
     async def test_empty_search_returns_empty_snippets(self):
         mock_client = MagicMock()
-        mock_client.vector_stores.search = AsyncMock(
-            return_value=MagicMock(data=[])
-        )
+        mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             result = await rag_retrieval_node(make_state())
@@ -76,15 +77,13 @@ class TestRagVectorStoreLookup:
         mock_vs.id = "vs-found"
         mock_vs.name = "noc_runbooks"
         mock_client = MagicMock()
-        mock_client.vector_stores.list = AsyncMock(
-            return_value=MagicMock(data=[mock_vs])
-        )
-        mock_client.vector_stores.search = AsyncMock(
-            return_value=MagicMock(data=[])
-        )
+        mock_client.vector_stores.list = AsyncMock(return_value=MagicMock(data=[mock_vs]))
+        mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", None):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", None),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             await rag_retrieval_node(make_state())
@@ -95,12 +94,12 @@ class TestRagVectorStoreLookup:
     @pytest.mark.asyncio
     async def test_vector_store_not_found_returns_empty(self):
         mock_client = MagicMock()
-        mock_client.vector_stores.list = AsyncMock(
-            return_value=MagicMock(data=[])
-        )
+        mock_client.vector_stores.list = AsyncMock(return_value=MagicMock(data=[]))
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", None):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", None),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             result = await rag_retrieval_node(make_state())
@@ -113,12 +112,12 @@ class TestRagErrorHandling:
     @pytest.mark.asyncio
     async def test_client_error_returns_empty_context_no_raise(self):
         mock_client = MagicMock()
-        mock_client.vector_stores.search = AsyncMock(
-            side_effect=ConnectionError("LlamaStack unreachable")
-        )
+        mock_client.vector_stores.search = AsyncMock(side_effect=ConnectionError("LlamaStack unreachable"))
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", "vs-123"),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             result = await rag_retrieval_node(make_state())
@@ -129,12 +128,12 @@ class TestRagErrorHandling:
     @pytest.mark.asyncio
     async def test_vector_store_lookup_error_returns_empty_context(self):
         mock_client = MagicMock()
-        mock_client.vector_stores.list = AsyncMock(
-            side_effect=ConnectionError("LlamaStack unreachable")
-        )
+        mock_client.vector_stores.list = AsyncMock(side_effect=ConnectionError("LlamaStack unreachable"))
 
-        with patch("agent_service.nodes.rag_retrieval._client", mock_client), \
-             patch("agent_service.nodes.rag_retrieval._vector_store_id", None):
+        with (
+            patch("agent_service.nodes.rag_retrieval._client", mock_client),
+            patch("agent_service.nodes.rag_retrieval._vector_store_id", None),
+        ):
             from agent_service.nodes.rag_retrieval import rag_retrieval_node
 
             result = await rag_retrieval_node(make_state())

@@ -33,8 +33,13 @@ async def _handle_completion(template: str, job_id: int, state, config):
 
     if status is None or status.get("status") not in TERMINAL_STATUSES:
         return _failure(
-            state, config, template, f"Job {job_id} timed out",
-            job_id, elapsed=config.job_timeout, timed_out=True,
+            state,
+            config,
+            template,
+            f"Job {job_id} timed out",
+            job_id,
+            elapsed=config.job_timeout,
+            timed_out=True,
         )
 
     output_text = await _get_output(job_id)
@@ -45,8 +50,13 @@ async def _handle_completion(template: str, job_id: int, state, config):
         traceback = status.get("result_traceback", "")
         summary = traceback or output_text
         return _failure(
-            state, config, template, summary[:500], job_id,
-            elapsed=elapsed, timestamp=finished,
+            state,
+            config,
+            template,
+            summary[:500],
+            job_id,
+            elapsed=elapsed,
+            timestamp=finished,
         )
 
     return {
@@ -65,14 +75,13 @@ async def _handle_completion(template: str, job_id: int, state, config):
 
 def make_remediate_node(config: GraphConfig):
     """Factory: returns an async node that runs an AAP remediation job."""
+
     async def remediate_node(state) -> dict:
         logger.info("Remediate node invoked")
         rca = state.root_cause_analysis
 
         # RCA recommended_actions[0] maps to an AAP job template name
-        template = (
-            rca.recommended_actions[0] if rca.recommended_actions else None
-        )
+        template = rca.recommended_actions[0] if rca.recommended_actions else None
         if not template:
             logger.warning("No recommended actions in RCA")
             return {
@@ -100,7 +109,10 @@ def make_remediate_node(config: GraphConfig):
             return _failure(state, config, template, error)
 
         return await _handle_completion(
-            template, launch["job_id"], state, config,
+            template,
+            launch["job_id"],
+            state,
+            config,
         )
 
     return remediate_node
@@ -111,9 +123,7 @@ async def _poll_job(job_id: int, timeout: float) -> dict | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            status = await _invoke_tool(
-                "get_job_status", {"job_id": job_id}
-            )
+            status = await _invoke_tool("get_job_status", {"job_id": job_id})
         except Exception:
             logger.exception("Failed to poll job status")
             return None
@@ -128,9 +138,7 @@ async def _poll_job(job_id: int, timeout: float) -> dict | None:
 
 async def _get_output(job_id: int) -> str:
     try:
-        result = await _invoke_tool(
-            "get_job_output", {"job_id": job_id}
-        )
+        result = await _invoke_tool("get_job_output", {"job_id": job_id})
         return result.get("output", "")
     except Exception:
         logger.exception("Failed to get job output")
@@ -138,8 +146,15 @@ async def _get_output(job_id: int) -> str:
 
 
 def _failure(
-    state, config: GraphConfig, template: str, error: str,
-    job_id=None, *, elapsed=0, timestamp=None, timed_out=False,
+    state,
+    config: GraphConfig,
+    template: str,
+    error: str,
+    job_id=None,
+    *,
+    elapsed=0,
+    timestamp=None,
+    timed_out=False,
 ) -> dict:
     entry = {"action": "remediate", "template": template, "error": error[:500]}
     if job_id is not None:
