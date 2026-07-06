@@ -175,10 +175,10 @@ ifeq ($(ENABLE_LIGHTSPEED),true)
 endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
-	@helm upgrade --install $(RELEASE) hub/helm \
+	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		$(helm_all_args) \
-		--wait --timeout 30m
+		--wait --timeout 10m
 else
 	@echo "ENABLE_HUB is not true — skipping hub chart deployment"
 endif
