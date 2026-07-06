@@ -32,6 +32,7 @@ ENABLE_LOKISTACK       ?= false
 ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
+ENABLE_LIGHTSPEED      ?= false
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -49,15 +50,7 @@ LOKISTACK_NAME         ?= logging-loki
 LOKISTACK_NAMESPACE    ?= $(NAMESPACE)
 MINIO_PORT             ?= 9000
 
-# ── AutoRAG ──────────────────────────────────────────────────────
-MILVUS_RELEASE         := milvus
-MILVUS_CHART           := hub/infra/milvus
-AUTORAG_RELEASE        := autorag
-AUTORAG_CHART          := hub/infra/autorag
-AUTORAG_HELM_EXTRA_ARGS ?=
-
-# ── AAP Mock (optional: ENABLE_AAP_MOCK=true) ──────────────────
-ENABLE_AAP_MOCK        ?= true
+# ── AAP / ServiceNow Mock images ──────────────────────────────────
 AAP_MOCK_IMG           := $(REGISTRY)/noc-aap-mock:$(VERSION)
 SERVICENOW_MOCK_IMG    := $(REGISTRY)/noc-servicenow-mock:$(VERSION)
 
@@ -131,6 +124,19 @@ helm_lokistack_args = \
 	--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
 	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
 
+ifeq ($(ENABLE_LIGHTSPEED),true)
+ifndef LIGHTSPEED_URL
+LIGHTSPEED_URL = $(shell oc get svc -A --no-headers 2>/dev/null | \
+	awk '/lightspeed.*app/{ns=$$1; name=$$2; split($$6,p,"/"); printf "https://%s.%s.svc:%s", name, ns, p[1]; exit}')
+ifeq ($(LIGHTSPEED_URL),)
+$(error ENABLE_LIGHTSPEED=true but no Lightspeed service found and LIGHTSPEED_URL not set. Set LIGHTSPEED_URL explicitly or install the Lightspeed operator.)
+endif
+endif
+endif
+
+helm_lightspeed_args = \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.url='$(LIGHTSPEED_URL)',)
+
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
@@ -155,6 +161,7 @@ helm_all_args = \
 	$(helm_mock_args) \
 	$(helm_adnr_llm_args) \
 	$(helm_autorag_args) \
+	$(helm_lightspeed_args) \
 	$(HELM_EXTRA_ARGS)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -163,6 +170,9 @@ helm_all_args = \
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
+ifeq ($(ENABLE_LIGHTSPEED),true)
+	$(MAKE) _check-lightspeed-operator
+endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
 	helm upgrade --install $(RELEASE) hub/helm \
@@ -215,6 +225,21 @@ check-adnr-llm-config:
 		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
 		exit 1; \
 	fi
+
+.PHONY: _check-lightspeed-operator
+_check-lightspeed-operator:
+	@oc get csv -A 2>/dev/null | grep -q "lightspeed-operator" || \
+		{ echo ""; \
+		  echo "ERROR: Lightspeed Operator is not installed on this cluster."; \
+		  echo ""; \
+		  echo "To install the Lightspeed Operator:"; \
+		  echo "  1. In the OpenShift web console, navigate to:"; \
+		  echo "     Operators → OperatorHub"; \
+		  echo "  2. Search for 'Ansible Lightspeed'"; \
+		  echo "  3. Click 'Install' and follow the installation wizard"; \
+		  echo "  4. Wait for the operator to become ready"; \
+		  echo ""; \
+		  exit 1; }
 
 .PHONY: edge-rbac-teardown
 edge-rbac-teardown:
@@ -276,117 +301,9 @@ reinstall-all:
 	cd hub/chatbot-service && uv sync --reinstall
 	cd hub/ingestion-pipeline && uv sync --reinstall
 
-.PHONY: namespace
-namespace:
-	@oc create namespace $(NAMESPACE) 2>/dev/null ||:
-	@oc config set-context --current --namespace=$(NAMESPACE) 2>/dev/null ||:
-
-.PHONY: helm-depend
-helm-depend:
-	cd hub/helm && helm dependency update
-
-.PHONY: check-adnr-llm-config
-check-adnr-llm-config:
-	@missing=""; \
-	[ -n "$(ADNR_LLM_ID)" ] || missing="$$missing ADNR_LLM_ID"; \
-	[ -n "$(ADNR_LLM_URL)" ] || missing="$$missing ADNR_LLM_URL"; \
-	[ -n "$(ADNR_LLM_TOKEN)" ] || missing="$$missing ADNR_LLM_TOKEN"; \
-	if [ -n "$$missing" ]; then \
-		echo "ERROR: Missing required ADNR LLM configuration:$$missing"; \
-		echo "Set ADNR_LLM_ID, ADNR_LLM_URL, and ADNR_LLM_TOKEN before running 'make helm-install'."; \
-		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
-		exit 1; \
-	fi
-
-.PHONY: helm-install
-helm-install: namespace helm-depend
-ifeq ($(ENABLE_KAFKA),true)
-	$(MAKE) kafka-install
-endif
-ifeq ($(ENABLE_MINIO),true)
-	$(MAKE) minio-install
-endif
-	$(MAKE) milvus-install
-ifeq ($(ENABLE_AAP_MOCK),true)
-	$(MAKE) deploy-aap-mock
-endif
-ifeq ($(ENABLE_LOKISTACK),true)
-	$(MAKE) lokistack-install
-endif
-ifeq ($(ENABLE_SERVICENOW_MOCK),true)
-	$(MAKE) deploy-servicenow-mock
-endif
-ifeq ($(ENABLE_HUB),true)
-	$(MAKE) check-adnr-llm-config
-	hub/mcp-servers/mcp-openshift/deploy/setup-edge-rbac.sh $(EDGE_NAMESPACE) $(NAMESPACE)
-	helm upgrade --install $(RELEASE) hub/helm \
-		--namespace $(NAMESPACE) \
-		--set image.registry=$(REGISTRY) \
-		--set image.chatbotService=noc-chatbot-service \
-		--set image.ingestionPipeline=noc-ingestion-pipeline \
-		--set image.agentService=noc-agent-service \
-		--set image.frontend=noc-frontend \
-		--set global.routes.enabled=$(ROUTES_ENABLED) \
-		--set image.tag=$(VERSION) \
-		$(helm_mcp_image_args) \
-		--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
-		--set mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
-		--set-string lokistack.name='$(LOKISTACK_NAME)' \
-		--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
-		$(helm_lokistack_registration_args) \
-		$(helm_adnr_llm_args) \
-		$(helm_aap_mock_args) \
-		$(helm_servicenow_mock_args) \
-		$(HELM_EXTRA_ARGS) \
-		--wait --timeout 30m
-else
-	@echo "ENABLE_HUB is not true — skipping hub chart deployment"
-endif
-	$(MAKE) autorag-install
-ifeq ($(ENABLE_LANGFUSE),true)
-	$(MAKE) _langfuse-deploy
-endif
-
-.PHONY: helm-uninstall
-helm-uninstall:
-ifeq ($(ENABLE_HUB),true)
-	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
-	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
-ifeq ($(ENABLE_LOKISTACK),true)
-	$(MAKE) lokistack-uninstall
-endif
-ifeq ($(ENABLE_MINIO),true)
-	$(MAKE) minio-uninstall
-endif
-ifeq ($(ENABLE_LANGFUSE),true)
-	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
-	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) || true
-	oc delete secret langfuse-secrets --namespace $(NAMESPACE) || true
-	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
-	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
-	oc delete secret langfuse-secrets --namespace $(NAMESPACE) --ignore-not-found
-endif
-ifeq ($(ENABLE_KAFKA),true)
-	$(MAKE) kafka-uninstall
-endif
-ifeq ($(ENABLE_AAP_MOCK),true)
-	oc delete -n $(NAMESPACE) -f hub/infra/aap-mock/k8s.yaml --ignore-not-found
-endif
-ifeq ($(ENABLE_SERVICENOW_MOCK),true)
-	oc delete -n $(NAMESPACE) -f hub/infra/servicenow-mock/k8s.yaml --ignore-not-found
-endif
-endif
-	$(MAKE) autorag-uninstall
-	$(MAKE) milvus-uninstall
-	$(MAKE) edge-rbac-teardown
-	oc delete namespace $(EDGE_NAMESPACE) --ignore-not-found
-	oc delete namespace $(NAMESPACE) --ignore-not-found
-
-.PHONY: edge-rbac-teardown
-edge-rbac-teardown:
-	sed 's/EDGE_NAMESPACE_PLACEHOLDER/$(EDGE_NAMESPACE)/g' hub/mcp-servers/mcp-openshift/deploy/edge-rbac.yaml \
-		| oc delete -n $(EDGE_NAMESPACE) --ignore-not-found -f -
-	oc delete secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) --ignore-not-found
+# ══════════════════════════════════════════════════════════════════════
+# Edge workload
+# ══════════════════════════════════════════════════════════════════════
 
 EDGE_WORKLOAD_IMAGE ?= registry.k8s.io/pause:3.10
 
@@ -412,45 +329,45 @@ _langfuse-deploy:
 		--version $(LANGFUSE_CHART_VERSION) \
 		--wait --timeout 10m
 
-.PHONY: _check-loki-operator
-_check-loki-operator:
-	@oc get csv -A 2>/dev/null | grep -q "loki-operator" || \
-		{ echo ""; \
-		  echo "ERROR: Loki Operator is not installed on this cluster."; \
-		  echo ""; \
-		  echo "The LokiStack requires the Loki Operator to be installed first."; \
-		  echo ""; \
-		  echo "To install the Loki Operator:"; \
-		  echo "  1. In the OpenShift web console, navigate to:"; \
-		  echo "     Operators → OperatorHub"; \
-		  echo "  2. Search for 'Loki Operator'"; \
-		  echo "  3. Select 'Loki Operator' (provided by Red Hat)"; \
-		  echo "  4. Click 'Install' and follow the installation wizard"; \
-		  echo "  5. Choose installation mode (all namespaces recommended)"; \
-		  echo "  6. Wait for the operator to become ready"; \
-		  echo ""; \
-		  exit 1; }
+.PHONY: langfuse-upgrade
+langfuse-upgrade:
+	helm repo update
+	helm upgrade $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
+		--namespace $(NAMESPACE) \
+		--values $(LANGFUSE_VALUES) \
+		--version $(LANGFUSE_CHART_VERSION)
 
-.PHONY: _check-minio
-_check-minio:
-	@oc get statefulset $(MINIO_RELEASE) -n $(MINIO_NAMESPACE) -o jsonpath='{.status.readyReplicas}' 2>/dev/null | grep -qE '^[1-9]' || \
-		{ echo "ERROR: MinIO is not running in namespace '$(MINIO_NAMESPACE)'. Run 'make minio-install' first."; exit 1; }
+.PHONY: langfuse-port-forward
+langfuse-port-forward:
+	oc port-forward svc/langfuse-web $(LANGFUSE_PORT):$(LANGFUSE_PORT) \
+		--namespace $(NAMESPACE)
 
-.PHONY: lokistack-install
-lokistack-install: _check-loki-operator _check-minio
-	helm upgrade --install $(LOKISTACK_RELEASE) $(LOKISTACK_CHART) \
-		--namespace $(LOKISTACK_NAMESPACE) \
-		--set-string lokistack.name='$(LOKISTACK_NAME)' \
-		--set testLogGenerator.enabled=$(ENABLE_LOKISTACK_TEST) \
-		$(LOKISTACK_EXTRA) \
-		--wait --timeout 15m
+.PHONY: langfuse-status
+langfuse-status:
+	@echo "=== Pods ==="
+	oc get pods -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
+	@echo ""
+	@echo "=== Services ==="
+	oc get svc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE)
+	@echo ""
+	@echo "=== Secrets ==="
+	oc get secret langfuse-secrets --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
 
-.PHONY: lokistack-uninstall
-lokistack-uninstall:
-	helm uninstall $(LOKISTACK_RELEASE) --namespace $(LOKISTACK_NAMESPACE) --ignore-not-found
-	oc delete pvc -n $(LOKISTACK_NAMESPACE) -l app.kubernetes.io/instance=$(LOKISTACK_NAME) --ignore-not-found
-	oc exec -n $(LOKISTACK_NAMESPACE) statefulset/minio -- sh -c \
-		'mc alias set local http://localhost:$(MINIO_PORT) $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc rb --force local/loki' || true
+# ══════════════════════════════════════════════════════════════════════
+# Dev convenience targets (standalone component install)
+# ══════════════════════════════════════════════════════════════════════
+
+.PHONY: kafka-port-forward
+kafka-port-forward:
+	oc port-forward svc/kafka $(KAFKA_PORT):$(KAFKA_PORT) \
+		--namespace $(NAMESPACE)
+
+.PHONY: kafka-client-cert
+kafka-client-cert:
+	@oc get secret kafka-client-tls -n $(NAMESPACE) -o jsonpath='{.data.ca\.crt}' | base64 -d > ca.crt
+	@oc get secret kafka-client-tls -n $(NAMESPACE) -o jsonpath='{.data.client\.crt}' | base64 -d > client.crt
+	@oc get secret kafka-client-tls -n $(NAMESPACE) -o jsonpath='{.data.client\.key}' | base64 -d > client.key
+	@echo "Extracted: ca.crt, client.crt, client.key"
 
 .PHONY: lokistack-status
 lokistack-status:
