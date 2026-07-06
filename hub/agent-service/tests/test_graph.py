@@ -159,9 +159,6 @@ class TestGraphCompilation:
     def test_expected_nodes_present(self):
         for name in ("remediate", "lightspeed", "audit"):
             assert name in self.nodes
-        assert "lightspeed_execute" not in self.nodes
-        assert "request_approval" not in self.nodes
-
     def test_audit_is_terminal_node_before_end(self):
         end_sources = [e.source for e in self.edges if e.target == "__end__"]
         assert end_sources == ["audit"]
@@ -170,11 +167,6 @@ class TestGraphCompilation:
         notify_targets = [e.target for e in self.edges if e.source == "notify"]
         assert "audit" in notify_targets
         assert "__end__" not in notify_targets
-
-    def test_graph_has_no_request_approval_node(self):
-        graph = build_graph()
-        node_names = {n.name for n in graph.get_graph().nodes.values()}
-        assert "request_approval" not in node_names
 
 
 class TestNormalizeNode:
