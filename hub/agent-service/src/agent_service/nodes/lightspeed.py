@@ -11,6 +11,7 @@ from agent_service.config import (
     LIGHTSPEED_TIMEOUT_SECONDS,
     LIGHTSPEED_TOKEN,
     LIGHTSPEED_URL,
+    LIGHTSPEED_VERIFY_SSL,
     LIGHTSPEED_WRAPPER_PLAYBOOK,
     now_iso,
 )
@@ -21,16 +22,22 @@ from agent_service.utils import invoke_tool as _invoke_tool
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
 
 
-_ols_headers: dict[str, str] = {}
-if LIGHTSPEED_TOKEN:
-    _ols_headers["Authorization"] = f"Bearer {LIGHTSPEED_TOKEN}"
+_ols_client: httpx.AsyncClient | None = None
 
-_ols_client = httpx.AsyncClient(
-    base_url=LIGHTSPEED_URL,
-    timeout=LIGHTSPEED_TIMEOUT_SECONDS,
-    headers=_ols_headers,
-    verify=False,  # OLS runs inside the cluster
-)
+
+def _get_ols_client() -> httpx.AsyncClient:
+    global _ols_client
+    if _ols_client is None:
+        headers: dict[str, str] = {}
+        if LIGHTSPEED_TOKEN:
+            headers["Authorization"] = f"Bearer {LIGHTSPEED_TOKEN}"
+        _ols_client = httpx.AsyncClient(
+            base_url=LIGHTSPEED_URL,
+            timeout=LIGHTSPEED_TIMEOUT_SECONDS,
+            headers=headers,
+            verify=LIGHTSPEED_VERIFY_SSL,
+        )
+    return _ols_client
 
 
 def _build_playbook_name(rca, log_event) -> str:
@@ -117,7 +124,7 @@ def _build_extra_vars(log_event, playbook_name, playbook_yaml):
 
 
 async def _call_ols(prompt: str, attachments: list[dict]) -> dict:
-    resp = await _ols_client.post(
+    resp = await _get_ols_client().post(
         "/v1/query",
         json={"query": prompt, "attachments": attachments},
     )
@@ -197,13 +204,6 @@ async def lightspeed_node(state) -> dict:
             generated_playbook_name=playbook_name,
             generated_playbook_preview=playbook_yaml,
         )
-
-        result = await _execute_in_aap(
-            result,
-            playbook_name,
-            playbook_yaml,
-            log_event,
-        )
     except Exception:
         duration = time.monotonic() - t0
         logger.exception("Lightspeed call failed after {:.2f}s", duration)
@@ -215,6 +215,24 @@ async def lightspeed_node(state) -> dict:
             duration_seconds=round(duration, 2),
             output_summary="Lightspeed playbook generation failed",
             timestamp=now_iso(),
+        )
+        return {"decision": "lightspeed", "remediation_result": result}
+
+    try:
+        result = await _execute_in_aap(
+            result,
+            playbook_name,
+            playbook_yaml,
+            log_event,
+        )
+    except Exception:
+        logger.exception("AAP execution failed for playbook '{}'", playbook_name)
+        result = result.model_copy(
+            update={
+                "success": False,
+                "output_summary": f"AAP execution failed for {playbook_name}",
+                "timestamp": now_iso(),
+            }
         )
 
     return {"decision": "lightspeed", "remediation_result": result}

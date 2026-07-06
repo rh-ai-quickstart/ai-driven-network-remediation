@@ -38,6 +38,7 @@ LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
 # Lightspeed (Ansible Lightspeed playbook generation)
 LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")
 LIGHTSPEED_TOKEN = os.getenv("LIGHTSPEED_TOKEN", "")
+LIGHTSPEED_VERIFY_SSL = os.getenv("LIGHTSPEED_VERIFY_SSL", "false").lower() == "true"
 
 # Configurable via env var to allow prompt experimentation without redeploying
 LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
