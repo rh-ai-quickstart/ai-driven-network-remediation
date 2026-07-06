@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+from helpers import make_log_event, make_rca
 
 from agent_service.models import (
     IncidentState,
@@ -9,15 +10,11 @@ from agent_service.models import (
 )
 from agent_service.nodes.lightspeed import (
     _build_attachments,
-    _build_extra_vars,
     _build_playbook_name,
     _build_prompt,
     _extract_yaml,
-    _playbook_name_from_parsed,
     lightspeed_node,
 )
-from helpers import make_log_event, make_rca
-
 
 _OLS_RESPONSE = {
     "conversation_id": "conv-123",
@@ -60,10 +57,14 @@ async def _default_invoke(tool_name, kwargs):
 
 
 async def _run_node(
-    ols_return=None, ols_side_effect=None, invoke_fn=None, **state_kw,
+    ols_return=None,
+    ols_side_effect=None,
+    invoke_fn=None,
+    **state_kw,
 ):
     ols_mock = AsyncMock(
-        return_value=ols_return, side_effect=ols_side_effect,
+        return_value=ols_return,
+        side_effect=ols_side_effect,
     )
     if invoke_fn is None:
         invoke_fn = _default_invoke
@@ -80,16 +81,17 @@ async def _run_node(
 # -- _build_playbook_name --
 
 
-@pytest.mark.parametrize("log_kw, expected_scope", [
-    (dict(pod_name="nginx-abc"), "nginx-abc"),
-    (dict(pod_name="", namespace="prod"), "prod"),
-    (dict(pod_name="", namespace="", edge_site_id="edge-5"), "edge-5"),
-    (dict(pod_name="", namespace="", edge_site_id=""), "cluster"),
-])
+@pytest.mark.parametrize(
+    "log_kw, expected_scope",
+    [
+        (dict(pod_name="nginx-abc"), "nginx-abc"),
+        (dict(pod_name="", namespace="prod"), "prod"),
+        (dict(pod_name="", namespace="", edge_site_id="edge-5"), "edge-5"),
+        (dict(pod_name="", namespace="", edge_site_id=""), "cluster"),
+    ],
+)
 def test_playbook_name_cascade(log_kw, expected_scope):
-    assert _build_playbook_name(make_rca(), make_log_event(**log_kw)) == (
-        f"remediate-oomkilled-{expected_scope}"
-    )
+    assert _build_playbook_name(make_rca(), make_log_event(**log_kw)) == (f"remediate-oomkilled-{expected_scope}")
 
 
 def test_playbook_name_no_rca():
@@ -105,13 +107,16 @@ def test_playbook_name_no_log():
 # -- _extract_yaml --
 
 
-@pytest.mark.parametrize("input_text, expected", [
-    ("```yaml\nkey: val\n```", "key: val"),
-    ("```yml\nkey: val\n```", "key: val"),
-    ("```\nkey: val\n```", "key: val"),
-    ("key: val", "key: val"),
-    ("", ""),
-])
+@pytest.mark.parametrize(
+    "input_text, expected",
+    [
+        ("```yaml\nkey: val\n```", "key: val"),
+        ("```yml\nkey: val\n```", "key: val"),
+        ("```\nkey: val\n```", "key: val"),
+        ("key: val", "key: val"),
+        ("", ""),
+    ],
+)
 def test_extract_yaml_valid(input_text, expected):
     text, parsed = _extract_yaml(input_text)
     assert text == expected
@@ -130,14 +135,25 @@ def test_extract_yaml_invalid_returns_raw():
 
 def test_prompt_includes_rca_fields():
     prompt = _build_prompt(
-        make_rca(failure_type="DNSFailure", estimated_severity="critical",
-             summary="DNS fail", recommended_actions=["fix", "check"],
-             evidence=["resolver timeout", "upstream unreachable"]),
+        make_rca(
+            failure_type="DNSFailure",
+            estimated_severity="critical",
+            summary="DNS fail",
+            recommended_actions=["fix", "check"],
+            evidence=["resolver timeout", "upstream unreachable"],
+        ),
         make_log_event(namespace="kube-system", pod_name="coredns-1"),
     )
-    for s in ["DNSFailure", "critical", "kube-system", "coredns-1",
-              "DNS fail", "fix, check",
-              "resolver timeout", "upstream unreachable"]:
+    for s in [
+        "DNSFailure",
+        "critical",
+        "kube-system",
+        "coredns-1",
+        "DNS fail",
+        "fix, check",
+        "resolver timeout",
+        "upstream unreachable",
+    ]:
         assert s in prompt
 
 
@@ -150,12 +166,15 @@ def test_prompt_none_inputs():
 # -- _build_attachments --
 
 
-@pytest.mark.parametrize("raw, evidence, expected_count", [
-    ("raw log", ["ev1"], 2),
-    ("", ["ev1"], 1),
-    ("raw log", [], 1),
-    ("", [], 0),
-])
+@pytest.mark.parametrize(
+    "raw, evidence, expected_count",
+    [
+        ("raw log", ["ev1"], 2),
+        ("", ["ev1"], 1),
+        ("raw log", [], 1),
+        ("", [], 0),
+    ],
+)
 def test_attachments_count(raw, evidence, expected_count):
     atts = _build_attachments(make_rca(evidence=evidence), make_log_event(raw=raw))
     assert len(atts) == expected_count
@@ -197,8 +216,12 @@ class TestLightspeedNodeSuccess:
         _, mock, _ = await _run_node(ols_return=_OLS_RESPONSE)
         prompt, attachments = mock.call_args[0]
         for expected in [
-            "OOMKilled", "high", "prod", "nginx-abc123",
-            "Container killed by OOM", "memory spike at 14:32",
+            "OOMKilled",
+            "high",
+            "prod",
+            "nginx-abc123",
+            "Container killed by OOM",
+            "memory spike at 14:32",
             "increase memory limit",
         ]:
             assert expected in prompt, f"{expected!r} not found in prompt"
@@ -206,7 +229,9 @@ class TestLightspeedNodeSuccess:
 
     async def test_no_rca(self):
         result, _, _ = await _run_node(
-            ols_return=_OLS_RESPONSE, rca=None, use_defaults=False,
+            ols_return=_OLS_RESPONSE,
+            rca=None,
+            use_defaults=False,
         )
         rr = result["remediation_result"]
         assert rr.success is True
@@ -214,7 +239,9 @@ class TestLightspeedNodeSuccess:
 
     async def test_no_log_event(self):
         result, _, _ = await _run_node(
-            ols_return=_OLS_RESPONSE, log_event=None, use_defaults=False,
+            ols_return=_OLS_RESPONSE,
+            log_event=None,
+            use_defaults=False,
         )
         name = result["remediation_result"].generated_playbook_name
         assert "cluster" in name
@@ -247,9 +274,7 @@ class TestAAPExecution:
         assert launch_call[0][0] == "launch_job"
         extra_vars = launch_call[0][1]["extra_vars"]
         assert extra_vars["generated_from_model"] is True
-        assert extra_vars["generated_playbook_name"] == (
-            "remediate-oomkilled-nginx-abc123"
-        )
+        assert extra_vars["generated_playbook_name"] == ("remediate-oomkilled-nginx-abc123")
         assert "hosts: all" in extra_vars["generated_playbook_yaml"]
         assert extra_vars["namespace"] == "prod"
         assert extra_vars["pod_name"] == "nginx-abc123"
@@ -261,7 +286,8 @@ class TestAAPExecution:
             return _LAUNCH_OK
 
         result, _, invoke_mock = await _run_node(
-            ols_return=_OLS_RESPONSE, invoke_fn=upsert_fails,
+            ols_return=_OLS_RESPONSE,
+            invoke_fn=upsert_fails,
         )
 
         rr = result["remediation_result"]
@@ -277,7 +303,8 @@ class TestAAPExecution:
             return {"success": False, "error": "quota exceeded"}
 
         result, _, _ = await _run_node(
-            ols_return=_OLS_RESPONSE, invoke_fn=launch_fails,
+            ols_return=_OLS_RESPONSE,
+            invoke_fn=launch_fails,
         )
 
         rr = result["remediation_result"]
@@ -286,7 +313,9 @@ class TestAAPExecution:
 
     async def test_no_log_event_still_has_playbook_vars(self):
         result, _, invoke_mock = await _run_node(
-            ols_return=_OLS_RESPONSE, log_event=None, use_defaults=False,
+            ols_return=_OLS_RESPONSE,
+            log_event=None,
+            use_defaults=False,
         )
 
         rr = result["remediation_result"]
@@ -303,14 +332,18 @@ class TestAAPExecution:
 
 
 class TestLightspeedNodeFailure:
-    @pytest.mark.parametrize("exc", [
-        httpx.HTTPStatusError(
-            "500", request=httpx.Request("POST", "http://x"),
-            response=httpx.Response(500),
-        ),
-        httpx.ConnectError("refused"),
-        RuntimeError("boom"),
-    ])
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.HTTPStatusError(
+                "500",
+                request=httpx.Request("POST", "http://x"),
+                response=httpx.Response(500),
+            ),
+            httpx.ConnectError("refused"),
+            RuntimeError("boom"),
+        ],
+    )
     async def test_exceptions_return_failure(self, exc):
         result, _, invoke_mock = await _run_node(ols_side_effect=exc)
         rr = result["remediation_result"]

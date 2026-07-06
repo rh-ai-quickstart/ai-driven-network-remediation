@@ -1,5 +1,6 @@
 import re
 import time
+
 import httpx
 import yaml
 from loguru import logger
@@ -78,19 +79,27 @@ def _build_prompt(rca, log_event) -> str:
         pod_name=log_event.pod_name if log_event else "unknown",
         summary=rca.summary if rca else "",
         evidence="\n".join(rca.evidence) if rca and rca.evidence else "N/A",
-        recommended_actions=(
-            ", ".join(rca.recommended_actions) if rca else ""
-        ),
+        recommended_actions=(", ".join(rca.recommended_actions) if rca else ""),
     )
 
 
 def _build_attachments(rca, log_event) -> list[dict]:
-    return [a for a in (
-        {"attachment_type": "log", "content_type": "text/plain",
-         "content": log_event.raw} if log_event and log_event.raw else None,
-        {"attachment_type": "configuration", "content_type": "text/plain",
-         "content": "\n".join(rca.evidence)} if rca and rca.evidence else None,
-    ) if a]
+    return [
+        a
+        for a in (
+            (
+                {"attachment_type": "log", "content_type": "text/plain", "content": log_event.raw}
+                if log_event and log_event.raw
+                else None
+            ),
+            (
+                {"attachment_type": "configuration", "content_type": "text/plain", "content": "\n".join(rca.evidence)}
+                if rca and rca.evidence
+                else None
+            ),
+        )
+        if a
+    ]
 
 
 def _build_extra_vars(log_event, playbook_name, playbook_yaml):
@@ -125,8 +134,6 @@ async def _upsert_template(name: str) -> dict:
             "base_template_name": AAP_LIGHTSPEED_TEMPLATE,
         },
     )
-
-
 
 
 # TODO: remove stub once LIGHTSPEED_URL is always set in deployment.
@@ -172,7 +179,8 @@ async def lightspeed_node(state) -> dict:
 
         logger.info(
             "OLS responded in {:.2f}s, conversation_id={}",
-            duration, data.get("conversation_id", ""),
+            duration,
+            data.get("conversation_id", ""),
         )
         logger.debug("Generated playbook '{}':\n{}", playbook_name, playbook_yaml)
 
@@ -191,7 +199,10 @@ async def lightspeed_node(state) -> dict:
         )
 
         result = await _execute_in_aap(
-            result, playbook_name, playbook_yaml, log_event,
+            result,
+            playbook_name,
+            playbook_yaml,
+            log_event,
         )
     except Exception:
         duration = time.monotonic() - t0
@@ -210,17 +221,22 @@ async def lightspeed_node(state) -> dict:
 
 
 async def _execute_in_aap(
-    result: RemediationResult, name: str, yaml_content: str, log_event,
+    result: RemediationResult,
+    name: str,
+    yaml_content: str,
+    log_event,
 ) -> RemediationResult:
     upsert = await _upsert_template(name)
     if not upsert.get("success"):
         error = upsert.get("error", "upsert failed")
         logger.warning("upsert_job_template failed: {}", error)
-        return result.model_copy(update={
-            "success": False,
-            "output_summary": error[:1000],
-            "timestamp": now_iso(),
-        })
+        return result.model_copy(
+            update={
+                "success": False,
+                "output_summary": error[:1000],
+                "timestamp": now_iso(),
+            }
+        )
 
     extra_vars = _build_extra_vars(log_event, name, yaml_content)
     launch = await _invoke_tool(
@@ -230,15 +246,19 @@ async def _execute_in_aap(
     if not launch.get("success"):
         error = launch.get("error", "launch failed")
         logger.warning("launch_job failed: {}", error)
-        return result.model_copy(update={
-            "success": False,
-            "output_summary": error[:1000],
-            "timestamp": now_iso(),
-        })
+        return result.model_copy(
+            update={
+                "success": False,
+                "output_summary": error[:1000],
+                "timestamp": now_iso(),
+            }
+        )
 
     job_id = str(launch.get("job_id", ""))
-    return result.model_copy(update={
-        "job_id": job_id,
-        "output_summary": f"Launched AAP job {job_id} for {name} (pending)",
-        "timestamp": now_iso(),
-    })
+    return result.model_copy(
+        update={
+            "job_id": job_id,
+            "output_summary": f"Launched AAP job {job_id} for {name} (pending)",
+            "timestamp": now_iso(),
+        }
+    )

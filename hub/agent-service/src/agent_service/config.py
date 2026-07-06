@@ -61,7 +61,8 @@ LIGHTSPEED_WRAPPER_PLAYBOOK = os.getenv(
     "playbooks/lightspeed-generate-and-run.yaml",
 )
 AAP_LIGHTSPEED_TEMPLATE = os.getenv(
-    "AAP_LIGHTSPEED_TEMPLATE", "lightspeed-runner",
+    "AAP_LIGHTSPEED_TEMPLATE",
+    "lightspeed-runner",
 )
 
 HTTP_TIMEOUT_SECONDS = 30
