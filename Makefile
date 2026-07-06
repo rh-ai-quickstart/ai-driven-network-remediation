@@ -3,7 +3,7 @@ REGISTRY        ?= quay.io/rh-ai-quickstart
 VERSION         ?= 0.1.0
 ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
-EDGE_NAMESPACE  ?= $(NAMESPACE) # TODO: Change to dark-noc-edge
+EDGE_NAMESPACE  ?= $(NAMESPACE)
 RELEASE         ?= hub
 PUSH_EXTRA_ARGS ?=
 ROUTES_ENABLED  ?= true
@@ -175,7 +175,7 @@ ifeq ($(ENABLE_LIGHTSPEED),true)
 endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
-	helm upgrade --install $(RELEASE) hub/helm \
+	@helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		$(helm_all_args) \
 		--wait --timeout 30m
