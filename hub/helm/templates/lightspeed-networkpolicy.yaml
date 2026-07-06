@@ -1,0 +1,25 @@
+{{- if .Values.agentService.lightspeed.url }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-hub-to-lightspeed
+  namespace: openshift-lightspeed
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: application-server
+      app.kubernetes.io/name: lightspeed-service-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - port: 8443
+          protocol: TCP
+{{- end }}
