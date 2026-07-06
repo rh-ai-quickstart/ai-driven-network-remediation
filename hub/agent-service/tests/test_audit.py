@@ -246,7 +246,6 @@ class TestPublishAuditRecord:
         sent_value = mock_producer.send.call_args.kwargs["value"]
         assert sent_value == payload
         mock_producer.send.assert_called_once_with("custom-audit", value=payload)
-        mock_producer.flush.assert_called_once_with(timeout=10)
         mock_producer.close.assert_called_once_with(timeout=10)
 
         serialized = mock_producer_cls.call_args.kwargs["value_serializer"](payload)

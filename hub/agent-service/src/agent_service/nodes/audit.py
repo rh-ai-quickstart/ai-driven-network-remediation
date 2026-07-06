@@ -8,6 +8,7 @@ from loguru import logger
 
 from agent_service.config import KAFKA_AUDIT_TOPIC, KAFKA_BOOTSTRAP
 
+# Must match failure_type enum in contracts/incident-audit.schema.json (narrower than FailureType).
 _AUDIT_FAILURE_TYPES = frozenset(
     {"OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "Unknown"}
 )
@@ -85,7 +86,6 @@ def publish_audit_record(
     try:
         future = producer.send(audit_topic, value=payload)
         metadata = future.get(timeout=10)
-        producer.flush(timeout=10)
         return int(metadata.offset)
     finally:
         producer.close(timeout=10)
