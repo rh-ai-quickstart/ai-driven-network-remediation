@@ -128,3 +128,60 @@ class TestConsumerLifecycle:
         assert len(handled) == 2
         assert handled[0].offset == 1
         assert handled[1].offset == 2
+
+    @patch("agent_service.kafka.consumer.KafkaConsumer")
+    def test_handler_exception_does_not_stop_consumer(self, mock_kafka_consumer_cls):
+        handled: list[AlertMessage] = []
+        messages = [
+            _make_message(offset=1, value=b"alert one"),
+            _make_message(offset=2, value=b"alert two"),
+        ]
+        mock_consumer = MagicMock()
+        mock_kafka_consumer_cls.return_value = mock_consumer
+
+        def handler(alert: AlertMessage) -> None:
+            if alert.offset == 1:
+                raise RuntimeError("handler failed")
+            handled.append(alert)
+
+        consumer = AlertConsumer(
+            handler,
+            bootstrap_servers="kafka:9092",
+            topics=["system-alerts"],
+            group_id="test-group",
+            poll_timeout_ms=100,
+        )
+        consumer._running = True
+
+        def poll_fn(timeout_ms=1000):
+            if poll_fn.seen:
+                consumer._running = False
+                return {}
+            poll_fn.seen = True
+            return {(0, 0): messages}
+
+        poll_fn.seen = False
+        mock_consumer.poll.side_effect = poll_fn
+        consumer._run()
+
+        assert len(handled) == 1
+        assert handled[0].offset == 2
+
+    @patch("agent_service.kafka.consumer.KafkaConsumer")
+    def test_stop_closes_consumer_once(self, mock_kafka_consumer_cls):
+        mock_consumer = MagicMock()
+        mock_consumer.poll.return_value = {}
+        mock_kafka_consumer_cls.return_value = mock_consumer
+
+        consumer = AlertConsumer(
+            lambda _alert: None,
+            bootstrap_servers="kafka:9092",
+            topics=["system-alerts"],
+            group_id="test-group",
+            poll_timeout_ms=100,
+        )
+
+        consumer.start()
+        consumer.stop()
+
+        assert mock_consumer.close.call_count == 1

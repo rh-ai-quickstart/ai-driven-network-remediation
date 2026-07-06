@@ -63,7 +63,6 @@ class AlertConsumer:
         if self._thread is not None:
             self._thread.join(timeout=self._poll_timeout_ms / 1000 + 5)
             self._thread = None
-        self.close()
         logger.info("Kafka alert consumer stopped")
 
     def close(self) -> None:
@@ -88,7 +87,14 @@ class AlertConsumer:
                     for msg in messages:
                         if not self._running:
                             return
-                        self._handle_message(msg)
+                        try:
+                            self._handle_message(msg)
+                        except Exception:
+                            logger.exception(
+                                "Failed to handle Kafka message topic={} offset={}",
+                                msg.topic,
+                                msg.offset,
+                            )
         finally:
             self.close()
 
