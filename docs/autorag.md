@@ -17,6 +17,9 @@ AutoRAG is an OpenShift AI (3.4) feature that automatically finds the best RAG c
 
 ## Architecture
 
+The deployment uses a **single LlamaStack instance** managed by the llama-stack operator.
+The operator automatically provisions the required `run-config` ConfigMap and `llama-stack-data` PVC.
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  OpenShift AI Dashboard                                  │
@@ -26,14 +29,14 @@ AutoRAG is an OpenShift AI (3.4) feature that automatically finds the best RAG c
 └───────────────────────────────────────────────────────┼──┘
                                                         │
   ┌─────────────────────────────────────────────────────┼──┐
-  │  Namespace: ai-driven-network-remediation-itay      │  │
+  │  Namespace                                          │  │
   │                                                     ▼  │
-  │  ┌─────────────────────┐    ┌──────────────────────┐  │
-  │  │ LlamaStackDistrib.  │    │  Milvus + etcd       │  │
-  │  │  (adnr-autorag)     │───▶│  (vector storage)    │  │
-  │  │  + sentence-trans.  │    └──────────────────────┘  │
-  │  │  + Granite LLM      │                              │
-  │  └─────────────────────┘                              │
+  │  ┌─────────────────────┐                               │
+  │  │ LlamaStackDistrib.  │                               │
+  │  │  (operator-managed) │                               │
+  │  │  + sentence-trans.  │                               │
+  │  │  + Granite LLM      │                               │
+  │  └─────────────────────┘                               │
   │           │                                            │
   │           ▼                                            │
   │  ┌──────────────────┐    ┌─────────────────────────┐  │
@@ -51,7 +54,7 @@ export ADNR_LLM_ID="granite-3.3-8b-instruct"
 export ADNR_LLM_URL="https://your-vllm-endpoint/v1"
 export ADNR_LLM_TOKEN="your-token"
 
-# Deploy everything (includes Milvus, AutoRAG, MinIO, Kafka — all in parallel)
+# Deploy everything (includes AutoRAG, MinIO, Kafka — all in parallel)
 make helm-install
 ```
 
@@ -85,7 +88,7 @@ remediation runbooks.
 2. Navigate to **AutoRAG** section
 3. Click **Create optimization run**
 4. Configure:
-   - **Llama Stack connection**: `http://adnr-autorag:8321` (the LSD deployed above)
+   - **Llama Stack connection**: `http://llamastack-service:8321` (the operator-managed LSD)
    - **Documents**: Upload from MinIO bucket or select the runbooks folder
    - **Test data**: Upload `hub/autorag/test-data.json`
    - **Optimization metric**: "Context correctness" (recommended for retrieval-focused RAG)
@@ -136,7 +139,7 @@ make helm-uninstall
 ## Limitations (Technology Preview)
 
 - Only English language documents supported
-- Remote Milvus only (inline Milvus not supported for AutoRAG)
+- pgvector used as vector store (managed by the operator)
 - Max 3 foundation models and 2 embedding models per run
 - Images in documents are not processed
 - No OCR for PDF documents

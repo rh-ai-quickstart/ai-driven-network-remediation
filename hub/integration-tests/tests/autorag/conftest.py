@@ -8,7 +8,7 @@ import pytest
 from common_helpers import sync_runbooks
 from helpers import discover_sentence_transformers_model
 
-_AUTORAG_URL = os.environ.get("AUTORAG_URL", "http://localhost:8321")
+_LLAMASTACK_URL = os.environ.get("LLAMASTACK_URL", "http://localhost:8321")
 _INGESTION_URL = os.environ.get("INGESTION_PIPELINE_URL", "http://localhost:8000")
 _E2E_CASE_LIMIT = int(os.environ.get("AUTORAG_E2E_CASE_LIMIT", "8"))
 _SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))
@@ -44,8 +44,8 @@ def ingestion_client():
 
 @pytest.fixture(scope="session")
 def autorag_client():
-    _wait_for_health(_AUTORAG_URL, "/v1/health", "autorag")
-    with httpx.Client(base_url=_AUTORAG_URL, timeout=60.0) as client:
+    _wait_for_health(_LLAMASTACK_URL, "/v1/health", "autorag")
+    with httpx.Client(base_url=_LLAMASTACK_URL, timeout=60.0) as client:
         yield client
 
 

@@ -174,7 +174,7 @@ ifeq ($(ENABLE_HUB),true)
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
-	oc delete pvc milvus-pvc --namespace $(NAMESPACE) --ignore-not-found
+
 ifeq ($(ENABLE_LANGFUSE),true)
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
@@ -351,12 +351,6 @@ lokistack-status:
 
 .PHONY: autorag-status
 autorag-status:
-	@echo "=== Milvus ==="
-	oc get pods -l app=milvus-standalone --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
-	@echo ""
-	@echo "=== etcd ==="
-	oc get pods -l app=etcd --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
-	@echo ""
 	@echo "=== LlamaStackDistribution ==="
 	oc get llamastackdistribution --namespace $(NAMESPACE) 2>/dev/null || echo "(none)"
 	@echo ""
@@ -406,7 +400,7 @@ ifeq ($(ENABLE_HUB),true)
 	PF9_PID=$$!; \
 	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID $$PF10_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 AUTORAG_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
+	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else
 	@echo "ENABLE_HUB is not true — skipping hub integration tests"
 endif
