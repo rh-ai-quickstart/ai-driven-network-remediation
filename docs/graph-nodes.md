@@ -28,7 +28,8 @@ Routes the incident based on confidence thresholds and failure type:
 |---|---|
 | confidence >= `remediate_threshold` and known playbook type | `remediate` |
 | confidence >= `remediate_threshold` and generation type | `lightspeed` |
-| otherwise | `escalate` |
+| confidence < `escalate_threshold` | `escalate` |
+| otherwise (between thresholds, unknown type) | `escalate` |
 
 Thresholds are configurable via `GraphConfig`.
 
@@ -41,28 +42,89 @@ Runs an AAP (Ansible Automation Platform) job to fix the incident.
 1. Takes the first `recommended_action` from the RCA as the AAP job template name.
 2. Launches the job via LlamaStack tool invocation with context from the log event (namespace, pod, container, edge site).
 3. Polls `get_job_status` until the job reaches a terminal status or the timeout expires (`GraphConfig.job_timeout`, default 120s).
-4. On success — records the result and routes to `notify`.
-5. On failure — records the attempt in `failed_attempts` and sets `should_retry = True` if under `GraphConfig.max_retries` (default 1). The graph loops back to `decide` for another attempt.
-6. On timeout — records `timed_out = True` and routes directly to `notify` (no retry).
+4. On success - records the result and routes to `notify`.
+5. On failure - records the attempt in `failed_attempts` and sets `should_retry = True` if under `GraphConfig.max_retries` (default 1). The graph loops back to `decide` for another attempt.
+6. On timeout - records `timed_out = True` and routes directly to `notify` (no retry).
 
 **Key files:**
 
-- `remediate.py` — node factory and AAP job lifecycle
-- `config.py` — shared HTTP client, terminal statuses, poll interval
-- `utils.py` — LlamaStack tool invocation helper
+- `remediate.py` - node factory and AAP job lifecycle
+- `config.py` - shared HTTP client, terminal statuses, poll interval
+- `utils.py` - LlamaStack tool invocation helper
 
 ### lightspeed
 
-*Placeholder.* Will generate an Ansible playbook via Lightspeed for failure types without a known runbook.
+Generates an Ansible playbook via OpenShift Lightspeed Service (OLS) for failure types without a known runbook, then executes it through AAP.
+
+**Flow:**
+
+1. If `LIGHTSPEED_URL` is not configured, returns a stub result (`lightspeed-disabled`) and skips to `notify`.
+2. Builds a prompt from the RCA (`failure_type`, `recommended_actions`, `summary`, `evidence`) and log event context (namespace, pod, container, edge site).
+3. Sends the prompt with attachments to OLS (`POST {LIGHTSPEED_URL}/v1/query`).
+4. Extracts YAML from the response, stripping markdown fences if present.
+5. Derives a playbook name from the YAML `plays[0].name` or falls back to `remediate-{failure_type}-{scope}`.
+6. Upserts an AAP job template using a wrapper playbook (`lightspeed-generate-and-run.yaml`) and launches the job with extra vars containing the generated YAML. Unlike `remediate`, the node does not poll for job completion.
+7. Records the result in `remediation_result` (including `generated_playbook_preview`, `generated_template_id`, and job ID) and routes to `notify`.
+8. On failure at any step, records a failed result with diagnostics and routes to `notify`.
+
+**Configuration (env vars):**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LIGHTSPEED_URL` | *(empty, disables node)* | OLS endpoint |
+| `LIGHTSPEED_TOKEN` | | Bearer auth token |
+| `LIGHTSPEED_VERIFY_SSL` | `false` | TLS verification |
+
+**Key files:**
+
+- `lightspeed.py` - node factory, OLS query, YAML extraction, AAP execution
+- `config.py` - Lightspeed and AAP settings
 
 ### escalate
 
-*Placeholder.* Will create a ServiceNow incident and notify the on-call team when confidence is too low for automated remediation.
+Creates a ServiceNow incident when confidence is too low for automated remediation.
+
+**Flow:**
+
+1. Builds a multi-section description from the RCA (failure type, confidence, severity, summary, evidence, recommended actions), log event context, and any failed remediation attempts.
+2. Maps `estimated_severity` to ServiceNow priority (critical=1, high=2, medium=3, low=4).
+3. Calls `create_incident` via LlamaStack tool invocation (`_invoke_tool`) with the description and priority.
+4. On success, stores the ticket number in `servicenow_ticket` and routes to `notify`.
+5. On failure, stores an empty ticket with `error_message` and still routes to `notify`.
+
+**Key files:**
+
+- `escalate.py` - node factory, description builder, priority mapping
 
 ### notify
 
-*Placeholder.* Will send incident status notifications (Slack, email, ServiceNow updates).
+*Placeholder.* Logs invocation and returns `{"notifications_sent": ["placeholder-notification"]}`. Will send Slack/email notifications in a future iteration. The `slack_thread_ts` field exists in `IncidentState` for future use.
+
+Routes to `audit`.
+
+**Key files:**
+
+- `notify.py` - stub implementation
 
 ### audit
 
-*Placeholder.* Will persist the full incident record for compliance and post-incident review.
+Publishes the full incident record to Kafka for compliance and post-incident review.
+
+**Flow:**
+
+1. Assembles an audit payload from state: `incident_id`, `failure_type`, `severity`, `edge_site_id`, `remediation_action`, `remediation_success`, plus optional `ai_confidence`, `servicenow_ticket`, `aap_job_id`, and `total_duration_ms`. Failure types not in the schema enum (`OOMKilled`, `CrashLoopBackOff`, `ConfigError`, `NetworkTimeout`) are mapped to `Unknown`.
+2. Computes `total_duration_ms` from `incident_start_ms` if not already set.
+3. Publishes the JSON-serialized record to Kafka via `KafkaProducer` (10s send/close timeout).
+4. Publish failures are logged but do not block the graph.
+
+**Configuration (env vars):**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KAFKA_BOOTSTRAP` | `kafka:9092` | Kafka broker address |
+| `KAFKA_AUDIT_TOPIC` | `incident-audit` | Target topic |
+
+**Key files:**
+
+- `audit.py` - payload builder, Kafka publisher, node factory
+- `contracts/incident-audit.schema.json` - JSON Schema for audit records
