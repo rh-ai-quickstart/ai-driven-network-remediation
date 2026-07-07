@@ -1,302 +1,195 @@
-# AI Driven Network Remediation
+# Automate Edge Network Remediation with AI
 
-> AI-Driven Self-Healing for Distributed Edge Infrastructure
+Detect, diagnose, and remediate failures across distributed edge clusters using AI-driven root cause analysis and automated playbooks.
 
-![image](https://img.shields.io/badge/OpenShift-4.21+-red) 
-![image](https://img.shields.io/badge/OpenShift%20AI-3.3+-red) 
-![image](https://img.shields.io/badge/Granite-4.0-purple) 
-![image](https://img.shields.io/badge/LangGraph-1.0+-blue) 
+![image](https://img.shields.io/badge/OpenShift-4.21+-red)
+![image](https://img.shields.io/badge/OpenShift%20AI-3.3+-red)
+![image](https://img.shields.io/badge/Granite-4.0-purple)
+![image](https://img.shields.io/badge/LangGraph-1.0+-blue)
 ![image](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 
-- - -
 ## Table of Contents
 
 - [Overview](#overview)
-- [The Problem](#the-problem)
-- [Our Solution](#our-solution)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Deployment Modes](#deployment-modes)
-- [Usage](#usage)
-- [Validation](#validation)
-- [Cleanup](#cleanup)
+- [Detailed description](#detailed-description)
+  - [Architecture diagrams](#architecture-diagrams)
+- [Requirements](#requirements)
+  - [Minimum hardware requirements](#minimum-hardware-requirements)
+  - [Minimum software requirements](#minimum-software-requirements)
+  - [Required user permissions](#required-user-permissions)
+- [Deploy](#deploy)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Validating the deployment](#validating-the-deployment)
+  - [Delete](#delete)
 - [References](#references)
+- [Tags](#tags)
 
-- - -
 ## Overview
 
-The **AI-Driven Network Remediation** quickstart is an AI-driven network
-operations solution for distributed edge infrastructure. It autonomously
-detects failures at edge sites, performs deep root cause analysis using IBM
-Granite 4.0 AI models, and executes Ansible remediation playbooks—all without
-human intervention. When AI cannot resolve an issue, it automatically creates
-tickets and notifies teams.
+This quickstart helps network operations teams managing distributed edge infrastructure eliminate manual incident response. It provides an autonomous AI agent that detects failures, identifies root causes, and executes remediation playbooks across multiple OpenShift clusters without human intervention.
 
-### Key Capabilities
+## Detailed description
 
+Network operations teams managing several edge sites face a growing challenge: manual incident response cannot keep pace. Tickets arrive, engineers escalate, investigate, and execute playbooks by hand. Time-to-resolution takes a significant amount of time for routine faults, alert fatigue grows from unstructured logs, and expert knowledge is required across multiple domains.
 
-|Capability              |Technology                    |Result                         |
-|------------------------|------------------------------|-------------------------------|
-|Real-time log streaming |Red Hat Streams for Kafka 3.1 |< 1s edge → hub                |
-|AI log analysis         |IBM Granite 4.0 + RHOAI 3.3   |< 5s root cause analysis       |
-|RAG-grounded decisions  |LlamaStack + pgvector         |Runbook-based remediation      |
-|Automated remediation   |AAP 2.5 + Event-Driven Ansible|< 30s MTTR                     |
-|Multi-cluster management|ACM 2.15                      |Hub controls edge fleet        |
-|Full observability      |Langfuse 3.x                  |Every AI decision traced       |
-|Human-in-the-loop       |LangGraph 1.0                 |Approval gates for P1 incidents|
+This quickstart deploys an AI-driven operations agent that inverts that workflow. It streams logs in real time from edge clusters to a central hub, runs root cause analysis using IBM Granite 4.0 and RAG-grounded runbooks, and automatically executes Ansible remediation playbooks. When AI cannot resolve an issue, it escalates to ServiceNow and notifies teams via Slack. Every decision is traced end-to-end through Langfuse for compliance and learning.
 
-- - -
-## The Problem
+### Architecture diagrams
 
-**Manual incident response is slow and error-prone:**
+For deployment modes, architecture details, and technical deep dive, see the [Architecture Guide](docs/architecture.md).
 
-- 📋 Tickets arrive → engineers escalate → investigate → execute playbooks
-- ⏱️ Time-to-resolution: 30+ minutes for routine faults
-- 😫 Alert fatigue from unstructured logs
-- 🌐 Distributed edge sites compound complexity
-- 👤 Requires expert knowledge across multiple domains
+The solution consists of three layers:
 
-**At scale (100+ edge sites), this becomes impossible.**
+- **AI & LLM:** Red Hat OpenShift AI 3.3, IBM Granite 4.0, LangGraph 1.0
+- **Automation:** Ansible Automation Platform 2.5, Advanced Cluster Management 2.15
+- **Data & Observability:** Red Hat Streams for Apache Kafka 3.1, PostgreSQL + pgvector, Langfuse 3.x
 
-- - -
-## Our Solution
+## Requirements
 
-**AI-Driven Network Remediation** inverts the workflow:
+### Minimum hardware requirements
 
-1.  **Detect** — Real-time log streaming from edge → hub
-2.  **Analyze** — AI-driven root cause analysis in < 5 seconds
-3.  **Remediate** — Automated playbook execution via Ansible Automation Platform
-4.  **Escalate** — ServiceNow tickets + Slack for unresolved cases
-5.  **Trace** — Every decision logged for compliance & learning
+- **CPU:** 8+ vCPU cores
+- **Memory:** 32+ GB RAM
+- **GPU:** 1x NVIDIA GPU (A10G, A100, L40S, or equivalent) for Granite model serving. Not required if using an external model endpoint (MaaS).
+- **Storage:** 100+ GB available disk space (storage class `gp3-csi` or override in Helm values)
 
-The result: **< 30 second MTTR** for known failure patterns, powered by Granite
-4.0 and LangGraph.
+For hub-spoke mode, each edge cluster requires OpenShift 4.21+ (SNO supported) with 16+ GB RAM and TLS-secured Kafka connectivity to the hub.
 
-- - -
-## Architecture
+### Minimum software requirements
 
-### Solution Stack
+**Platform:**
 
-**AI & LLM:**
+- OpenShift 4.21+
+- Helm 3+
 
-- Red Hat OpenShift AI (RHOAI) 3.3 — MLOps platform
-- IBM Granite 4.0 — Generative AI for log analysis
-- LangGraph 1.0 — Agentic workflow orchestration
+**CLI tools:**
 
-**Automation:**
+| Tool | Purpose |
+|------|---------|
+| `oc` | OpenShift CLI, cluster login, resource inspection, port-forwards |
+| `helm` (v3+) | Chart install, uninstall, dependency management |
+| `podman` | Container image builds and pushes |
+| `make` | Build orchestration (all targets in the root `Makefile`) |
+| `jq` | JSON processing (used by Langfuse secrets script) |
+| `openssl` | Key generation for Langfuse secrets |
 
-- Red Hat Ansible Automation Platform (AAP) 2.5
-- Event-Driven Ansible (EDA) — Kafka-triggered playbooks
-- Advanced Cluster Management (ACM) 2.15 — Multi-cluster governance
+**Required OpenShift Operators:**
 
-**Data & Observability:**
+| Operator | Version |
+|----------|---------|
+| Red Hat OpenShift AI | 3.3+ |
+| Red Hat Ansible Automation Platform | 2.5+ |
+| Llama Stack K8s Operator | latest |
+| Advanced Cluster Management | 2.15+ |
+| OpenShift Logging + Loki Operator | 6.4+ |
+| OpenShift Lightspeed Operator | latest |
 
-- Red Hat Streams for Apache Kafka 3.1 — Event streaming
-- PostgreSQL + pgvector — Vector embeddings for RAG
-- Langfuse 3.x — LLM observability & tracing
-- OpenShift Logging — Log aggregation
+**OpenShift Lightspeed setup:**
 
-### Deployment Modes
+OpenShift Lightspeed is required for this quickstart. The Lightspeed Operator must be installed and its service reachable in-cluster before deploying. For installation instructions, see the [Red Hat Lightspeed documentation](https://docs.redhat.com/en/documentation/red_hat_lightspeed/1-latest/html/monitoring_your_openshift_cluster_health_with_red_hat_lightspeed_advisor/using-insights-advisor).
 
-#### Mode 1: Single-Cluster (Development)
+The Makefile auto-discovers the Lightspeed service URL, or you can set `LIGHTSPEED_URL` explicitly. The Helm chart creates either a ServiceAccount-based token (auto) or uses a manually provided `LIGHTSPEED_TOKEN` for authentication against the OLS API.
 
-```
-┌──────────────────────────────┐
-│   OpenShift Cluster (OCP)    │
-│                              │
-│  ┌────────────────────────┐  │
-│  │ AI Engine (RHOAI)      │  │
-│  │ Kafka                  │  │
-│  │ PostgreSQL + pgvector  │  │
-│  │ Langfuse Observability │  │
-│  │ AAP Automation         │  │
-│  └────────────────────────┘  │
-│                              │
-│  ┌────────────────────────┐  │
-│  │ Simulated Edge         │  │
-│  │ (separate namespace)   │  │
-│  └────────────────────────┘  │
-│                              │
-└──────────────────────────────┘
-```
-**Use for:** Development, testing, proof-of-concept
+For development only, Lightspeed can be disabled with `ENABLE_LIGHTSPEED=false`.
 
-#### Mode 2: Hub-Spoke (Production)
+**AI model endpoint:**
 
-```
-┌──────────────────────────────┐
-│   Hub Cluster (OCP)          │
-│   (AI, Automation, Control)  │
-│                              │
-│  ┌────────────────────────┐  │
-│  │ RHOAI + Granite        │  │
-│  │ Kafka + PostgreSQL     │  │
-│  │ Langfuse + AAP         │  │
-│  │ ACM Hub                │  │
-│  └────────────────────────┘  │
-└──────────────────────────────┘
-           ↑ Kafka TLS
-           │ ACM Management
-           │ AAP API
-           ↓
-┌──────────────────────────────┐
-│   Edge Cluster (OCP SNO)     │
-│   (Monitoring & Workloads)   │
-│                              │
-│  ┌────────────────────────┐  │
-│  │ nginx + Workloads      │  │
-│  │ Vector Log Collection  │  │
-│  │ ACM Spoke              │  │
-│  └────────────────────────┘  │
-│                              │
-└──────────────────────────────┘
-```
-**Use for:** Production edge operations, multiple sites
-
-- - -
-## Prerequisites
-
-### Required Operators (OpenShift)
-
-Install these operators on your cluster(s) before deploying:
-
-- **Red Hat OpenShift AI 3.3** — For Granite model serving
-- **Red Hat Streams for Apache Kafka 3.1** — For event streaming
-- **Red Hat Ansible Automation Platform 2.5** — For remediation
-- **Advanced Cluster Management 2.15** — For hub-spoke mode (optional)
-- **OpenShift Logging 6.4** — For log collection
-- **LokiStack** — For log aggregation and querying
-
-### Minimum Resource Requirements
-
-**Single-Cluster Mode:**
-
-- 1 OpenShift 4.21+ cluster
-- GPU node (NVIDIA A10G or equivalent) for Granite model
-- 32GB+ node memory
-- 100GB+ storage for databases
-
-**Hub-Spoke Mode:**
-
-- Hub cluster: Same as single-cluster
-- Edge cluster(s): OpenShift 4.21+ (SNO supported), 16GB+ RAM
-- Network: TLS-secured Kafka connectivity between clusters
-
-### Required Credentials & Configuration
-
-1.  **OpenShift Access:**
-  - Hub cluster API URL + admin token/credentials
-  - Edge cluster API URL + admin token/credentials (for hub-spoke mode)
-2.  **Ansible Automation Platform:**
-  - AAP controller URL + API token
-  - Project with playbooks ready
-3.  **Optional Integrations:**
-  - ServiceNow instance URL + API credentials
-  - Slack workspace + bot token
-  - Langfuse instance (or auto-provisioned)
-
-- - -
-## Quick Start
-
-### 1\. Clone the Repository
+An OpenAI-compatible LLM endpoint is required. Set these environment variables before deploying:
 
 ```bash
-git clone https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
-cd ai-driven-network-remediation
+export ADNR_LLM_ID=granite-3-2-8b-instruct
+export ADNR_LLM_URL=https://your-llm-endpoint.example.com/v1
+export ADNR_LLM_TOKEN=your-llm-api-token
 ```
 
-### 2\. Deploy
+See `.env.example` for the full configuration template.
 
-```bash
-# Core platform
-make helm-install
+### Required user permissions
 
-# With Langfuse observability
-ENABLE_LANGFUSE=true make helm-install
-```
+This quickstart requires **cluster-admin** access to:
 
-See [Langfuse Deployment Guide](docs/langfuse-deploy.md) for details.
+- Install OpenShift Operators (RHOAI, AAP, ACM, Lightspeed, Logging)
+- Create ClusterRoleBindings for edge RBAC and Lightspeed service accounts
+- Deploy Helm charts that create cluster-scoped resources
 
-- - -
-## Architecture Deep Dive
+For hub-spoke mode, admin access is also required on each edge cluster.
 
-### AI Analysis Workflow
+## Deploy
 
-```
-1. INGEST (Kafka)
-   └─ Raw log event arrives
-   
-2. CONTEXT (RAG)
-   └─ pgvector retrieves relevant runbooks
-   
-3. ANALYZE (Granite 4.0 + LangGraph)
-   └─ RootCauseAnalysis struct (xgrammar enforced)
-   
-4. DECIDE (LangGraph Router)
-   ├─ If confidence > 0.8 → REMEDIATE
-   ├─ If confidence < 0.7 → ESCALATE
-   └─ Else → REQUEST APPROVAL
-   
-5. EXECUTE (AAP + MCP)
-   └─ Playbook runs (< 30s typical)
-   
-6. NOTIFY
-   ├─ Slack message
-   ├─ ServiceNow ticket (if escalated)
-   └─ Langfuse trace recorded
-```
-### Data Persistence
+### Prerequisites
 
-- **Incident state** → PostgreSQL (LangGraph checkpoint)
-- **Runbooks** → MinIO object storage + PostgreSQL/pgvector (RAG)
-- **Traces** → Langfuse (observability)
-- **Playbook definitions** → AAP (Ansible)
-- **Logs** → Kafka (event stream)
+- Access to a Red Hat OpenShift 4.21+ cluster with all [required operators](#minimum-software-requirements) installed
+- `oc` CLI authenticated to the cluster (`oc login`)
+- `helm` CLI (v3+) installed
+- AI model endpoint credentials (`ADNR_LLM_ID`, `ADNR_LLM_URL`, `ADNR_LLM_TOKEN`)
 
-### Multi-Cluster Coordination
+### Installation
 
-**Hub Cluster (Hub-Spoke Mode):**
+1. Clone the repository:
 
-- Receives logs from all edge sites via Kafka TLS
-- Runs AI analysis
-- Triggers AAP playbooks
-- Manages access to edge clusters via ACM
+   ```bash
+   git clone https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
+   cd ai-driven-network-remediation
+   ```
 
-**Edge Clusters:**
+2. Deploy the solution:
 
-- Collect logs from monitored workloads
-- Stream to hub via Kafka
-- Execute remediation playbooks via AAP
-- Report status back to hub
+   ```bash
+   make helm-install
+   ```
 
-- - -
+   With Langfuse observability (optional):
+
+   ```bash
+   ENABLE_LANGFUSE=true make helm-install
+   ```
+
+   See [Langfuse Deployment Guide](docs/langfuse-deploy.md) for Langfuse details.
+
+### Validating the deployment
+
+1. Check all pods are running:
+
+   ```bash
+   oc get pods -n $NAMESPACE
+   ```
+
+2. Get the frontend URL:
+
+   ```bash
+   echo "https://$(oc get route noc-frontend -n $NAMESPACE --template='{{.spec.host}}')"
+   ```
+
+### Delete
+
+1. Uninstall the Helm release:
+
+   ```bash
+   make helm-uninstall
+   ```
+
+2. Verify removal:
+
+   ```bash
+   oc get pods -n $NAMESPACE
+   # Should return "No resources found"
+   ```
+
 ## References
 
-- AI Driven Network Remediation Architecture
-- Deployment Guide
 - [IBM Granite Model Documentation](https://www.ibm.com/granite)
-- 
-  [Red Hat OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai)
+- [Red Hat OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
-- [Original Auto-Darknoc POC](https://github.com/msugur/auto-darknoc)
+- [Architecture Guide](docs/architecture.md)
 
-- - -
-## Support
+## Tags
 
-For issues, questions, or contributions:
-
-- GitHub Issues: 
-  [Report a bug](https://github.com/rh-ai-quickstart/ai-driven-network-remediation/issues)
-- Discussions: 
-  [Ask a question](https://github.com/rh-ai-quickstart/ai-driven-network-remediation/discussions)
-
-- - -
-## License
-
-This project is licensed under the Apache 2.0 License. See [LICENSE](LICENSE)
-for details.
-
-- - -
-*Red Hat AI Quickstarts · AI Driven Network Operations · 2026*
+- **Title:** Automate Edge Network Remediation with AI
+- **Description:** Detect, diagnose, and remediate failures across distributed edge clusters using AI-driven root cause analysis and automated playbooks.
+- **Industry:** Telecommunications
+- **Product:** OpenShift AI
+- **Use case:** Automation, network operations
+- **Partner:** N/A
+- **Contributor org:** Red Hat
 
