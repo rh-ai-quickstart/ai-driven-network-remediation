@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, DEFAULT, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,9 +12,9 @@ INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 
 @pytest.fixture
 def client():
-    with patch("agent_service.server.AlertConsumer") as mock_consumer_cls:
+    with patch("agent_service.server.AlertConsumer"):
         with TestClient(app) as test_client:
-            yield test_client, mock_consumer_cls
+            yield test_client
 
 
 async def _mock_escalate_invoke(tool_name, kwargs):
@@ -25,25 +25,22 @@ async def _mock_escalate_invoke(tool_name, kwargs):
 
 class TestHealthEndpoint:
     def test_health_returns_ok(self, client):
-        test_client, _ = client
-        response = test_client.get("/health")
+        response = client.get("/health")
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
 
 class TestReadyEndpoint:
     def test_ready_returns_true(self, client):
-        test_client, _ = client
-        response = test_client.get("/ready")
+        response = client.get("/ready")
         assert response.status_code == 200
         assert response.json() == {"ready": True}
 
 
 class TestRemediateEndpoint:
     def test_post_remediate_returns_full_state(self, client):
-        test_client, _ = client
         with patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke):
-            response = test_client.post("/remediate", json={"raw_event": "test event"})
+            response = client.post("/remediate", json={"raw_event": "test event"})
         assert response.status_code == 200
         body = response.json()
         assert body["raw_event"] == "test event"
@@ -51,8 +48,7 @@ class TestRemediateEndpoint:
         assert body["decision"] != ""
 
     def test_post_remediate_with_failure_type_override(self, client):
-        test_client, _ = client
-        response = test_client.post(
+        response = client.post(
             "/remediate",
             json={"raw_event": "test event", "confidence_override": 0.9, "failure_type_override": "KafkaLag"},
         )
@@ -61,48 +57,50 @@ class TestRemediateEndpoint:
         assert body["decision"] == "lightspeed"
 
     def test_post_remediate_rejects_invalid_failure_type_override(self, client):
-        test_client, _ = client
-        response = test_client.post(
+        response = client.post(
             "/remediate",
             json={"raw_event": "test event", "failure_type_override": "FooBar"},
         )
         assert response.status_code == 422
 
     def test_post_remediate_rejects_missing_raw_event(self, client):
-        test_client, _ = client
-        response = test_client.post("/remediate", json={})
+        response = client.post("/remediate", json={})
         assert response.status_code == 422
 
 
 class TestKafkaLifespan:
-    def test_lifespan_starts_consumer_when_enabled(self):
+    @patch("agent_service.server.AlertConsumer")
+    @patch.multiple(
+        "agent_service.server",
+        KAFKA_CONSUMER_ENABLED=True,
+        KAFKA_BOOTSTRAP="kafka.test:9092",
+        KAFKA_CONSUME_TOPICS=["noc-alerts", "system-alerts"],
+        KAFKA_GROUP_ID="test-group",
+        build_graph=DEFAULT,
+    )
+    def test_lifespan_starts_consumer_when_enabled(self, AlertConsumer, **_mocks):
         mock_consumer = MagicMock()
-        with patch("agent_service.server.KAFKA_CONSUMER_ENABLED", True), patch(
-            "agent_service.server.KAFKA_BOOTSTRAP", "kafka.test:9092"
-        ), patch(
-            "agent_service.server.KAFKA_CONSUME_TOPICS", ["noc-alerts", "system-alerts"]
-        ), patch("agent_service.server.KAFKA_GROUP_ID", "test-group"), patch(
-            "agent_service.server.AlertConsumer", return_value=mock_consumer
-        ) as mock_cls, patch("agent_service.server.build_graph", return_value=MagicMock()):
-            with TestClient(app):
-                pass
+        AlertConsumer.return_value = mock_consumer
 
-        mock_cls.assert_called_once()
-        _, kwargs = mock_cls.call_args
+        with TestClient(app):
+            pass
+
+        AlertConsumer.assert_called_once()
+        _, kwargs = AlertConsumer.call_args
         assert kwargs["bootstrap_servers"] == "kafka.test:9092"
         assert kwargs["topics"] == ["noc-alerts", "system-alerts"]
         assert kwargs["group_id"] == "test-group"
         mock_consumer.start.assert_called_once()
         mock_consumer.stop.assert_called_once()
 
-    def test_lifespan_skips_consumer_when_disabled(self):
-        with patch("agent_service.server.KAFKA_CONSUMER_ENABLED", False), patch(
-            "agent_service.server.AlertConsumer"
-        ) as mock_cls, patch("agent_service.server.build_graph", return_value=MagicMock()):
-            with TestClient(app):
-                pass
+    @patch("agent_service.server.AlertConsumer")
+    @patch("agent_service.server.KAFKA_CONSUMER_ENABLED", False)
+    @patch("agent_service.server.build_graph", return_value=MagicMock())
+    def test_lifespan_skips_consumer_when_disabled(self, _build_graph, AlertConsumer):
+        with TestClient(app):
+            pass
 
-        mock_cls.assert_not_called()
+        AlertConsumer.assert_not_called()
 
     def test_invoke_graph_for_alert_passes_kafka_offset(self):
         graph = MagicMock()

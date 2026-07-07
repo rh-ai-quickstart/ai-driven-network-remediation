@@ -104,6 +104,8 @@ def ready():
 
 @app.post("/remediate", response_model=IncidentState)
 async def remediate(request: RemediateRequest, req: Request):
+    # Reuse the graph compiled at startup; LangGraph compiled graphs are stateless
+    # and safe to invoke concurrently with distinct input state per call.
     graph = req.app.state.graph
     return await graph.ainvoke(request.model_dump(exclude_none=True))
 

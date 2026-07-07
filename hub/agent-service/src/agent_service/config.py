@@ -31,7 +31,8 @@ KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "dark-noc-agent")
 KAFKA_AUDIT_TOPIC = os.getenv("KAFKA_AUDIT_TOPIC", "incident-audit")
 KAFKA_CONSUMER_ENABLED = _env_bool("KAFKA_CONSUMER_ENABLED", True)
 
-# LangGraph invoke from Kafka consumer thread (seconds; demo target is under 5 minutes)
+# LangGraph invoke from Kafka consumer thread (seconds; demo target is under 5 minutes).
+# float (not int) so tests can use sub-second values like 0.01 with future.result(timeout=...).
 GRAPH_INVOKE_TIMEOUT_SECONDS = float(os.getenv("GRAPH_INVOKE_TIMEOUT_SECONDS", "300"))
 
 # LlamaStack

@@ -62,6 +62,8 @@ class AlertConsumer:
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=self._poll_timeout_ms / 1000 + 5)
+            if self._thread.is_alive():
+                logger.warning("Kafka alert consumer thread still running after join timeout")
             self._thread = None
         logger.info("Kafka alert consumer stopped")
 
@@ -71,12 +73,17 @@ class AlertConsumer:
             self._consumer = None
 
     def _run(self) -> None:
+        from agent_service.config import GRAPH_INVOKE_TIMEOUT_SECONDS
+
         self._consumer = KafkaConsumer(
             *self._topics,
             bootstrap_servers=self._bootstrap_servers,
             group_id=self._group_id,
             auto_offset_reset="latest",
             enable_auto_commit=True,
+            # One record per poll: handler blocks for up to GRAPH_INVOKE_TIMEOUT_SECONDS.
+            max_poll_records=1,
+            max_poll_interval_ms=int(GRAPH_INVOKE_TIMEOUT_SECONDS * 1000 * 2),
         )
         try:
             while self._running:
