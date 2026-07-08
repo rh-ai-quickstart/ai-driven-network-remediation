@@ -73,6 +73,13 @@ AAP_LIGHTSPEED_TEMPLATE = os.getenv(
 HTTP_TIMEOUT_SECONDS = 30
 LIGHTSPEED_TIMEOUT_SECONDS = 60
 
+# Slack notifications
+SLACK_ENABLED = _env_bool("SLACK_ENABLED", False)
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
+SLACK_CHANNEL = os.getenv("SLACK_CHANNEL", "#ai-driven-network")
+SLACK_TIMEOUT_SECONDS = int(os.getenv("SLACK_TIMEOUT_SECONDS", "10"))
+SERVICENOW_INSTANCE_URL = os.getenv("SERVICENOW_INSTANCE_URL", "")
+
 _http_client: httpx.AsyncClient | None = None
 
 

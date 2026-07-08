@@ -59,6 +59,21 @@ spec:
               value: {{ .Values.agentService.lightspeed.wrapperPlaybook | quote }}
             - name: AAP_LIGHTSPEED_TEMPLATE
               value: {{ .Values.agentService.lightspeed.baseTemplateName | quote }}
+            - name: SLACK_ENABLED
+              value: {{ .Values.agentService.slack.enabled | quote }}
+            - name: SLACK_CHANNEL
+              value: {{ .Values.agentService.slack.channel | quote }}
+            {{- if or .Values.agentService.slack.botToken .Values.agentService.slack.existingSecret }}
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentService.slack.existingSecret | default "noc-slack-secret" }}
+                  key: SLACK_BOT_TOKEN
+            {{- end }}
+            {{- if .Values.agentService.servicenowInstanceUrl }}
+            - name: SERVICENOW_INSTANCE_URL
+              value: {{ .Values.agentService.servicenowInstanceUrl | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8001

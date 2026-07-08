@@ -342,6 +342,7 @@ agentService:
   slack:
     enabled: "false"
     botToken: ""
+    existingSecret: ""
     channel: "#ai-driven-network"
   servicenowInstanceUrl: ""
   env:

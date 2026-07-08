@@ -98,13 +98,36 @@ Creates a ServiceNow incident when confidence is too low for automated remediati
 
 ### notify
 
-*Placeholder.* Logs invocation and returns `{"notifications_sent": ["placeholder-notification"]}`. Will send Slack/email notifications in a future iteration. The `slack_thread_ts` field exists in `IncidentState` for future use.
+Sends a Slack notification summarizing the incident outcome. Messages use Block Kit formatting with a color-coded sidebar indicating severity.
 
-Routes to `audit`.
+**Flow:**
+
+1. Builds a fallback plain-text summary from the incident state (severity, site, status, description, resolution).
+2. Constructs Block Kit blocks displaying severity, site, timestamp, status, description, and resolution. The attachment sidebar color reflects severity:
+   - Critical: `#FF0000` (red)
+   - High: `#FF6600` (orange)
+   - Medium: `#FFAA00` (amber)
+   - Low: `#00AA00` (green)
+3. If `SERVICENOW_INSTANCE_URL` is set and a `servicenow_ticket` exists, appends a clickable ticket link to the message blocks.
+4. Posts the message via `slack_sdk.WebClient` (sync client wrapped in `asyncio.to_thread` to avoid blocking the event loop).
+5. Returns the `slack_thread_ts` from the Slack API response, which can be used for follow-up threading.
+6. When `SLACK_ENABLED` is `false`, logs the fallback text and returns an empty string instead of posting.
+
+After completing, routes to `audit`.
+
+**Configuration (environment variables):**
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SLACK_ENABLED` | `false` | Enable or disable Slack posting |
+| `SLACK_BOT_TOKEN` | | Bot OAuth token for authentication |
+| `SLACK_CHANNEL` | | Target channel or channel ID |
+| `SLACK_TIMEOUT_SECONDS` | `10` | API call timeout in seconds |
+| `SERVICENOW_INSTANCE_URL` | *(empty)* | When set, appends a ticket link to escalation messages |
 
 **Key files:**
 
-- `notify.py` - stub implementation
+- `notify.py` - Slack message builder, Block Kit formatting, node factory
 
 ### audit
 
