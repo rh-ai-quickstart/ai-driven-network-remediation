@@ -22,12 +22,6 @@ def test_aap_health(mcp_aap_client):
     assert response.json() == {"status": "OK"}
 
 
-def test_slack_health(mcp_slack_client):
-    response = mcp_slack_client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "OK"}
-
-
 def test_servicenow_health(mcp_servicenow_client):
     response = mcp_servicenow_client.get("/health")
     assert response.status_code == 200

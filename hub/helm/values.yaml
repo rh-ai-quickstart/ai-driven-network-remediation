@@ -58,8 +58,6 @@ llama-stack:
       uri: http://mcp-noc-kafka:8000/mcp
     noc-aap:
       uri: http://mcp-noc-aap:8000/mcp
-    noc-slack:
-      uri: http://mcp-noc-slack:8000/mcp
     noc-servicenow:
       uri: http://mcp-noc-servicenow:8000/mcp
   models:
@@ -291,7 +289,6 @@ chatbotService:
     mcpLokistackUrl: "http://mcp-noc-lokistack:8000"
     mcpKafkaUrl: "http://mcp-noc-kafka:8000"
     mcpAapUrl: "http://mcp-noc-aap:8000"
-    mcpSlackUrl: "http://mcp-noc-slack:8000"
     mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
     servicenowUrl: "http://servicenow-mock:8080"
     kafkaBootstrap: "kafka:9092"
@@ -342,6 +339,11 @@ agentService:
     token: ""
     wrapperPlaybook: "playbooks/lightspeed-generate-and-run.yaml"
     baseTemplateName: "lightspeed-runner"
+  slack:
+    enabled: "false"
+    botToken: ""
+    channel: "#ai-driven-network"
+  servicenowInstanceUrl: ""
   env:
     kafkaBootstrap: "kafka:9092"
     kafkaGroupId: "dark-noc-agent"
@@ -485,20 +487,6 @@ mcp-servers:
           name: noc-aap-secret
           key: AAP_PASSWORD
 
-    noc-slack:
-      enabled: true
-      deploymentMode: deployment
-      image:
-        repository: quay.io/rh-ai-quickstart/noc-mcp-slack
-        tag: "0.1.0"
-      port: 8000
-      targetPort: 8000
-      transport: streamable-http
-      imagePullPolicy: Always
-      env:
-        MCP_TRANSPORT: "streamable-http"
-        MCP_PORT: "8000"
-
     noc-servicenow:
       enabled: true
       deploymentMode: deployment
@@ -534,5 +522,4 @@ mcp-servers:
       enabled: false
     openshift-mcp:
       enabled: false
-    slack-mcp:
-      enabled: false
+

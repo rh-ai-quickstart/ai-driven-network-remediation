@@ -46,14 +46,14 @@ def test_integrations(mock_probe, mock_audits, client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["_deps"] == {"status": "ok"}
-    assert data["total"] == 7
-    assert data["up"] == 7
+    assert data["total"] == 6
+    assert data["up"] == 6
     assert data["down"] == 0
     assert "slo" in data
     assert "incident_movie" in data
     assert "business_impact" in data
     assert "integrations" in data
-    assert len(data["integrations"]) == 7
+    assert len(data["integrations"]) == 6
 
 
 @patch("chatbot_service.fetch_recent_audits")
@@ -70,7 +70,7 @@ def test_integrations_with_down_service(mock_probe, mock_audits, client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["_deps"] == {"status": "degraded", "unavailable": ["probes"]}
-    assert data["up"] == 6
+    assert data["up"] == 5
     assert data["down"] == 1
 
 
@@ -83,7 +83,7 @@ def test_integrations_kafka_unreachable(mock_probe, mock_audits, client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["_deps"] == {"status": "degraded", "unavailable": ["kafka"]}
-    assert data["up"] == 7
+    assert data["up"] == 6
 
 
 @patch("chatbot_service.publish_demo_event")

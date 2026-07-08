@@ -34,8 +34,6 @@ spec:
               value: {{ .Values.chatbotService.env.mcpKafkaUrl | quote }}
             - name: MCP_AAP_URL
               value: {{ .Values.chatbotService.env.mcpAapUrl | quote }}
-            - name: MCP_SLACK_URL
-              value: {{ .Values.chatbotService.env.mcpSlackUrl | quote }}
             - name: MCP_SERVICENOW_URL
               value: {{ .Values.chatbotService.env.mcpServicenowUrl | quote }}
             - name: SERVICENOW_URL

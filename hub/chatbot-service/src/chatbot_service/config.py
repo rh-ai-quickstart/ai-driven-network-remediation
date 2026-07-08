@@ -11,7 +11,6 @@ MCP_OPENSHIFT_URL = os.getenv("MCP_OPENSHIFT_URL", "http://mcp-noc-openshift:800
 MCP_LOKISTACK_URL = os.getenv("MCP_LOKISTACK_URL", "http://mcp-noc-lokistack:8000")
 MCP_KAFKA_URL = os.getenv("MCP_KAFKA_URL", "http://mcp-noc-kafka:8000")
 MCP_AAP_URL = os.getenv("MCP_AAP_URL", "http://mcp-noc-aap:8000")
-MCP_SLACK_URL = os.getenv("MCP_SLACK_URL", "http://mcp-noc-slack:8000")
 MCP_SERVICENOW_URL = os.getenv("MCP_SERVICENOW_URL", "http://mcp-noc-servicenow:8000")
 
 SERVICENOW_URL = os.getenv("SERVICENOW_URL", "http://servicenow-mock:8080")
@@ -54,7 +53,6 @@ INTEGRATION_TARGETS = [
     {"id": "mcp-lokistack", "name": "MCP LokiStack", "group": "mcp", "probe_url": f"{MCP_LOKISTACK_URL}/health"},
     {"id": "mcp-kafka", "name": "MCP Kafka", "group": "mcp", "probe_url": f"{MCP_KAFKA_URL}/health"},
     {"id": "mcp-aap", "name": "MCP AAP", "group": "mcp", "probe_url": f"{MCP_AAP_URL}/health"},
-    {"id": "mcp-slack", "name": "MCP Slack", "group": "mcp", "probe_url": f"{MCP_SLACK_URL}/health"},
     {"id": "mcp-servicenow", "name": "MCP ServiceNow", "group": "mcp", "probe_url": f"{MCP_SERVICENOW_URL}/health"},
     {"id": "servicenow", "name": "ServiceNow", "group": "platform", "probe_url": f"{SERVICENOW_URL}/health"},
 ]

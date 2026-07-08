@@ -21,8 +21,6 @@ MCP server wrapping the ServiceNow REST API for incident management in the AI-dr
 | `SERVICENOW_USERNAME` | No | `""` |
 | `SERVICENOW_PASSWORD` | No | `""` |
 | `SERVICENOW_CALLER_NAME` | No | `NOC Agent` |
-| `SLACK_BOT_TOKEN` | No | `""` |
-| `SLACK_NOC_CHANNEL` | No | `#dark-noc-alerts` |
 | `MCP_TRANSPORT` | No | `sse` |
 | `MCP_PORT` | No | `8000` |
 

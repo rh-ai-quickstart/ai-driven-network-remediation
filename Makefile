@@ -16,7 +16,6 @@ MCP_OPENSHIFT_IMG  := $(REGISTRY)/noc-mcp-openshift:$(VERSION)
 MCP_LOKISTACK_IMG  := $(REGISTRY)/noc-mcp-lokistack:$(VERSION)
 MCP_KAFKA_IMG      := $(REGISTRY)/noc-mcp-kafka:$(VERSION)
 MCP_AAP_IMG        := $(REGISTRY)/noc-mcp-aap:$(VERSION)
-MCP_SLACK_IMG      := $(REGISTRY)/noc-mcp-slack:$(VERSION)
 MCP_SERVICENOW_IMG := $(REGISTRY)/noc-mcp-servicenow:$(VERSION)
 
 MCP_CONTAINERFILE           := hub/mcp-servers/Containerfile
@@ -33,6 +32,10 @@ ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
+ENABLE_SLACK           ?= false
+SLACK_BOT_TOKEN        ?=
+SLACK_CHANNEL          ?= \#ai-driven-network
+SERVICENOW_INSTANCE_URL ?=
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -63,7 +66,6 @@ CORE_BUILD_PUSH_IMAGES := \
 	$(MCP_LOKISTACK_IMG) \
 	$(MCP_KAFKA_IMG) \
 	$(MCP_AAP_IMG) \
-	$(MCP_SLACK_IMG) \
 	$(MCP_SERVICENOW_IMG)
 
 EXTRA_BUILD_PUSH_IMAGES := \
@@ -99,8 +101,6 @@ helm_mcp_image_args = \
 	--set mcp-servers.mcp-servers.noc-kafka.image.tag=$(VERSION) \
 	--set mcp-servers.mcp-servers.noc-aap.image.repository=$(REGISTRY)/noc-mcp-aap \
 	--set mcp-servers.mcp-servers.noc-aap.image.tag=$(VERSION) \
-	--set mcp-servers.mcp-servers.noc-slack.image.repository=$(REGISTRY)/noc-mcp-slack \
-	--set mcp-servers.mcp-servers.noc-slack.image.tag=$(VERSION) \
 	--set mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
 	--set mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION)
 
@@ -137,6 +137,12 @@ endif
 helm_lightspeed_args = \
 	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.url='$(LIGHTSPEED_URL)',)
 
+helm_slack_args = \
+	--set agentService.slack.enabled=$(ENABLE_SLACK) \
+	$(if $(SLACK_BOT_TOKEN),--set-string agentService.slack.botToken='$(SLACK_BOT_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_SLACK)),--set-string agentService.slack.channel='$(SLACK_CHANNEL)',) \
+	$(if $(SERVICENOW_INSTANCE_URL),--set-string agentService.servicenowInstanceUrl='$(SERVICENOW_INSTANCE_URL)',)
+
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
@@ -162,6 +168,7 @@ helm_all_args = \
 	$(helm_adnr_llm_args) \
 	$(helm_autorag_args) \
 	$(helm_lightspeed_args) \
+	$(helm_slack_args) \
 	$(HELM_EXTRA_ARGS)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -273,7 +280,6 @@ build-mcp-images:
 	$(CONTAINER_TOOL) build -t $(MCP_LOKISTACK_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-lokistack  --build-arg MODULE_NAME=mcp_lokistack  -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_KAFKA_IMG)      --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-kafka      --build-arg MODULE_NAME=mcp_kafka      -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_AAP_IMG)        --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-aap        --build-arg MODULE_NAME=mcp_aap        -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
-	$(CONTAINER_TOOL) build -t $(MCP_SLACK_IMG)      --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-slack      --build-arg MODULE_NAME=mcp_slack      -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_SERVICENOW_IMG) --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-servicenow --build-arg MODULE_NAME=mcp_servicenow -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 
 .PHONY: push-all-images
@@ -427,13 +433,11 @@ ifeq ($(ENABLE_HUB),true)
 	PF5_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
 	PF6_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-slack 8005:8000 & \
-	PF7_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
 	PF8_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
 	PF9_PID=$$!; \
-	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF7_PID $$PF8_PID $$PF9_PID $$PF10_PID" EXIT; \
+	trap "kill $$PF1_PID $$PF2_PID $$PF3_PID $$PF4_PID $$PF5_PID $$PF6_PID $$PF8_PID $$PF9_PID $$PF10_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
 	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest
 else

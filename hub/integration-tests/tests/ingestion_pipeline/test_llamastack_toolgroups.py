@@ -28,7 +28,6 @@ def _assert_mcp_toolgroup(toolgroups, identifier: str, service_name: str):
         ("mcp::noc-openshift", "mcp-noc-openshift"),
         ("mcp::noc-kafka", "mcp-noc-kafka"),
         ("mcp::noc-aap", "mcp-noc-aap"),
-        ("mcp::noc-slack", "mcp-noc-slack"),
         ("mcp::noc-servicenow", "mcp-noc-servicenow"),
     ],
 )

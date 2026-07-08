@@ -90,7 +90,6 @@ _SERVICES: dict[str, _ServiceCfg] = {
     "lokistack": _ServiceCfg(port=8002, timeout=30),
     "kafka": _ServiceCfg(port=8003, timeout=60),
     "aap": _ServiceCfg(port=8004, timeout=30),
-    "slack": _ServiceCfg(port=8005, timeout=30),
     "servicenow": _ServiceCfg(port=8006, timeout=30),
 }
 
@@ -164,12 +163,6 @@ def mcp_kafka_client():
 @pytest.fixture(scope="session")
 def mcp_aap_client():
     with _make_client("aap") as client:
-        yield client
-
-
-@pytest.fixture(scope="session")
-def mcp_slack_client():
-    with _make_client("slack") as client:
         yield client
 
 

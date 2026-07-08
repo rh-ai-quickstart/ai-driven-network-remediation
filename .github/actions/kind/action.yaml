@@ -98,7 +98,7 @@ runs:
 
     - name: Wait for MCP pods to be ready
       run: |
-        for label in noc-kafka noc-openshift noc-aap noc-slack noc-servicenow; do
+        for label in noc-kafka noc-openshift noc-aap noc-servicenow; do
           echo "Waiting for ${label}..."
           oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=${label}" -n hub --timeout=120s
         done
