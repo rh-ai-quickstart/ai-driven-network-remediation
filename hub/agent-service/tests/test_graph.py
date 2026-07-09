@@ -160,6 +160,7 @@ class TestGraphCompilation:
     def test_expected_nodes_present(self):
         for name in ("remediate", "lightspeed", "audit"):
             assert name in self.nodes
+
     def test_audit_is_terminal_node_before_end(self):
         end_sources = [e.source for e in self.edges if e.target == "__end__"]
         assert end_sources == ["audit"]
