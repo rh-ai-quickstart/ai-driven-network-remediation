@@ -140,6 +140,7 @@ def _patch_graph_nodes():
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
         patch("agent_service.nodes.lightspeed._call_ols", _ols_mock),
         patch("agent_service.nodes.lightspeed._invoke_tool", _mock_invoke_tool()),
+        patch("agent_service.nodes.audit.KafkaProducer"),
     ):
         yield
 

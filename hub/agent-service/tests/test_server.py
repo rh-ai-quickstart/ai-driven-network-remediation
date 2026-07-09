@@ -12,7 +12,8 @@ INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 
 @pytest.fixture
 def client():
-    with patch("agent_service.server.AlertConsumer"):
+    with patch("agent_service.server.AlertConsumer"), \
+         patch("agent_service.nodes.audit.KafkaProducer"):
         with TestClient(app) as test_client:
             yield test_client
 
