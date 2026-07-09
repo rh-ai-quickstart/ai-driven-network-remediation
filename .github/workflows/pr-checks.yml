@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   unit-tests:
+    if: github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
     name: Run unit tests
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +29,7 @@ jobs:
         run: make unit-tests
 
   e2e-tests:
+    if: github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
     name: Run e2e tests
     runs-on: ubuntu-latest
     steps:
