@@ -42,7 +42,7 @@ def _seed() -> None:
     for name, playbook, desc in [
         ("restart-nginx", "restart.yml", "Restart nginx on edge"),
         ("scale-up-workers", "scale.yml", "Scale up worker replicas"),
-        ("lightspeed-runner", "playbooks/lightspeed-generate-and-run.yaml", "Run OLS-generated playbook"),
+        ("lightspeed-runner", "playbooks/lightspeed-generate-and-run.yaml", "Run ALS-generated playbook"),
     ]:
         job_templates_db[_next_template_id] = {
             "id": _next_template_id,

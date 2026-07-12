@@ -106,21 +106,12 @@ _STUB_RCA = RootCauseAnalysis(
     runbook_reference="runbook-001",
 )
 
-_OLS_STUB_RESPONSE = {
+_ALS_STUB_RESPONSE = {
     "conversation_id": "stub-conv-id",
     "response": "- hosts: all\n  tasks: []",
 }
 
-
-_ols_mock = AsyncMock(return_value=_OLS_STUB_RESPONSE)
-
-_OLS_STUB_RESPONSE = {
-    "conversation_id": "stub-conv-id",
-    "response": "- hosts: all\n  tasks: []",
-}
-
-
-_ols_mock = AsyncMock(return_value=_OLS_STUB_RESPONSE)
+_als_mock = AsyncMock(return_value=_ALS_STUB_RESPONSE)
 
 
 async def _mock_escalate_invoke(tool_name, kwargs):
@@ -131,14 +122,14 @@ async def _mock_escalate_invoke(tool_name, kwargs):
 
 @pytest.fixture
 def _patch_graph_nodes():
-    _ols_mock.reset_mock()
+    _als_mock.reset_mock()
     with (
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
         patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke),
-        patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
-        patch("agent_service.nodes.lightspeed._call_ols", _ols_mock),
+        patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://als-stub"),
+        patch("agent_service.nodes.lightspeed._call_als", _als_mock),
         patch("agent_service.nodes.lightspeed._invoke_tool", _mock_invoke_tool()),
         patch("agent_service.nodes.audit.KafkaProducer"),
     ):

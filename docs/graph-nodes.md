@@ -54,13 +54,13 @@ Runs an AAP (Ansible Automation Platform) job to fix the incident.
 
 ### lightspeed
 
-Generates an Ansible playbook via OpenShift Lightspeed Service (OLS) for failure types without a known runbook, then executes it through AAP.
+Generates an Ansible playbook via Ansible Lightspeed (ALS) for failure types without a known runbook, then executes it through AAP.
 
 **Flow:**
 
 1. If `LIGHTSPEED_URL` is not configured, returns a stub result (`lightspeed-disabled`) and skips to `notify`.
 2. Builds a prompt from the RCA (`failure_type`, `recommended_actions`, `summary`, `evidence`) and log event context (namespace, pod, container, edge site).
-3. Sends the prompt with attachments to OLS (`POST {LIGHTSPEED_URL}/v1/query`).
+3. Sends the prompt with attachments to ALS (`POST {LIGHTSPEED_URL}/v1/query`).
 4. Extracts YAML from the response, stripping markdown fences if present.
 5. Derives a playbook name from the YAML `plays[0].name` or falls back to `remediate-{failure_type}-{scope}`.
 6. Upserts an AAP job template using a wrapper playbook (`lightspeed-generate-and-run.yaml`) and launches the job with extra vars containing the generated YAML. Unlike `remediate`, the node does not poll for job completion.
@@ -71,13 +71,13 @@ Generates an Ansible playbook via OpenShift Lightspeed Service (OLS) for failure
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LIGHTSPEED_URL` | *(empty, disables node)* | OLS endpoint |
+| `LIGHTSPEED_URL` | *(empty, disables node)* | ALS endpoint |
 | `LIGHTSPEED_TOKEN` | | Bearer auth token |
 | `LIGHTSPEED_VERIFY_SSL` | `false` | TLS verification |
 
 **Key files:**
 
-- `lightspeed.py` - node factory, OLS query, YAML extraction, AAP execution
+- `lightspeed.py` - node factory, ALS query, YAML extraction, AAP execution
 - `config.py` - Lightspeed and AAP settings
 
 ### escalate

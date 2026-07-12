@@ -47,18 +47,17 @@ LIGHTSPEED_VERIFY_SSL = os.getenv("LIGHTSPEED_VERIFY_SSL", "false").lower() == "
 # Configurable via env var to allow prompt experimentation without redeploying
 LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "LIGHTSPEED_PROMPT_TEMPLATE",
-    "The following issue was detected in an OpenShift cluster. "
-    "Analyze the problem based on the description and findings below, "
-    "then generate an Ansible playbook that REMEDIATES (fixes) the issue. "
-    "Do NOT generate an investigation or diagnostic playbook.\n\n"
+    "Generate an Ansible playbook to remediate this OpenShift cluster issue. "
+    "Prefer the kubernetes.core collection when applicable.\n\n"
     "Failure type: {failure_type}\n"
     "Severity: {severity}\n"
     "Namespace: {namespace}\n"
     "Pod: {pod_name}\n"
     "Summary: {summary}\n\n"
-    "Problem description and findings:\n{evidence}\n\n"
+    "Evidence:\n{evidence}\n\n"
     "Recommended actions: {recommended_actions}\n\n"
-    "Return ONLY a valid Ansible YAML playbook, no explanation.",
+    "The playbook must apply a corrective fix, not investigate or diagnose. "
+    "Return ONLY valid Ansible YAML, no explanation or markdown fences.",
 )
 
 LIGHTSPEED_WRAPPER_PLAYBOOK = os.getenv(

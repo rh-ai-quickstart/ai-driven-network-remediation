@@ -4,14 +4,13 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-{{ .Release.Namespace }}-to-lightspeed
-  namespace: openshift-lightspeed
+  namespace: {{ .Values.agentService.lightspeed.namespace | default "aap" }}
   labels:
     {{- include "hub.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: application-server
-      app.kubernetes.io/name: lightspeed-service-api
+      app.kubernetes.io/component: ansible-lightspeed-api
   policyTypes:
     - Ingress
   ingress:

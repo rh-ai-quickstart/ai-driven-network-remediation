@@ -83,13 +83,13 @@ For hub-spoke mode, each edge cluster requires OpenShift 4.21+ (SNO supported) w
 | Llama Stack K8s Operator | latest |
 | Advanced Cluster Management | 2.15+ |
 | OpenShift Logging + Loki Operator | 6.4+ |
-| OpenShift Lightspeed Operator | latest |
+| Ansible Automation Platform Operator | 2.5+ |
 
-**OpenShift Lightspeed setup:**
+**Ansible Lightspeed setup:**
 
-OpenShift Lightspeed is required for this quickstart. The Lightspeed Operator must be installed and its service reachable in-cluster before deploying. For installation instructions, see the [Red Hat Lightspeed documentation](https://docs.redhat.com/en/documentation/red_hat_lightspeed/1-latest/html/monitoring_your_openshift_cluster_health_with_red_hat_lightspeed_advisor/using-insights-advisor).
+Ansible Lightspeed (the intelligent assistant chatbot) is required for playbook generation. Deploy the AAP operator and enable Lightspeed in the `AnsibleAutomationPlatform` CR (`spec.lightspeed.disabled: false`). For installation instructions, see the [AAP on OpenShift documentation](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/installing_on_openshift_container_platform/deploying-chatbot-operator).
 
-The Makefile auto-discovers the Lightspeed service URL, or you can set `LIGHTSPEED_URL` explicitly. The Helm chart creates either a ServiceAccount-based token (auto) or uses a manually provided `LIGHTSPEED_TOKEN` for authentication against the OLS API.
+Set `LIGHTSPEED_URL` to the chatbot service endpoint. The Helm chart supports referencing an external API key secret via `tokenSecretName`, or uses a manually provided `LIGHTSPEED_TOKEN` for authentication against the ALS API.
 
 For development only, Lightspeed can be disabled with `ENABLE_LIGHTSPEED=false`.
 

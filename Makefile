@@ -32,6 +32,8 @@ ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
+LIGHTSPEED_VERIFY_SSL  ?= false
+AAP_NAMESPACE          ?= aap
 ENABLE_SLACK           ?= false
 SLACK_BOT_TOKEN        ?=
 SLACK_CHANNEL          ?= \#ai-driven-network
@@ -127,15 +129,20 @@ helm_lokistack_args = \
 ifeq ($(ENABLE_LIGHTSPEED),true)
 ifndef LIGHTSPEED_URL
 LIGHTSPEED_URL = $(shell oc get svc -A --no-headers 2>/dev/null | \
-	awk '/lightspeed.*app/{ns=$$1; name=$$2; split($$6,p,"/"); printf "https://%s.%s.svc:%s", name, ns, p[1]; exit}')
+	awk '/lightspeed-chatbot-api/{ns=$$1; name=$$2; split($$6,p,"/"); printf "https://%s.%s.svc:%s", name, ns, p[1]; exit}')
 ifeq ($(LIGHTSPEED_URL),)
-$(error ENABLE_LIGHTSPEED=true but no Lightspeed service found and LIGHTSPEED_URL not set. Set LIGHTSPEED_URL explicitly or install the Lightspeed operator.)
+$(error ENABLE_LIGHTSPEED=true but no Lightspeed service found and LIGHTSPEED_URL not set. Set LIGHTSPEED_URL explicitly or install the AAP operator with Lightspeed enabled.)
 endif
+endif
+ifndef LIGHTSPEED_TOKEN
+LIGHTSPEED_TOKEN := $(shell oc get secret aap-lightspeed-chatbot-api-key -n $(AAP_NAMESPACE) -o jsonpath='{.data.api_key}' 2>/dev/null | base64 -d 2>/dev/null)
 endif
 endif
 
 helm_lightspeed_args = \
-	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.url='$(LIGHTSPEED_URL)',)
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.url='$(LIGHTSPEED_URL)',) \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.token='$(LIGHTSPEED_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',)
 
 helm_slack_args = \
 	--set agentService.slack.enabled=$(ENABLE_SLACK) \
@@ -235,16 +242,22 @@ check-adnr-llm-config:
 
 .PHONY: _check-lightspeed-operator
 _check-lightspeed-operator:
-	@oc get csv -A 2>/dev/null | grep -q "lightspeed-operator" || \
+	@oc get csv -A 2>/dev/null | grep -q "aap-operator" || \
 		{ echo ""; \
-		  echo "ERROR: Lightspeed Operator is not installed on this cluster."; \
+		  echo "ERROR: AAP Operator is not installed on this cluster."; \
 		  echo ""; \
-		  echo "To install the Lightspeed Operator:"; \
+		  echo "To install the AAP Operator with Lightspeed:"; \
 		  echo "  1. In the OpenShift web console, navigate to:"; \
 		  echo "     Operators → OperatorHub"; \
-		  echo "  2. Search for 'Ansible Lightspeed'"; \
+		  echo "  2. Search for 'Ansible Automation Platform'"; \
 		  echo "  3. Click 'Install' and follow the installation wizard"; \
-		  echo "  4. Wait for the operator to become ready"; \
+		  echo "  4. Create an AnsibleAutomationPlatform CR with lightspeed.disabled=false"; \
+		  echo ""; \
+		  exit 1; }
+	@oc get svc -A --no-headers 2>/dev/null | grep -q "lightspeed-chatbot-api" || \
+		{ echo ""; \
+		  echo "ERROR: AAP Operator found but no lightspeed-chatbot-api service detected."; \
+		  echo "Ensure Lightspeed is enabled in the AnsibleAutomationPlatform CR (spec.lightspeed.disabled: false)."; \
 		  echo ""; \
 		  exit 1; }
 

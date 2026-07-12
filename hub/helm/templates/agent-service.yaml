@@ -42,18 +42,22 @@ spec:
               value: {{ .Values.agentService.env.kafkaConsumerEnabled | quote }}
             - name: LIGHTSPEED_URL
               value: {{ .Values.agentService.lightspeed.url | quote }}
-            {{- if and .Values.agentService.lightspeed.url (not .Values.agentService.lightspeed.token) }}
+            {{- if .Values.agentService.lightspeed.tokenSecretName }}
             - name: LIGHTSPEED_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: noc-lightspeed-token
-                  key: token
+                  name: {{ .Values.agentService.lightspeed.tokenSecretName }}
+                  key: {{ .Values.agentService.lightspeed.tokenSecretKey | default "api_key" }}
             {{- else if .Values.agentService.lightspeed.token }}
             - name: LIGHTSPEED_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: noc-lightspeed-secret
                   key: LIGHTSPEED_TOKEN
+            {{- end }}
+            {{- if .Values.agentService.lightspeed.url }}
+            - name: LIGHTSPEED_VERIFY_SSL
+              value: {{ .Values.agentService.lightspeed.verifySSL | quote }}
             {{- end }}
             - name: LIGHTSPEED_WRAPPER_PLAYBOOK
               value: {{ .Values.agentService.lightspeed.wrapperPlaybook | quote }}

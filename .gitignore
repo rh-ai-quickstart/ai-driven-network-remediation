@@ -94,3 +94,4 @@ scripts/ci/test-local.sh
 scripts/ci/test-local.sh
 .claude/
 
+dev-private/

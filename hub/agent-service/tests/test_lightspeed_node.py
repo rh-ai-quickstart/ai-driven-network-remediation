@@ -16,7 +16,7 @@ from agent_service.nodes.lightspeed import (
     lightspeed_node,
 )
 
-_OLS_RESPONSE = {
+_ALS_RESPONSE = {
     "conversation_id": "conv-123",
     "response": "```yaml\n- hosts: all\n  tasks: []\n```",
     "referenced_documents": [],
@@ -57,25 +57,25 @@ async def _default_invoke(tool_name, kwargs):
 
 
 async def _run_node(
-    ols_return=None,
-    ols_side_effect=None,
+    als_return=None,
+    als_side_effect=None,
     invoke_fn=None,
     **state_kw,
 ):
-    ols_mock = AsyncMock(
-        return_value=ols_return,
-        side_effect=ols_side_effect,
+    als_mock = AsyncMock(
+        return_value=als_return,
+        side_effect=als_side_effect,
     )
     if invoke_fn is None:
         invoke_fn = _default_invoke
     invoke_mock = AsyncMock(side_effect=invoke_fn)
     with (
-        patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://ols-stub"),
-        patch("agent_service.nodes.lightspeed._call_ols", ols_mock),
+        patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "https://als-stub"),
+        patch("agent_service.nodes.lightspeed._call_als", als_mock),
         patch("agent_service.nodes.lightspeed._invoke_tool", invoke_mock),
     ):
         result = await lightspeed_node(_state(**state_kw))
-    return result, ols_mock, invoke_mock
+    return result, als_mock, invoke_mock
 
 
 # -- _build_playbook_name --
@@ -199,7 +199,7 @@ def test_attachments_content():
 
 class TestLightspeedNodeSuccess:
     async def test_returns_successful_result(self):
-        result, _, invoke_mock = await _run_node(ols_return=_OLS_RESPONSE)
+        result, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
 
         assert result["decision"] == "lightspeed"
         rr = result["remediation_result"]
@@ -212,8 +212,8 @@ class TestLightspeedNodeSuccess:
         assert rr.duration_seconds >= 0
         assert invoke_mock.call_count == 2
 
-    async def test_passes_prompt_and_attachments_to_ols(self):
-        _, mock, _ = await _run_node(ols_return=_OLS_RESPONSE)
+    async def test_passes_prompt_and_attachments_to_als(self):
+        _, mock, _ = await _run_node(als_return=_ALS_RESPONSE)
         prompt, attachments = mock.call_args[0]
         for expected in [
             "OOMKilled",
@@ -229,7 +229,7 @@ class TestLightspeedNodeSuccess:
 
     async def test_no_rca(self):
         result, _, _ = await _run_node(
-            ols_return=_OLS_RESPONSE,
+            als_return=_ALS_RESPONSE,
             rca=None,
             use_defaults=False,
         )
@@ -239,15 +239,15 @@ class TestLightspeedNodeSuccess:
 
     async def test_no_log_event(self):
         result, _, _ = await _run_node(
-            ols_return=_OLS_RESPONSE,
+            als_return=_ALS_RESPONSE,
             log_event=None,
             use_defaults=False,
         )
         name = result["remediation_result"].generated_playbook_name
         assert "cluster" in name
 
-    async def test_empty_ols_response(self):
-        result, _, _ = await _run_node(ols_return={"response": ""})
+    async def test_empty_als_response(self):
+        result, _, _ = await _run_node(als_return={"response": ""})
         rr = result["remediation_result"]
         assert rr.success is True
         assert rr.generated_playbook_preview == ""
@@ -258,7 +258,7 @@ class TestLightspeedNodeSuccess:
 
 class TestAAPExecution:
     async def test_upsert_uses_wrapper_playbook(self):
-        _, _, invoke_mock = await _run_node(ols_return=_OLS_RESPONSE)
+        _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
 
         upsert_call = invoke_mock.call_args_list[0]
         assert upsert_call[0][0] == "upsert_job_template"
@@ -268,7 +268,7 @@ class TestAAPExecution:
         assert args["template_name"] == "remediate-oomkilled-nginx-abc123"
 
     async def test_launch_extra_vars_contain_generated_yaml(self):
-        _, _, invoke_mock = await _run_node(ols_return=_OLS_RESPONSE)
+        _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
 
         launch_call = invoke_mock.call_args_list[1]
         assert launch_call[0][0] == "launch_job"
@@ -286,7 +286,7 @@ class TestAAPExecution:
             return _LAUNCH_OK
 
         result, _, invoke_mock = await _run_node(
-            ols_return=_OLS_RESPONSE,
+            als_return=_ALS_RESPONSE,
             invoke_fn=upsert_fails,
         )
 
@@ -303,7 +303,7 @@ class TestAAPExecution:
             return {"success": False, "error": "quota exceeded"}
 
         result, _, _ = await _run_node(
-            ols_return=_OLS_RESPONSE,
+            als_return=_ALS_RESPONSE,
             invoke_fn=launch_fails,
         )
 
@@ -313,7 +313,7 @@ class TestAAPExecution:
 
     async def test_no_log_event_still_has_playbook_vars(self):
         result, _, invoke_mock = await _run_node(
-            ols_return=_OLS_RESPONSE,
+            als_return=_ALS_RESPONSE,
             log_event=None,
             use_defaults=False,
         )
@@ -328,7 +328,7 @@ class TestAAPExecution:
         assert "namespace" not in extra_vars
 
 
-# -- OLS failure --
+# -- ALS failure --
 
 
 class TestLightspeedNodeFailure:
@@ -345,7 +345,7 @@ class TestLightspeedNodeFailure:
         ],
     )
     async def test_exceptions_return_failure(self, exc):
-        result, _, invoke_mock = await _run_node(ols_side_effect=exc)
+        result, _, invoke_mock = await _run_node(als_side_effect=exc)
         rr = result["remediation_result"]
         assert rr.success is False
         assert rr.job_id == ""

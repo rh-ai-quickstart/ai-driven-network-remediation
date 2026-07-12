@@ -23,22 +23,22 @@ from agent_service.utils import invoke_tool as _invoke_tool
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
 
 
-_ols_client: httpx.AsyncClient | None = None
+_als_client: httpx.AsyncClient | None = None
 
 
-def _get_ols_client() -> httpx.AsyncClient:
-    global _ols_client
-    if _ols_client is None:
+def _get_als_client() -> httpx.AsyncClient:
+    global _als_client
+    if _als_client is None:
         headers: dict[str, str] = {}
         if LIGHTSPEED_TOKEN:
             headers["Authorization"] = f"Bearer {LIGHTSPEED_TOKEN}"
-        _ols_client = httpx.AsyncClient(
+        _als_client = httpx.AsyncClient(
             base_url=LIGHTSPEED_URL,
             timeout=LIGHTSPEED_TIMEOUT_SECONDS,
             headers=headers,
             verify=LIGHTSPEED_VERIFY_SSL,
         )
-    return _ols_client
+    return _als_client
 
 
 def _build_playbook_name(rca, log_event) -> str:
@@ -79,7 +79,7 @@ def _playbook_name_from_parsed(parsed, rca, log_event) -> str:
 
 
 def _build_prompt(rca, log_event) -> str:
-    """Fill the OLS prompt template with RCA + log context."""
+    """Fill the ALS prompt template with RCA + log context."""
     return LIGHTSPEED_PROMPT_TEMPLATE.format(
         failure_type=rca.failure_type if rca else "Unknown",
         severity=rca.estimated_severity if rca else "unknown",
@@ -124,8 +124,8 @@ def _build_extra_vars(log_event, playbook_name, playbook_yaml):
     return ev
 
 
-async def _call_ols(prompt: str, attachments: list[dict]) -> dict:
-    resp = await _get_ols_client().post(
+async def _call_als(prompt: str, attachments: list[dict]) -> dict:
+    resp = await _get_als_client().post(
         "/v1/query",
         json={"query": prompt, "attachments": attachments},
     )
@@ -145,7 +145,7 @@ async def _upsert_template(name: str) -> dict:
 
 
 # TODO: remove stub once LIGHTSPEED_URL is always set in deployment.
-# Without it, the decide node can route here when no OLS is configured,
+# Without it, the decide node can route here when no ALS is configured,
 # producing a confusing httpx error instead of a clean pass-through.
 def _stub_result() -> dict:
     result = RemediationResult(
@@ -161,7 +161,7 @@ def _stub_result() -> dict:
 
 
 async def lightspeed_node(state) -> dict:
-    """Ask OLS to generate an Ansible playbook from RCA."""
+    """Ask Ansible Lightspeed to generate an Ansible playbook from RCA."""
     logger.info("Lightspeed node invoked")
 
     if not LIGHTSPEED_URL:
@@ -175,22 +175,18 @@ async def lightspeed_node(state) -> dict:
     try:
         prompt = _build_prompt(rca, log_event)
         attachments = _build_attachments(rca, log_event)
-        logger.debug("OLS prompt: {}", prompt)
-        logger.info("OLS attachments count: {}", len(attachments))
+        logger.debug(f"ALS prompt: {prompt}")
+        logger.info(f"ALS attachments count: {len(attachments)}")
 
-        data = await _call_ols(prompt, attachments)
+        data = await _call_als(prompt, attachments)
         duration = time.monotonic() - t0
-        logger.debug("Raw OLS response: {}", data)
+        logger.debug(f"Raw ALS response: {data}")
 
         playbook_yaml, parsed = _extract_yaml(data.get("response", ""))
         playbook_name = _playbook_name_from_parsed(parsed, rca, log_event)
 
-        logger.info(
-            "OLS responded in {:.2f}s, conversation_id={}",
-            duration,
-            data.get("conversation_id", ""),
-        )
-        logger.debug("Generated playbook '{}':\n{}", playbook_name, playbook_yaml)
+        logger.info(f"ALS responded in {duration:.2f}s, conversation_id={data.get('conversation_id', '')}")
+        logger.debug(f"Generated playbook '{playbook_name}':\n{playbook_yaml}")
 
         result = RemediationResult(
             action_taken="generate-playbook",
@@ -207,7 +203,7 @@ async def lightspeed_node(state) -> dict:
         )
     except Exception:
         duration = time.monotonic() - t0
-        logger.exception("Lightspeed call failed after {:.2f}s", duration)
+        logger.exception(f"Lightspeed call failed after {duration:.2f}s")
         result = RemediationResult(
             action_taken="generate-playbook",
             tool_used="lightspeed",
@@ -221,7 +217,7 @@ async def lightspeed_node(state) -> dict:
 
     try:
         if LIGHTSPEED_SKIP_AAP:
-            logger.info("LIGHTSPEED_SKIP_AAP=true, skipping AAP execution for '{}'", playbook_name)
+            logger.info(f"LIGHTSPEED_SKIP_AAP=true, skipping AAP execution for '{playbook_name}'")
         else:
             result = await _execute_in_aap(
                 result,
@@ -230,7 +226,7 @@ async def lightspeed_node(state) -> dict:
                 log_event,
             )
     except Exception:
-        logger.exception("AAP execution failed for playbook '{}'", playbook_name)
+        logger.exception(f"AAP execution failed for playbook '{playbook_name}'")
         result = result.model_copy(
             update={
                 "success": False,
@@ -251,7 +247,7 @@ async def _execute_in_aap(
     upsert = await _upsert_template(name)
     if not upsert.get("success"):
         error = upsert.get("error", "upsert failed")
-        logger.warning("upsert_job_template failed: {}", error)
+        logger.warning(f"upsert_job_template failed: {error}")
         return result.model_copy(
             update={
                 "success": False,
@@ -267,7 +263,7 @@ async def _execute_in_aap(
     )
     if not launch.get("success"):
         error = launch.get("error", "launch failed")
-        logger.warning("launch_job failed: {}", error)
+        logger.warning(f"launch_job failed: {error}")
         return result.model_copy(
             update={
                 "success": False,

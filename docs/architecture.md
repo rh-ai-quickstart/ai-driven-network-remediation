@@ -104,8 +104,8 @@ Use for production edge operations across multiple sites.
 5. ACT (conditional branch)
    ├─ REMEDIATE (AAP)
    │   └─ Launch & poll AAP job template (retry → DECIDE on failure)
-   ├─ LIGHTSPEED (OLS + AAP)
-   │   └─ OLS generates Ansible playbook, then executes via AAP
+   ├─ LIGHTSPEED (ALS + AAP)
+   │   └─ ALS generates Ansible playbook, then executes via AAP
    └─ ESCALATE (ServiceNow)
        └─ Create ServiceNow incident
 

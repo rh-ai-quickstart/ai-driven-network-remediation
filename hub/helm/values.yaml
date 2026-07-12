@@ -337,6 +337,10 @@ agentService:
   lightspeed:
     url: ""
     token: ""
+    tokenSecretName: ""
+    tokenSecretKey: "api_key"
+    verifySSL: "false"
+    namespace: "aap"
     wrapperPlaybook: "playbooks/lightspeed-generate-and-run.yaml"
     baseTemplateName: "lightspeed-runner"
   slack:
