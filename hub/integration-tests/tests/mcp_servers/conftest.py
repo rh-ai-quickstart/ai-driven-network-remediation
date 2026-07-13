@@ -121,20 +121,6 @@ def _wait_for_all_services():
         _wait_for_service(svc, name)
 
 
-_MAX_RERUN_DELAY = 32
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_setup(item):
-    """Apply exponential backoff between reruns for flaky-marked tests."""
-    if not item.get_closest_marker("flaky"):
-        return
-    count = getattr(item, "execution_count", 0)
-    if count > 0:
-        delay = min(2**count, _MAX_RERUN_DELAY)
-        time.sleep(delay)
-
-
 def _make_client(name: str) -> httpx.Client:
     svc = _SERVICES[name]
     return httpx.Client(base_url=svc.base_url, timeout=svc.timeout)
