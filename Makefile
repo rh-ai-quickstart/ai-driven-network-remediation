@@ -1,6 +1,6 @@
 CONTAINER_TOOL  ?= podman
 REGISTRY        ?= quay.io/rh-ai-quickstart
-VERSION         ?= 0.1.0
+VERSION         ?= 0.1.5
 ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
 EDGE_NAMESPACE  ?= $(NAMESPACE)
