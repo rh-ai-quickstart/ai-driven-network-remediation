@@ -44,6 +44,7 @@ class AlertConsumer:
         self._poll_timeout_ms = poll_timeout_ms
         self._consumer: KafkaConsumer | None = None
         self._running = False
+        self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
@@ -58,8 +59,13 @@ class AlertConsumer:
             self._group_id,
         )
 
+    @property
+    def is_connected(self) -> bool:
+        return self._running and self._consumer is not None
+
     def stop(self) -> None:
         self._running = False
+        self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=self._poll_timeout_ms / 1000 + 5)
             if self._thread.is_alive():
@@ -75,16 +81,25 @@ class AlertConsumer:
     def _run(self) -> None:
         from agent_service.config import GRAPH_INVOKE_TIMEOUT_SECONDS
 
-        self._consumer = KafkaConsumer(
-            *self._topics,
-            bootstrap_servers=self._bootstrap_servers,
-            group_id=self._group_id,
-            auto_offset_reset="latest",
-            enable_auto_commit=True,
-            # One record per poll: handler blocks for up to GRAPH_INVOKE_TIMEOUT_SECONDS.
-            max_poll_records=1,
-            max_poll_interval_ms=int(GRAPH_INVOKE_TIMEOUT_SECONDS * 1000 * 2),
-        )
+        while self._running:
+            try:
+                self._consumer = KafkaConsumer(
+                    *self._topics,
+                    bootstrap_servers=self._bootstrap_servers,
+                    group_id=self._group_id,
+                    auto_offset_reset="latest",
+                    enable_auto_commit=True,
+                    max_poll_records=1,
+                    max_poll_interval_ms=int(GRAPH_INVOKE_TIMEOUT_SECONDS * 1000 * 2),
+                )
+                break
+            except Exception:
+                logger.warning(f"Kafka not reachable at {self._bootstrap_servers}, retrying in 5s")
+                self._stop_event.wait(5)
+
+        if not self._running:
+            return
+
         try:
             while self._running:
                 records = self._consumer.poll(timeout_ms=self._poll_timeout_ms)

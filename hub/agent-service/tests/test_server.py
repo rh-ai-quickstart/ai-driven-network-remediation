@@ -31,10 +31,27 @@ class TestHealthEndpoint:
 
 
 class TestReadyEndpoint:
-    def test_ready_returns_true(self, client):
+    @patch("agent_service.server.KAFKA_CONSUMER_ENABLED", False)
+    def test_ready_skips_kafka_when_consumer_disabled(self, client):
         response = client.get("/ready")
         assert response.status_code == 200
         assert response.json() == {"ready": True}
+
+    def test_ready_returns_true_when_consumer_connected(self, client):
+        mock_consumer = MagicMock()
+        mock_consumer.is_connected = True
+        client.app.state.kafka_consumer = mock_consumer
+        response = client.get("/ready")
+        assert response.status_code == 200
+        assert response.json() == {"ready": True}
+
+    def test_ready_returns_503_when_consumer_not_connected(self, client):
+        mock_consumer = MagicMock()
+        mock_consumer.is_connected = False
+        client.app.state.kafka_consumer = mock_consumer
+        response = client.get("/ready")
+        assert response.status_code == 503
+        assert response.json()["ready"] is False
 
 
 class TestRemediateEndpoint:

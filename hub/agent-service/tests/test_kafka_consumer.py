@@ -190,6 +190,55 @@ class TestConsumerLifecycle:
         )
 
     @patch("agent_service.kafka.consumer.KafkaConsumer")
+    def test_retries_connection_until_kafka_available(self, mock_kafka_cls):
+        mock_consumer = MagicMock()
+        mock_consumer.poll.return_value = {}
+        mock_kafka_cls.side_effect = [Exception("no brokers"), Exception("no brokers"), mock_consumer]
+
+        consumer = AlertConsumer(
+            lambda _alert: None,
+            bootstrap_servers="kafka:9092",
+            topics=["system-alerts"],
+            group_id="test-group",
+            poll_timeout_ms=100,
+        )
+        with patch.object(consumer._stop_event, "wait"):
+            consumer.start()
+            import time
+
+            time.sleep(0.3)
+            assert consumer.is_connected is True
+            assert mock_kafka_cls.call_count == 3
+            consumer.stop()
+
+    def test_is_connected_false_before_start(self):
+        consumer = AlertConsumer(
+            lambda _alert: None,
+            bootstrap_servers="kafka:9092",
+            topics=["system-alerts"],
+            group_id="test-group",
+        )
+        assert consumer.is_connected is False
+
+    @patch("agent_service.kafka.consumer.KafkaConsumer")
+    def test_is_connected_true_while_running(self, mock_kafka_cls):
+        mock_kafka_cls.return_value = MagicMock(poll=MagicMock(return_value={}))
+        consumer = AlertConsumer(
+            lambda _alert: None,
+            bootstrap_servers="kafka:9092",
+            topics=["system-alerts"],
+            group_id="test-group",
+            poll_timeout_ms=100,
+        )
+        consumer.start()
+        import time
+
+        time.sleep(0.2)
+        assert consumer.is_connected is True
+        consumer.stop()
+        assert consumer.is_connected is False
+
+    @patch("agent_service.kafka.consumer.KafkaConsumer")
     def test_stop_closes_consumer_once(self, mock_kafka_consumer_cls):
         mock_consumer = MagicMock()
         mock_consumer.poll.return_value = {}

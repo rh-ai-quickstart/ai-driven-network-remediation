@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
@@ -129,8 +130,13 @@ def health():
 
 
 @app.get("/ready")
-def ready():
-    return {"ready": True}
+def ready(req: Request):
+    if not KAFKA_CONSUMER_ENABLED:
+        return {"ready": True}
+    consumer: AlertConsumer | None = getattr(req.app.state, "kafka_consumer", None)
+    if consumer is not None and consumer.is_connected:
+        return {"ready": True}
+    return JSONResponse({"ready": False, "reason": "kafka consumer not connected"}, status_code=503)
 
 
 @app.post("/remediate", response_model=IncidentState)
