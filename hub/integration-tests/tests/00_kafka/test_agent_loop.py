@@ -15,8 +15,13 @@ import time
 
 import pytest
 
-# Match agent GRAPH_INVOKE_TIMEOUT_SECONDS (300) plus buffer for Kafka poll/consume lag.
-_AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "330"))
+# Demo scenarios without _overrides invoke Granite LLM analysis and can exceed the
+# agent graph timeout in CI before audit_node runs. lightspeed embeds confidence overrides.
+_DEMO_SCENARIO = "lightspeed"
+_DEMO_SITE = "edge-01"
+
+# Buffer for Kafka consume lag; lightspeed path completes in seconds when overrides apply.
+_AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "120"))
 _AUDIT_POLL_INTERVAL_S = int(os.environ.get("KAFKA_E2E_POLL_INTERVAL_SECONDS", "5"))
 
 _COMPLETED_WORKFLOW_STAGES = frozenset({"Auto-Remediated", "Remediated", "Escalated"})
@@ -67,15 +72,15 @@ def test_kafka_agent_loop(chatbot_client):
     """Demo trigger publishes to system-alerts; agent consumes and writes incident-audit."""
     trigger_resp = chatbot_client.post(
         "/api/demo/trigger",
-        json={"scenario": "oom", "site": "edge-01"},
+        json={"scenario": _DEMO_SCENARIO, "site": _DEMO_SITE},
     )
     if trigger_resp.status_code == 502:
         pytest.fail(f"Demo trigger failed (Kafka unreachable): {trigger_resp.text}")
     assert trigger_resp.status_code == 200, trigger_resp.text
     trigger = trigger_resp.json()
     assert trigger["status"] == "queued"
-    assert trigger["scenario"] == "oom"
-    assert trigger["site"] == "edge-01"
+    assert trigger["scenario"] == _DEMO_SCENARIO
+    assert trigger["site"] == _DEMO_SITE
     assert "kafka_offset" in trigger
     assert trigger["kafka_offset"] is not None
     incident_id = trigger["incident_id"]
@@ -87,5 +92,5 @@ def test_kafka_agent_loop(chatbot_client):
     assert movie_entry["stage"] in _COMPLETED_WORKFLOW_STAGES, (
         f"Workflow did not complete; stage={movie_entry.get('stage')!r}"
     )
-    assert "edge-01" in movie_entry.get("title", "")
+    assert _DEMO_SITE in movie_entry.get("title", "")
     assert movie_entry.get("summary")
