@@ -2,6 +2,10 @@
 
 Requires a deployed hub stack (chatbot BFF, Kafka, agent-service) with port-forwards
 as set up by ``make integration-tests``.
+
+This module lives under ``00_kafka/`` so it runs before ``chatbot_service/test_bff.py``,
+which also publishes a demo event via ``test_demo_trigger``. The agent consumer handles
+one alert at a time and can block for up to GRAPH_INVOKE_TIMEOUT_SECONDS (300s).
 """
 
 from __future__ import annotations
@@ -11,7 +15,8 @@ import time
 
 import pytest
 
-_AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "180"))
+# Match agent GRAPH_INVOKE_TIMEOUT_SECONDS (300) plus buffer for Kafka poll/consume lag.
+_AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "330"))
 _AUDIT_POLL_INTERVAL_S = int(os.environ.get("KAFKA_E2E_POLL_INTERVAL_SECONDS", "5"))
 
 _COMPLETED_WORKFLOW_STAGES = frozenset({"Auto-Remediated", "Remediated", "Escalated"})
@@ -30,7 +35,11 @@ def _poll_incident_movie(chatbot_client, incident_id: str) -> dict:
     last_movie: list[dict] = []
 
     while time.monotonic() < deadline:
-        response = chatbot_client.get("/api/integrations", params={"force_refresh": True})
+        response = chatbot_client.get(
+            "/api/integrations",
+            params={"force_refresh": True},
+            timeout=60.0,
+        )
         assert response.status_code == 200, response.text
         data = response.json()
         assert _kafka_reachable(data.get("_deps", {})), (
@@ -53,7 +62,7 @@ def _poll_incident_movie(chatbot_client, incident_id: str) -> dict:
 
 
 @pytest.mark.integration
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(reruns=1)
 def test_kafka_agent_loop(chatbot_client):
     """Demo trigger publishes to system-alerts; agent consumes and writes incident-audit."""
     trigger_resp = chatbot_client.post(
