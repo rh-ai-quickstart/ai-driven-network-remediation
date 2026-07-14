@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import time
 
+import httpx
 import pytest
 
 # Demo scenarios without _overrides invoke Granite LLM analysis and can exceed the
@@ -23,6 +24,7 @@ _DEMO_SITE = "edge-01"
 # Buffer for Kafka consume lag; lightspeed path completes in seconds when overrides apply.
 _AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "120"))
 _AUDIT_POLL_INTERVAL_S = int(os.environ.get("KAFKA_E2E_POLL_INTERVAL_SECONDS", "5"))
+_AGENT_READY_TIMEOUT_S = int(os.environ.get("AGENT_READY_TIMEOUT_SECONDS", "120"))
 
 _COMPLETED_WORKFLOW_STAGES = frozenset({"Auto-Remediated", "Remediated", "Escalated"})
 
@@ -32,6 +34,28 @@ def _kafka_reachable(deps: dict) -> bool:
         return True
     unavailable = deps.get("unavailable") or []
     return "kafka" not in unavailable
+
+
+def _wait_for_agent_ready() -> None:
+    """Wait until agent-service reports Kafka consumer connected (PR #105 ready gate)."""
+    base_url = os.environ.get("AGENT_SERVICE_URL", "http://localhost:8007")
+    deadline = time.monotonic() + _AGENT_READY_TIMEOUT_S
+    last_status: int | None = None
+    last_body = ""
+
+    with httpx.Client(base_url=base_url, timeout=10.0) as client:
+        while time.monotonic() < deadline:
+            response = client.get("/ready")
+            last_status = response.status_code
+            last_body = response.text
+            if response.status_code == 200 and response.json().get("ready") is True:
+                return
+            time.sleep(2)
+
+    pytest.fail(
+        f"agent-service not ready within {_AGENT_READY_TIMEOUT_S}s "
+        f"(last /ready status={last_status}, body={last_body})"
+    )
 
 
 def _poll_incident_movie(chatbot_client, incident_id: str) -> dict:
@@ -70,6 +94,8 @@ def _poll_incident_movie(chatbot_client, incident_id: str) -> dict:
 @pytest.mark.flaky(reruns=1)
 def test_kafka_agent_loop(chatbot_client):
     """Demo trigger publishes to system-alerts; agent consumes and writes incident-audit."""
+    _wait_for_agent_ready()
+
     trigger_resp = chatbot_client.post(
         "/api/demo/trigger",
         json={"scenario": _DEMO_SCENARIO, "site": _DEMO_SITE},
