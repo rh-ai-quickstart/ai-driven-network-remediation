@@ -156,7 +156,10 @@ async def _poll_job(job_id: int, timeout: float) -> dict | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            status = await _invoke_tool("get_job_status", {"job_id": job_id})
+            status = await _invoke_tool(
+                "get_job_status",
+                {"job_id": job_id},
+            )
         except Exception:
             logger.exception("Failed to poll job status")
             return None
@@ -171,7 +174,10 @@ async def _poll_job(job_id: int, timeout: float) -> dict | None:
 
 async def _get_output(job_id: int) -> str:
     try:
-        result = await _invoke_tool("get_job_output", {"job_id": job_id})
+        result = await _invoke_tool(
+            "get_job_output",
+            {"job_id": job_id},
+        )
         return result.get("output", "")
     except Exception:
         logger.exception("Failed to get job output")

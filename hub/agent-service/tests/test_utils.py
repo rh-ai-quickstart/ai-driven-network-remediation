@@ -4,14 +4,14 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from agent_service.utils import invoke_tool
+from agent_service.utils import invoke_tool, warm_tool_cache
 
 
-def _response(data, status=200):
+def _response(data, status=200, method="POST", url="http://test/v1/tool-runtime/invoke"):
     return httpx.Response(
         status,
         json=data,
-        request=httpx.Request("POST", "http://test/v1/tool-runtime/invoke"),
+        request=httpx.Request(method, url),
     )
 
 
@@ -51,3 +51,20 @@ async def test_empty_content(_mock_client):
     _mock_client.post.return_value = _response({"content": ""})
     result = await invoke_tool("launch_job", {})
     assert result == {}
+
+
+async def test_warm_tool_cache_calls_list_tools(_mock_client):
+    _mock_client.get.return_value = _response(
+        {"data": [{"name": "tool1"}, {"name": "tool2"}]},
+        method="GET",
+        url="http://test/v1/tools",
+    )
+    result = await warm_tool_cache()
+    assert result is True
+    _mock_client.get.assert_called_once_with("/v1/tools")
+
+
+async def test_warm_tool_cache_survives_failure(_mock_client):
+    _mock_client.get.side_effect = Exception("connection refused")
+    result = await warm_tool_cache()
+    assert result is False

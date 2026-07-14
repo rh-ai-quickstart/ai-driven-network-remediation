@@ -33,6 +33,7 @@ from agent_service.config import (
 from agent_service.graph import build_graph
 from agent_service.kafka.consumer import AlertConsumer, AlertMessage
 from agent_service.models import FailureType, IncidentState
+from agent_service.utils import warm_tool_cache
 
 
 def _extract_overrides(raw_event: str) -> dict:
@@ -90,6 +91,8 @@ def _invoke_graph_for_alert(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.llamastack_ready = await warm_tool_cache()
+
     graph = build_graph()
     app.state.graph = graph
     loop = asyncio.get_running_loop()
@@ -130,13 +133,30 @@ def health():
 
 
 @app.get("/ready")
-def ready(req: Request):
-    if not KAFKA_CONSUMER_ENABLED:
-        return {"ready": True}
-    consumer: AlertConsumer | None = getattr(req.app.state, "kafka_consumer", None)
-    if consumer is not None and consumer.is_connected:
-        return {"ready": True}
-    return JSONResponse({"ready": False, "reason": "kafka consumer not connected"}, status_code=503)
+async def ready(req: Request):
+    not_ready = []
+
+    # LlamaStack: retry warm-up if it failed at startup
+    if not getattr(req.app.state, "llamastack_ready", False):
+        try:
+            req.app.state.llamastack_ready = await asyncio.wait_for(
+                warm_tool_cache(),
+                timeout=3,
+            )
+        except asyncio.TimeoutError:
+            pass
+    if not req.app.state.llamastack_ready:
+        not_ready.append("llamastack")
+
+    # Kafka: only checked when consumer is enabled
+    if KAFKA_CONSUMER_ENABLED:
+        consumer: AlertConsumer | None = getattr(req.app.state, "kafka_consumer", None)
+        if consumer is None or not consumer.is_connected:
+            not_ready.append("kafka")
+
+    if not_ready:
+        return JSONResponse({"ready": False, "reason": ", ".join(not_ready)}, status_code=503)
+    return {"ready": True}
 
 
 @app.post("/remediate", response_model=IncidentState)

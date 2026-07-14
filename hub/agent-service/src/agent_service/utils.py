@@ -1,6 +1,21 @@
 import json
 
+from loguru import logger
+
 from agent_service.config import get_http_client
+
+
+async def warm_tool_cache() -> bool:
+    """Call /v1/tools so LlamaStack indexes MCP tools into its routing cache."""
+    try:
+        resp = await get_http_client().get("/v1/tools")
+        resp.raise_for_status()
+        tools = resp.json().get("data", [])
+        logger.info(f"LlamaStack tool cache warmed: {len(tools)} tools indexed")
+        return True
+    except Exception:
+        logger.warning("Failed to warm LlamaStack tool cache")
+        return False
 
 
 async def invoke_tool(tool_name: str, kwargs: dict) -> dict:

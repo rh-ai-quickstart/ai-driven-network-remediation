@@ -12,7 +12,11 @@ INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 
 @pytest.fixture
 def client():
-    with patch("agent_service.server.AlertConsumer"), patch("agent_service.nodes.audit.KafkaProducer"):
+    with (
+        patch("agent_service.server.AlertConsumer"),
+        patch("agent_service.nodes.audit.KafkaProducer"),
+        patch("agent_service.server.warm_tool_cache", return_value=True),
+    ):
         with TestClient(app) as test_client:
             yield test_client
 
@@ -51,7 +55,27 @@ class TestReadyEndpoint:
         client.app.state.kafka_consumer = mock_consumer
         response = client.get("/ready")
         assert response.status_code == 503
-        assert response.json()["ready"] is False
+        assert "kafka" in response.json()["reason"]
+
+    def test_ready_returns_503_when_llamastack_not_ready(self, client):
+        client.app.state.llamastack_ready = False
+        with patch(
+            "agent_service.server.warm_tool_cache",
+            return_value=False,
+        ):
+            response = client.get("/ready")
+        assert response.status_code == 503
+        assert "llamastack" in response.json()["reason"]
+
+    def test_ready_retries_llamastack_on_probe(self, client):
+        client.app.state.llamastack_ready = False
+        with patch(
+            "agent_service.server.warm_tool_cache",
+            return_value=True,
+        ):
+            response = client.get("/ready")
+        assert response.status_code == 200
+        assert client.app.state.llamastack_ready is True
 
 
 class TestRemediateEndpoint:
@@ -86,6 +110,7 @@ class TestRemediateEndpoint:
 
 
 class TestKafkaLifespan:
+    @patch("agent_service.server.warm_tool_cache", return_value=True)
     @patch("agent_service.server.AlertConsumer")
     @patch.multiple(
         "agent_service.server",
@@ -95,7 +120,7 @@ class TestKafkaLifespan:
         KAFKA_GROUP_ID="test-group",
         build_graph=DEFAULT,
     )
-    def test_lifespan_starts_consumer_when_enabled(self, AlertConsumer, **_mocks):
+    def test_lifespan_starts_consumer_when_enabled(self, AlertConsumer, _warm, **_mocks):
         mock_consumer = MagicMock()
         AlertConsumer.return_value = mock_consumer
 
@@ -110,10 +135,11 @@ class TestKafkaLifespan:
         mock_consumer.start.assert_called_once()
         mock_consumer.stop.assert_called_once()
 
+    @patch("agent_service.server.warm_tool_cache", return_value=True)
     @patch("agent_service.server.AlertConsumer")
     @patch("agent_service.server.KAFKA_CONSUMER_ENABLED", False)
     @patch("agent_service.server.build_graph", return_value=MagicMock())
-    def test_lifespan_skips_consumer_when_disabled(self, _build_graph, AlertConsumer):
+    def test_lifespan_skips_consumer_when_disabled(self, _build_graph, AlertConsumer, _warm):
         with TestClient(app):
             pass
 
