@@ -12,7 +12,11 @@ from agent_service.models import (
     RemediationResult,
     RootCauseAnalysis,
 )
-from agent_service.nodes.audit import audit_node, build_audit_payload, publish_audit_record
+from agent_service.nodes.audit import (
+    audit_node,
+    build_audit_payload,
+    publish_audit_record,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _INCIDENT_AUDIT_SCHEMA = json.loads((_REPO_ROOT / "contracts" / "incident-audit.schema.json").read_text())

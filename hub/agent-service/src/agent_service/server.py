@@ -25,8 +25,8 @@ logging.getLogger("uvicorn.access").addFilter(_ProbeFilter())
 from agent_service.config import (
     GRAPH_INVOKE_TIMEOUT_SECONDS,
     KAFKA_BOOTSTRAP,
-    KAFKA_CONSUMER_ENABLED,
     KAFKA_CONSUME_TOPICS,
+    KAFKA_CONSUMER_ENABLED,
     KAFKA_GROUP_ID,
 )
 from agent_service.graph import build_graph

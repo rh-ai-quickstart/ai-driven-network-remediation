@@ -44,8 +44,7 @@ async def escalate_node(state) -> dict:
     rca = state.root_cause_analysis
 
     short_description = (
-        f"[AI-NOC] {rca.failure_type} – {log_event.pod_name}"
-        f" in {log_event.namespace} ({log_event.edge_site_id})"
+        f"[AI-NOC] {rca.failure_type} – {log_event.pod_name}" f" in {log_event.namespace} ({log_event.edge_site_id})"
     )
 
     description = _build_description(log_event, rca, state.failed_attempts)
@@ -53,11 +52,14 @@ async def escalate_node(state) -> dict:
 
     logger.info(f"Creating ServiceNow incident: {short_description}")
     try:
-        response = await _invoke_tool("create_incident", {
-            "short_description": short_description,
-            "description": description,
-            "priority": priority,
-        })
+        response = await _invoke_tool(
+            "create_incident",
+            {
+                "short_description": short_description,
+                "description": description,
+                "priority": priority,
+            },
+        )
     except Exception as exc:
         reason = str(exc)
         logger.warning(f"ServiceNow escalation failed: {reason}")

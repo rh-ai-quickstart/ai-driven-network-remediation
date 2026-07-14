@@ -9,9 +9,7 @@ from loguru import logger
 from agent_service.config import KAFKA_AUDIT_TOPIC, KAFKA_BOOTSTRAP
 
 # Must match failure_type enum in contracts/incident-audit.schema.json (narrower than FailureType).
-_AUDIT_FAILURE_TYPES = frozenset(
-    {"OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "Unknown"}
-)
+_AUDIT_FAILURE_TYPES = frozenset({"OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "Unknown"})
 
 
 def _audit_failure_type(raw: str | None) -> str:

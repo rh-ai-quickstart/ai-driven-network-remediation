@@ -1,9 +1,10 @@
 import json
 from unittest.mock import AsyncMock, patch
 
+from helpers import make_rca, make_state
+
 from agent_service.models import RemediationResult
 from agent_service.nodes.notify import _build_payload, notify_node
-from helpers import make_rca, make_state
 
 
 def _stub_remediation(**overrides):
@@ -56,9 +57,7 @@ class TestBuildPayload:
 
     def test_remediation_failure(self):
         state = _notify_state(
-            remediation_result=_stub_remediation(
-                success=False, output_summary="timeout"
-            ),
+            remediation_result=_stub_remediation(success=False, output_summary="timeout"),
         )
         dump = _payload_text(_build_payload(state))
 
@@ -121,9 +120,7 @@ class TestBuildPayload:
             decision="escalate",
             remediation_result=None,
         )
-        state.log_event = state.log_event.model_copy(
-            update={"namespace": long_ns, "pod_name": long_pod}
-        )
+        state.log_event = state.log_event.model_copy(update={"namespace": long_ns, "pod_name": long_pod})
         payload = _build_payload(state)
         title = payload["attachments"][0]["blocks"][0]["text"]["text"]
         assert len(title) <= 150
@@ -134,9 +131,7 @@ class TestBuildPayload:
             remediation_result=None,
             servicenow_ticket="INC0012345",
         )
-        with patch(
-            "agent_service.nodes.notify.SERVICENOW_INSTANCE_URL", ""
-        ):
+        with patch("agent_service.nodes.notify.SERVICENOW_INSTANCE_URL", ""):
             dump = _payload_text(_build_payload(state))
 
         assert "Ticket" not in dump
@@ -163,9 +158,7 @@ class TestNotifyNodeHappyPath:
 
         with (
             patch.multiple("agent_service.nodes.notify", **_SLACK_PATCHES),
-            patch(
-                "agent_service.nodes.notify._send_slack_message", fake_send
-            ),
+            patch("agent_service.nodes.notify._send_slack_message", fake_send),
         ):
             result = await notify_node(state)
 
@@ -180,9 +173,7 @@ class TestNotifyNodeError:
 
         with (
             patch.multiple("agent_service.nodes.notify", **_SLACK_PATCHES),
-            patch(
-                "agent_service.nodes.notify._send_slack_message", fake_send
-            ),
+            patch("agent_service.nodes.notify._send_slack_message", fake_send),
             patch("agent_service.nodes.notify.logger") as mock_logger,
         ):
             result = await notify_node(state)

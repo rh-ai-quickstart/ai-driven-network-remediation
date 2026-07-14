@@ -26,9 +26,7 @@ def _format_recent_incidents(integrations_data: dict[str, Any]) -> str:
         return "No recent remediation events."
     lines = []
     for ev in movie[:5]:
-        lines.append(
-            f"  - [{ev.get('stage')}] {ev.get('title')}: {ev.get('summary', '')[:200]}"
-        )
+        lines.append(f"  - [{ev.get('stage')}] {ev.get('title')}: {ev.get('summary', '')[:200]}")
     return "\n".join(lines)
 
 

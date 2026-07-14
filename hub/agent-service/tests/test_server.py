@@ -1,19 +1,18 @@
 import asyncio
-from unittest.mock import AsyncMock, DEFAULT, MagicMock, patch
+from unittest.mock import DEFAULT, AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agent_service.models import IncidentState
-from agent_service.server import app, _invoke_graph_for_alert
+from agent_service.server import _invoke_graph_for_alert, app
 
 INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 
 
 @pytest.fixture
 def client():
-    with patch("agent_service.server.AlertConsumer"), \
-         patch("agent_service.nodes.audit.KafkaProducer"):
+    with patch("agent_service.server.AlertConsumer"), patch("agent_service.nodes.audit.KafkaProducer"):
         with TestClient(app) as test_client:
             yield test_client
 

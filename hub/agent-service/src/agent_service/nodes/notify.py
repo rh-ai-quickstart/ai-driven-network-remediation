@@ -66,12 +66,11 @@ def _build_payload(state) -> dict:
     severity = rca.estimated_severity.lower() if rca else "info"
     title = _build_title(rca, log_event, severity)
     status, resolution = _resolve_status(
-        state.decision, state.remediation_result,
+        state.decision,
+        state.remediation_result,
     )
     summary = f"{title} - {resolution}"
-    description = (
-        (rca and rca.summary) or (log_event and log_event.message) or ""
-    )
+    description = (rca and rca.summary) or (log_event and log_event.message) or ""
     emoji = _STATUS_EMOJIS.get(status, "")
     resolution_line = f"{emoji} {resolution}" if emoji else resolution
     site = log_event.edge_site_id if log_event else "N/A"
@@ -80,18 +79,18 @@ def _build_payload(state) -> dict:
     # Assemble Block Kit blocks
     blocks = [
         HeaderBlock(text=title),
-        SectionBlock(fields=[
-            f"*Severity:*\n{severity.upper()}",
-            f"*Site:*\n{site}",
-            f"*Time:*\n{timestamp}",
-            f"*Status:*\n{status}",
-        ]),
+        SectionBlock(
+            fields=[
+                f"*Severity:*\n{severity.upper()}",
+                f"*Site:*\n{site}",
+                f"*Time:*\n{timestamp}",
+                f"*Status:*\n{status}",
+            ]
+        ),
     ]
     if description:
-        blocks += [DividerBlock(),
-                   SectionBlock(text=f"*Description:*\n{description}")]
-    blocks += [DividerBlock(),
-               SectionBlock(text=f"*Resolution:*\n{resolution_line}")]
+        blocks += [DividerBlock(), SectionBlock(text=f"*Description:*\n{description}")]
+    blocks += [DividerBlock(), SectionBlock(text=f"*Resolution:*\n{resolution_line}")]
 
     # Optional ServiceNow ticket link
     if state.servicenow_ticket and SERVICENOW_INSTANCE_URL:
@@ -117,7 +116,9 @@ async def _send_slack_message(payload: dict) -> str:
     )
     try:
         response = await asyncio.to_thread(
-            client.chat_postMessage, channel=SLACK_CHANNEL, **payload,
+            client.chat_postMessage,
+            channel=SLACK_CHANNEL,
+            **payload,
         )
         return response.get("ts", "")
     except SlackApiError as exc:

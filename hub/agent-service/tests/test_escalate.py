@@ -1,8 +1,9 @@
 from unittest.mock import patch
 
+from helpers import make_state
+
 from agent_service.models import RootCauseAnalysis
 from agent_service.nodes.escalate import escalate_node
-from helpers import make_state
 
 
 def _stub_rca(**overrides):
