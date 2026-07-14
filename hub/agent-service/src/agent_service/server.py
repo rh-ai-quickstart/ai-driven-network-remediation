@@ -138,13 +138,17 @@ async def ready(req: Request):
 
     # LlamaStack: retry warm-up if it failed at startup
     if not getattr(req.app.state, "llamastack_ready", False):
-        try:
-            req.app.state.llamastack_ready = await asyncio.wait_for(
-                warm_tool_cache(),
-                timeout=3,
-            )
-        except asyncio.TimeoutError:
-            pass
+        if not getattr(req.app.state, "_warming", False):
+            req.app.state._warming = True
+            try:
+                req.app.state.llamastack_ready = await asyncio.wait_for(
+                    warm_tool_cache(),
+                    timeout=3,
+                )
+            except asyncio.TimeoutError:
+                pass
+            finally:
+                req.app.state._warming = False
     if not req.app.state.llamastack_ready:
         not_ready.append("llamastack")
 

@@ -10,12 +10,12 @@ async def warm_tool_cache() -> bool:
     try:
         resp = await get_http_client().get("/v1/tools")
         resp.raise_for_status()
-        tools = resp.json().get("data", [])
-        logger.info(f"LlamaStack tool cache warmed: {len(tools)} tools indexed")
-        return True
     except Exception:
-        logger.warning("Failed to warm LlamaStack tool cache")
+        logger.opt(exception=True).warning("Failed to warm LlamaStack tool cache")
         return False
+    tools = resp.json().get("data") or []
+    logger.info(f"LlamaStack tool cache warmed: {len(tools)} tools indexed")
+    return True
 
 
 async def invoke_tool(tool_name: str, kwargs: dict) -> dict:
