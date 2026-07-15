@@ -18,6 +18,11 @@ def pytest_runtest_setup(item):
         time.sleep(delay)
 
 
+def pytest_collection_modifyitems(items):
+    """Run kafka tests first. Agent consumer handles one alert at a time."""
+    items.sort(key=lambda item: 0 if "/kafka/" in str(item.fspath) else 1)
+
+
 @pytest.fixture(scope="session")
 def chatbot_client():
     base_url = os.environ.get("CHATBOT_SERVICE_URL", "http://localhost:8080")
