@@ -250,12 +250,8 @@ helm_infra_args = \
 	--set minio.route.enabled=$(ROUTES_ENABLED) \
 	--set gitea.enabled=$(ENABLE_GITEA)
 
-helm_topology_args = \
-	--set topology.clusterCount=$(CLUSTER_COUNT) \
-	--set-string topology.deploymentMode='$(DEPLOYMENT_MODE)' \
-	--set topology.spokeCount=$(SPOKE_COUNT) \
-	--set-string topology.edgeNamespace='$(EDGE_NAMESPACE)' \
-	--set-string topology.spokeNamePrefix='$(SPOKE_NAME_PREFIX)'
+# topology.* comes solely from -f $(SPOKES_GENERATED) (see helm-install).
+# Do not also --set those fields here; duplicated sources drift.
 
 helm_all_args = \
 	--set image.registry=$(REGISTRY) \
@@ -306,7 +302,7 @@ validate-topology:
 	$(MAKE) render-spokes
 
 .PHONY: helm-install
-helm-install: namespace helm-depend render-spokes
+helm-install: namespace helm-depend validate-topology
 ifeq ($(ENABLE_AAP_MOCK),false)
 	$(MAKE) _check-aap-operator
 endif

@@ -8,20 +8,40 @@ and an oc login to the hub cluster (unless SKIP_OC_CHECK=1).
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
-from lib import build_spokes, deployment_mode_for, spoke_count_for  # noqa: E402
+def _load_topology_lib():
+    path = Path(__file__).resolve().parent / "lib.py"
+    spec = importlib.util.spec_from_file_location("adnr_topology_lib", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load topology lib from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_lib = _load_topology_lib()
+build_spokes = _lib.build_spokes
+deployment_mode_for = _lib.deployment_mode_for
+spoke_count_for = _lib.spoke_count_for
 
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
+
+
+def _parse_cluster_count(raw: str) -> int:
+    try:
+        return int(raw or "1")
+    except ValueError as exc:
+        raise ValueError("CLUSTER_COUNT must be an integer >= 1") from exc
 
 
 def validate_topology(
@@ -105,9 +125,9 @@ def _check_oc_hub() -> tuple[bool, str]:
 
 def main() -> int:
     try:
-        cluster_count = int(_env("CLUSTER_COUNT", "1") or "1")
-    except ValueError:
-        print("ERROR: CLUSTER_COUNT must be an integer >= 1", file=sys.stderr)
+        cluster_count = _parse_cluster_count(_env("CLUSTER_COUNT", "1"))
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
     skip_oc = _env("SKIP_OC_CHECK", "").lower() in {"1", "true", "yes"}

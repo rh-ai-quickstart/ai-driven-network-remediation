@@ -10,19 +10,27 @@ Writes a Helm values overlay with topology.spokes populated.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import sys
 from pathlib import Path
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-if _SCRIPT_DIR not in sys.path:
-    sys.path.insert(0, _SCRIPT_DIR)
 
-from lib import (  # noqa: E402
-    deployment_mode_for,
-    render_values_yaml,
-    spoke_count_for,
-)
+def _load_topology_lib():
+    path = Path(__file__).resolve().parent / "lib.py"
+    spec = importlib.util.spec_from_file_location("adnr_topology_lib", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load topology lib from {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_lib = _load_topology_lib()
+deployment_mode_for = _lib.deployment_mode_for
+render_values_yaml = _lib.render_values_yaml
+spoke_count_for = _lib.spoke_count_for
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,8 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    raw_count = (os.environ.get("CLUSTER_COUNT", "1") or "1").strip()
     try:
-        cluster_count = int(os.environ.get("CLUSTER_COUNT", "1"))
+        cluster_count = int(raw_count)
     except ValueError:
         print("ERROR: CLUSTER_COUNT must be an integer >= 1", file=sys.stderr)
         return 1

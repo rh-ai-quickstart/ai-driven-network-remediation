@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import re
+
+# Safe unquoted YAML scalars for spoke name prefix and namespace.
+_SAFE_YAML_SCALAR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
 
 def spoke_count_for(cluster_count: int) -> int:
     if cluster_count < 1:
@@ -13,12 +18,23 @@ def deployment_mode_for(cluster_count: int) -> str:
     return "single-cluster" if cluster_count == 1 else "hub-spoke"
 
 
+def _require_safe_scalar(name: str, value: str) -> str:
+    if not value or not _SAFE_YAML_SCALAR.match(value):
+        raise ValueError(
+            f"{name} must be a non-empty DNS-like token "
+            f"(letters, digits, ., _, -); got {value!r}"
+        )
+    return value
+
+
 def build_spokes(
     cluster_count: int,
     *,
     prefix: str = "edge-site",
     namespace: str = "dark-noc-edge",
 ) -> list[dict[str, str]]:
+    prefix = _require_safe_scalar("SPOKE_NAME_PREFIX", prefix)
+    namespace = _require_safe_scalar("EDGE_NAMESPACE", namespace)
     count = spoke_count_for(cluster_count)
     return [
         {
@@ -36,6 +52,7 @@ def render_values_yaml(
     prefix: str = "edge-site",
     namespace: str = "dark-noc-edge",
 ) -> str:
+    # Hand-built YAML (stdlib only). Values are validated as safe scalars above.
     mode = deployment_mode_for(cluster_count)
     spokes = build_spokes(cluster_count, prefix=prefix, namespace=namespace)
     lines = [

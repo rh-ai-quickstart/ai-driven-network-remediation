@@ -113,3 +113,13 @@ def test_validate_hub_spoke_ok_with_skip_oc():
     assert summary["spokes"][0]["name"] == "edge-site-01"
     assert summary["spokes"][1]["name"] == "edge-site-02"
     assert any("OK:" in m for m in messages)
+
+
+def test_build_spokes_rejects_unsafe_namespace():
+    with pytest.raises(ValueError, match="EDGE_NAMESPACE"):
+        lib.build_spokes(2, namespace="dark noc")
+
+
+def test_render_values_yaml_rejects_unsafe_prefix():
+    with pytest.raises(ValueError, match="SPOKE_NAME_PREFIX"):
+        lib.render_values_yaml(2, prefix="edge:site")
