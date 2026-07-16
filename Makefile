@@ -3,10 +3,30 @@ REGISTRY        ?= quay.io/rh-ai-quickstart
 VERSION         ?= 0.1.5
 ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
-EDGE_NAMESPACE  ?= $(NAMESPACE)
+EDGE_NAMESPACE  ?= dark-noc-edge
 RELEASE         ?= hub
 PUSH_EXTRA_ARGS ?=
 ROUTES_ENABLED  ?= true
+
+# ── Multi-cluster topology (CLUSTER_COUNT) ───────────────────────
+# 1      = single-cluster dev (hub chart + simulated edge namespace)
+# N>=2   = hub + N spokes (edge-site-01 .. edge-site-NN via ACM/ArgoCD)
+CLUSTER_COUNT      ?= 1
+SPOKE_NAME_PREFIX  ?= edge-site
+ACM_HUB_CLUSTER    ?= local-cluster
+CLUSTER_CREATE     ?= false
+GITOPS_REPO_URL    ?= https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
+GITOPS_REVISION    ?= main
+SKIP_OC_CHECK      ?=
+SPOKES_GENERATED   := hub/helm/spokes.generated.yaml
+
+ifeq ($(CLUSTER_COUNT),1)
+  DEPLOYMENT_MODE := single-cluster
+  SPOKE_COUNT     := 0
+else
+  DEPLOYMENT_MODE := hub-spoke
+  SPOKE_COUNT     := $(CLUSTER_COUNT)
+endif
 
 CHATBOT_IMG        := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG      := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
@@ -230,6 +250,13 @@ helm_infra_args = \
 	--set minio.route.enabled=$(ROUTES_ENABLED) \
 	--set gitea.enabled=$(ENABLE_GITEA)
 
+helm_topology_args = \
+	--set topology.clusterCount=$(CLUSTER_COUNT) \
+	--set-string topology.deploymentMode='$(DEPLOYMENT_MODE)' \
+	--set topology.spokeCount=$(SPOKE_COUNT) \
+	--set-string topology.edgeNamespace='$(EDGE_NAMESPACE)' \
+	--set-string topology.spokeNamePrefix='$(SPOKE_NAME_PREFIX)'
+
 helm_all_args = \
 	--set image.registry=$(REGISTRY) \
 	--set image.chatbotService=noc-chatbot-service \
@@ -243,6 +270,7 @@ helm_all_args = \
 	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
+	$(helm_topology_args) \
 	$(helm_infra_args) \
 	$(helm_lokistack_args) \
 	$(helm_mcp_image_args) \
@@ -259,8 +287,26 @@ helm_all_args = \
 # Main deployment targets
 # ══════════════════════════════════════════════════════════════════════
 
+.PHONY: render-spokes
+render-spokes:
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	EDGE_NAMESPACE=$(EDGE_NAMESPACE) \
+	SPOKE_NAME_PREFIX=$(SPOKE_NAME_PREFIX) \
+	python3 scripts/topology/render-spokes.py -o $(SPOKES_GENERATED)
+
+.PHONY: validate-topology
+validate-topology:
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	GITOPS_REPO_URL='$(GITOPS_REPO_URL)' \
+	GITOPS_REVISION='$(GITOPS_REVISION)' \
+	EDGE_NAMESPACE=$(EDGE_NAMESPACE) \
+	SPOKE_NAME_PREFIX=$(SPOKE_NAME_PREFIX) \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	python3 scripts/topology/validate.py
+	$(MAKE) render-spokes
+
 .PHONY: helm-install
-helm-install: namespace helm-depend
+helm-install: namespace helm-depend render-spokes
 ifeq ($(ENABLE_AAP_MOCK),false)
 	$(MAKE) _check-aap-operator
 endif
@@ -271,6 +317,7 @@ ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
+		-f $(SPOKES_GENERATED) \
 		$(helm_all_args) \
 		--wait --timeout 10m
 else

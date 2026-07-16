@@ -94,6 +94,12 @@ scripts/ci/test-local.sh
 scripts/ci/test-local.sh
 .claude/
 
+# Agent-local Cursor rules / playbooks (not part of the shipped repo)
+.cursor/
+
+# Generated multi-cluster spoke overlay (make render-spokes / validate-topology)
+hub/helm/spokes.generated.yaml
+
 dev-private/
 issues/
 once.sh
