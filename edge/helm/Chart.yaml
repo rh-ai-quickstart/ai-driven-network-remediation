@@ -1,0 +1,6 @@
+apiVersion: v2
+name: adnr-edge
+description: Spoke-side ADNR edge chart (nginx demo workload + CLF to hub Kafka)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,25 @@
+{{- if .Values.clusterLogForwarder.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+---
+# Required by OpenShift Logging to collect application logs for this CLF.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ printf "%s-%s-collect-application-logs" (include "adnr-edge.fullname" .) .Values.siteId | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-application-logs
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    namespace: {{ include "adnr-edge.namespace" . }}
+{{- end }}

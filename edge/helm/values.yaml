@@ -1,0 +1,49 @@
+# Spoke edge chart values.
+# ArgoCD ApplicationSet sets siteId per spoke (edge-01, edge-02, ...).
+# kafka.externalHost is the hub Kafka Route hostname (mTLS on :443).
+# kafka-client-certs secret is created by scripts/acm/distribute-kafka-certs.sh (C7).
+
+siteId: ""
+namespace: dark-noc-edge
+createNamespace: true
+
+nginx:
+  enabled: true
+  name: edge-nginx
+  replicas: 1
+  image:
+    repository: nginx
+    tag: "1.27-alpine"
+    pullPolicy: IfNotPresent
+  # Low memory limit so OOMKill demos are reliable on spokes.
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+  ports:
+    http: 80
+
+kafka:
+  # Hostname only (no scheme). Used to build tls://host:port/topic for CLF.
+  externalHost: ""
+  # Optional full bootstrap string (host:port). Defaults to externalHost:port when empty.
+  bootstrapServers: ""
+  port: 443
+  topic: system-alerts
+  # Secret created on the spoke by distribute-kafka-certs (keys match make kafka-client-cert).
+  tlsSecret: kafka-client-certs
+  tls:
+    caKey: ca.crt
+    certKey: client.crt
+    keyKey: client.key
+  insecureSkipVerify: false
+
+clusterLogForwarder:
+  enabled: true
+  name: adnr-edge-forwarder
+  serviceAccountName: adnr-logcollector
+  # Drop records whose .level is not warn/error (and related severities).
+  keepWarnErrorOnly: true

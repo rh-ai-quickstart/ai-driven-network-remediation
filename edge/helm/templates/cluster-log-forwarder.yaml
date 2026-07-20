@@ -1,0 +1,69 @@
+{{- if .Values.clusterLogForwarder.enabled }}
+{{- $siteId := required "siteId is required (e.g. edge-01)" .Values.siteId }}
+{{- $tlsSecret := required "kafka.tlsSecret is required" .Values.kafka.tlsSecret }}
+apiVersion: observability.openshift.io/v1
+kind: ClusterLogForwarder
+metadata:
+  name: {{ .Values.clusterLogForwarder.name }}
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+spec:
+  managementState: Managed
+  serviceAccount:
+    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+  inputs:
+    - name: edge-application
+      type: application
+      application:
+        includes:
+          - namespace: {{ include "adnr-edge.namespace" . | quote }}
+  filters:
+    - name: edge-site-labels
+      type: openshiftLabels
+      openshiftLabels:
+        edge_site_id: {{ $siteId | quote }}
+    {{- if .Values.clusterLogForwarder.keepWarnErrorOnly }}
+    - name: keep-warn-error
+      type: drop
+      drop:
+        - test:
+            - field: .level
+              notMatches: (?i)^(error|err|warning|warn|critical|crit|fatal|alert|emerg|panic)$
+    {{- end }}
+  outputs:
+    - name: hub-kafka-system-alerts
+      type: kafka
+      kafka:
+        url: {{ include "adnr-edge.kafkaUrl" . | quote }}
+        topic: {{ .Values.kafka.topic | quote }}
+        {{- if .Values.kafka.bootstrapServers }}
+        brokers:
+          - {{ printf "tls://%s" .Values.kafka.bootstrapServers | quote }}
+        {{- else }}
+        brokers:
+          - {{ printf "tls://%s:%v" .Values.kafka.externalHost .Values.kafka.port | quote }}
+        {{- end }}
+      tls:
+        insecureSkipVerify: {{ .Values.kafka.insecureSkipVerify }}
+        ca:
+          key: {{ .Values.kafka.tls.caKey | quote }}
+          secretName: {{ $tlsSecret | quote }}
+        certificate:
+          key: {{ .Values.kafka.tls.certKey | quote }}
+          secretName: {{ $tlsSecret | quote }}
+        key:
+          key: {{ .Values.kafka.tls.keyKey | quote }}
+          secretName: {{ $tlsSecret | quote }}
+  pipelines:
+    - name: edge-app-to-hub-kafka
+      inputRefs:
+        - edge-application
+      filterRefs:
+        - edge-site-labels
+        {{- if .Values.clusterLogForwarder.keepWarnErrorOnly }}
+        - keep-warn-error
+        {{- end }}
+      outputRefs:
+        - hub-kafka-system-alerts
+{{- end }}
