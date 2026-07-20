@@ -28,7 +28,4 @@ def wait_for_agent_ready() -> None:
                 return
             time.sleep(2)
 
-    pytest.fail(
-        f"agent-service not ready within {timeout_s}s "
-        f"(last /ready status={last_status}, body={last_body})"
-    )
+    pytest.fail(f"agent-service not ready within {timeout_s}s " f"(last /ready status={last_status}, body={last_body})")
