@@ -1,0 +1,79 @@
+# Hive ClusterDeployment template for ADNR spoke provisioning.
+# Placeholders are substituted by scripts/acm/create-clusters.sh:
+#   __SPOKE_NAME__  ManagedCluster / ClusterDeployment name (edge-site-NN)
+#   __SITE_ID__     alert label edge_site_id (edge-NN)
+#   __BASE_DOMAIN__ HIVE_BASE_DOMAIN
+#   __IMAGE_SET__   HIVE_CLUSTER_IMAGE_SET
+#   __AWS_REGION__  HIVE_AWS_REGION
+#
+# Required secrets (create in each spoke namespace before apply):
+#   __SPOKE_NAME__-pull-secret
+#   __SPOKE_NAME__-ssh-private-key
+#   __SPOKE_NAME__-aws-creds
+#   __SPOKE_NAME__-install-config
+#
+# CLUSTER_CREATE=false (default) skips provisioning; import existing spokes instead.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __SPOKE_NAME__
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: hive-spoke
+    adnr.io/role: edge
+    adnr.io/site-id: __SITE_ID__
+---
+apiVersion: hive.openshift.io/v1
+kind: ClusterDeployment
+metadata:
+  name: __SPOKE_NAME__
+  namespace: __SPOKE_NAME__
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: hive-spoke
+    adnr.io/role: edge
+    adnr.io/site-id: __SITE_ID__
+    # ACM imports/manages this cluster under the same name when provisioned.
+    cloud: Amazon
+    vendor: OpenShift
+    cluster.open-cluster-management.io/clusterset: adnr-edge
+spec:
+  baseDomain: __BASE_DOMAIN__
+  clusterName: __SPOKE_NAME__
+  platform:
+    aws:
+      credentialsSecretRef:
+        name: __SPOKE_NAME__-aws-creds
+      region: __AWS_REGION__
+  provisioning:
+    installConfigSecretRef:
+      name: __SPOKE_NAME__-install-config
+    imageSetRef:
+      name: __IMAGE_SET__
+    sshPrivateKeySecretRef:
+      name: __SPOKE_NAME__-ssh-private-key
+  pullSecretRef:
+    name: __SPOKE_NAME__-pull-secret
+  manageDNS: true
+---
+apiVersion: hive.openshift.io/v1
+kind: MachinePool
+metadata:
+  name: __SPOKE_NAME__-worker
+  namespace: __SPOKE_NAME__
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: hive-spoke
+    adnr.io/site-id: __SITE_ID__
+spec:
+  clusterDeploymentRef:
+    name: __SPOKE_NAME__
+  name: worker
+  platform:
+    aws:
+      type: m5.xlarge
+      rootVolume:
+        size: 100
+        type: gp3
+  replicas: 2

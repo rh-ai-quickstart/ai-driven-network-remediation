@@ -19,6 +19,10 @@ GITOPS_REPO_URL    ?= https://github.com/rh-ai-quickstart/ai-driven-network-reme
 GITOPS_REVISION    ?= main
 SKIP_OC_CHECK      ?=
 SPOKES_GENERATED   := hub/helm/spokes.generated.yaml
+# Hive spoke provisioning (only used when CLUSTER_CREATE=true)
+HIVE_BASE_DOMAIN       ?=
+HIVE_CLUSTER_IMAGE_SET ?= img4.20.12-x86-64-appsub
+HIVE_AWS_REGION        ?= us-east-1
 
 ifeq ($(CLUSTER_COUNT),1)
   DEPLOYMENT_MODE := single-cluster
@@ -307,6 +311,16 @@ acm-prereq-check: validate-topology
 	SPOKES_GENERATED=$(SPOKES_GENERATED) \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/prereq-check.sh
+
+.PHONY: acm-create-clusters
+acm-create-clusters: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	HIVE_BASE_DOMAIN='$(HIVE_BASE_DOMAIN)' \
+	HIVE_CLUSTER_IMAGE_SET='$(HIVE_CLUSTER_IMAGE_SET)' \
+	HIVE_AWS_REGION='$(HIVE_AWS_REGION)' \
+	bash scripts/acm/create-clusters.sh $(ACM_CREATE_ARGS)
 
 .PHONY: helm-install
 helm-install: namespace helm-depend validate-topology
