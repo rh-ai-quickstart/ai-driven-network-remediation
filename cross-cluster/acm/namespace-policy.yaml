@@ -1,0 +1,53 @@
+# Enforce dark-noc-edge Namespace on every spoke selected by Placement
+# adnr-edge-spokes. Complements the edge Helm chart Namespace template.
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: adnr-edge-namespace
+  namespace: hub
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: acm-placement
+  annotations:
+    policy.open-cluster-management.io/standards: NIST SP 800-53
+    policy.open-cluster-management.io/categories: CM Configuration Management
+    policy.open-cluster-management.io/controls: CM-2 Baseline Configuration
+spec:
+  remediationAction: enforce
+  disabled: false
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: adnr-edge-namespace-dark-noc-edge
+        spec:
+          remediationAction: enforce
+          severity: low
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: dark-noc-edge
+                  labels:
+                    adnr.io/role: edge
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: adnr-edge-namespace
+  namespace: hub
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: acm-placement
+placementRef:
+  apiGroup: cluster.open-cluster-management.io
+  kind: Placement
+  name: adnr-edge-spokes
+subjects:
+  - apiGroup: policy.open-cluster-management.io
+    kind: Policy
+    name: adnr-edge-namespace

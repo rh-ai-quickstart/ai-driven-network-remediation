@@ -301,6 +301,13 @@ validate-topology:
 	python3 scripts/topology/validate.py
 	$(MAKE) render-spokes
 
+.PHONY: acm-prereq-check
+acm-prereq-check: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	bash scripts/acm/prereq-check.sh
+
 .PHONY: helm-install
 helm-install: namespace helm-depend validate-topology
 ifeq ($(ENABLE_AAP_MOCK),false)

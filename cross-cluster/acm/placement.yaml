@@ -1,0 +1,45 @@
+# ADNR edge Placement: selects ManagedClusters labeled adnr.io/role=edge.
+# Label is applied by scripts/acm/label-spokes.sh (C7). Apply on the hub after
+# helm-install so namespace "hub" exists (see make acm-deploy).
+---
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSet
+metadata:
+  name: adnr-edge
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: acm-placement
+spec:
+  clusterSelector:
+    selectorType: LabelSelector
+    labelSelector:
+      matchLabels:
+        adnr.io/role: edge
+---
+apiVersion: cluster.open-cluster-management.io/v1beta2
+kind: ManagedClusterSetBinding
+metadata:
+  name: adnr-edge
+  namespace: hub
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: acm-placement
+spec:
+  clusterSet: adnr-edge
+---
+apiVersion: cluster.open-cluster-management.io/v1beta1
+kind: Placement
+metadata:
+  name: adnr-edge-spokes
+  namespace: hub
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: acm-placement
+spec:
+  clusterSets:
+    - adnr-edge
+  predicates:
+    - requiredClusterSelector:
+        labelSelector:
+          matchLabels:
+            adnr.io/role: edge
