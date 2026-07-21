@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -352,3 +353,47 @@ class TestLightspeedNodeFailure:
         assert rr.generated_playbook_name is None
         assert result["decision"] == "lightspeed"
         invoke_mock.assert_not_called()
+
+
+# -- Playbook storage --
+
+
+class TestPlaybookStorage:
+    async def test_store_called_after_aap_success(self):
+        store_mock = AsyncMock()
+        with patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock):
+            await _run_node(als_return=_ALS_RESPONSE)
+            await asyncio.sleep(0)
+        store_mock.assert_called_once()
+        args = store_mock.call_args.args
+        assert args[0] == "remediate-oomkilled-nginx-abc123"
+        assert "hosts: all" in args[1]
+        assert args[2] == "OOMKilled"
+        assert args[3] == "Container killed by OOM"
+
+    async def test_store_called_when_skip_aap(self):
+        store_mock = AsyncMock()
+        with (
+            patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock),
+            patch("agent_service.nodes.lightspeed.LIGHTSPEED_SKIP_AAP", True),
+        ):
+            await _run_node(als_return=_ALS_RESPONSE)
+            await asyncio.sleep(0)
+        store_mock.assert_called_once()
+
+    async def test_store_not_called_on_als_failure(self):
+        store_mock = AsyncMock()
+        with patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock):
+            await _run_node(als_side_effect=RuntimeError("boom"))
+            await asyncio.sleep(0)
+        store_mock.assert_not_called()
+
+    async def test_store_not_called_when_no_lightspeed_url(self):
+        store_mock = AsyncMock()
+        with (
+            patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock),
+            patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", ""),
+        ):
+            await lightspeed_node(_state())
+            await asyncio.sleep(0)
+        store_mock.assert_not_called()

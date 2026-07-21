@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 
@@ -17,6 +18,7 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.models import RemediationResult
+from agent_service.nodes.rag_retrieval import store_generated_playbook
 from agent_service.utils import invoke_tool as _invoke_tool
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
@@ -24,6 +26,7 @@ _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
 
 
 _als_client: httpx.AsyncClient | None = None
+_background_tasks: set[asyncio.Task] = set()
 
 
 def _get_als_client() -> httpx.AsyncClient:
@@ -108,6 +111,24 @@ def _build_attachments(rca, log_event) -> list[dict]:
         )
         if a
     ]
+
+
+def _log_task_exception(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception():
+        logger.error(f"Background playbook storage failed: {task.exception()}")
+
+
+async def drain_background_tasks(timeout_seconds: float = 10.0) -> None:
+    if not _background_tasks:
+        return
+    logger.info(f"Draining {len(_background_tasks)} background task(s)")
+    done, pending = await asyncio.wait(
+        _background_tasks, timeout=timeout_seconds
+    )
+    for task in pending:
+        task.cancel()
+    if pending:
+        logger.warning(f"{len(pending)} background task(s) cancelled on shutdown")
 
 
 def _build_extra_vars(log_event, playbook_name, playbook_yaml):
@@ -234,6 +255,16 @@ async def lightspeed_node(state) -> dict:
                 "timestamp": now_iso(),
             }
         )
+
+    if result.success:
+        # TODO: raise or log an error when rca is None instead of falling back to defaults
+        failure_type = rca.failure_type if rca else "Unknown"
+        summary = rca.summary if rca else ""
+        # Scheduled on the event loop; the asyncio scheduler will execute it.
+        task = asyncio.create_task(store_generated_playbook(playbook_name, playbook_yaml, failure_type, summary))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+        task.add_done_callback(_log_task_exception)
 
     return {"decision": "lightspeed", "remediation_result": result}
 

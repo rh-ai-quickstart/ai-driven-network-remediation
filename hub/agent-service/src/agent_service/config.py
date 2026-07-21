@@ -38,6 +38,10 @@ GRAPH_INVOKE_TIMEOUT_SECONDS = float(os.getenv("GRAPH_INVOKE_TIMEOUT_SECONDS", "
 # LlamaStack
 LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
 LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
+VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "noc_runbooks")
+# Chunking params for vector store file ingestion (must match ingestion-pipeline defaults)
+VECTOR_STORE_CHUNK_SIZE_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_SIZE_TOKENS", "800"))
+VECTOR_STORE_CHUNK_OVERLAP_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_OVERLAP_TOKENS", "80"))
 
 # Lightspeed (Ansible Lightspeed playbook generation)
 LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")

@@ -33,6 +33,7 @@ from agent_service.config import (
 from agent_service.graph import build_graph
 from agent_service.kafka.consumer import AlertConsumer, AlertMessage
 from agent_service.models import FailureType, IncidentState
+from agent_service.nodes.lightspeed import drain_background_tasks
 from agent_service.utils import warm_tool_cache
 
 
@@ -114,6 +115,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    await drain_background_tasks()
     if consumer is not None:
         consumer.stop()
 
