@@ -1,0 +1,67 @@
+# ADNR edge ApplicationSet: one Application per spoke from spokes.generated.yaml.
+#
+# Generator: list elements are rendered by scripts/acm/argocd-apply.sh from
+# hub/helm/spokes.generated.yaml (gitignored; not usable as a Git file generator).
+# ClusterDecisionResource is an alternative once spokes are labeled; list keeps
+# siteId (edge-NN) aligned with topology without ManagedCluster label coupling.
+#
+# Sample values / spokes below are valid for kubectl --dry-run=client. The apply
+# script replaces the SPOKE_ELEMENTS block and substitutes repo/revision/kafka
+# from env (GITOPS_REPO_URL, GITOPS_REVISION, KAFKA_EXTERNAL_HOST).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: adnr-edge
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: argocd-edge
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - list:
+        elements:
+          # SPOKE_ELEMENTS_START
+          - name: edge-site-01
+            siteId: edge-01
+            namespace: dark-noc-edge
+          - name: edge-site-02
+            siteId: edge-02
+            namespace: dark-noc-edge
+          # SPOKE_ELEMENTS_END
+  template:
+    metadata:
+      name: "adnr-edge-{{.name}}"
+      labels:
+        app.kubernetes.io/part-of: adnr
+        adnr.io/component: argocd-edge
+        adnr.io/spoke: "{{.name}}"
+        adnr.io/site-id: "{{.siteId}}"
+    spec:
+      project: adnr-edge
+      source:
+        repoURL: https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
+        targetRevision: main
+        path: edge/helm
+        helm:
+          releaseName: adnr-edge
+          parameters:
+            - name: siteId
+              value: "{{.siteId}}"
+            - name: namespace
+              value: "{{.namespace}}"
+            - name: kafka.externalHost
+              value: "ADNR_KAFKA_EXTERNAL_HOST"
+      destination:
+        # ManagedCluster name = ArgoCD cluster secret name (ACM GitOps registers these).
+        name: "{{.name}}"
+        namespace: "{{.namespace}}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

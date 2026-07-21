@@ -19,6 +19,10 @@ spec:
         includes:
           - namespace: {{ include "adnr-edge.namespace" . | quote }}
   filters:
+    # Injects site id onto forwarded records (OpenShift Logging openshiftLabels).
+    # Demo-trigger E2E uses canonical alert JSON with top-level labels.edge_site_id
+    # (contracts/nginx-logs.schema.json). Validate real CLF→Kafka shape in lab (C9)
+    # before relying on live log forwarding for site routing.
     - name: edge-site-labels
       type: openshiftLabels
       openshiftLabels:

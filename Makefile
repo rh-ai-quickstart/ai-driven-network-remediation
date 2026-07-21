@@ -322,6 +322,29 @@ acm-create-clusters: validate-topology
 	HIVE_AWS_REGION='$(HIVE_AWS_REGION)' \
 	bash scripts/acm/create-clusters.sh $(ACM_CREATE_ARGS)
 
+# ArgoCD edge fan-out (CLUSTER_COUNT>=2). Dry-run: ARGOCD_APPLY_ARGS=--dry-run
+KAFKA_EXTERNAL_HOST ?=
+ARGOCD_NAMESPACE    ?=
+ARGOCD_APPLY_ARGS   ?=
+
+.PHONY: argocd-apply
+argocd-apply: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	GITOPS_REPO_URL='$(GITOPS_REPO_URL)' \
+	GITOPS_REVISION='$(GITOPS_REVISION)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	KAFKA_EXTERNAL_HOST='$(KAFKA_EXTERNAL_HOST)' \
+	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	bash scripts/acm/argocd-apply.sh $(ARGOCD_APPLY_ARGS)
+
+.PHONY: argocd-wait-spokes
+argocd-wait-spokes: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	bash scripts/acm/argocd-wait-spokes.sh
+
 .PHONY: helm-install
 helm-install: namespace helm-depend validate-topology
 ifeq ($(ENABLE_AAP_MOCK),false)

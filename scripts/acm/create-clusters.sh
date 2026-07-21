@@ -41,6 +41,11 @@ done
 log() { printf '%s\n' "$*"; }
 fail() { log "ERROR: $*"; exit 1; }
 
+# Escape sed replacement specials: \ & and the | delimiter we use.
+sed_escape() {
+  printf '%s' "$1" | sed -e 's/[\\|&]/\\&/g'
+}
+
 create_raw="$(printf '%s' "${CLUSTER_CREATE}" | tr '[:upper:]' '[:lower:]')"
 create_enabled=0
 case "${create_raw}" in
@@ -129,12 +134,18 @@ fi
 render_spoke() {
   local spoke_name="$1"
   local site_id="$2"
+  local name_esc site_esc domain_esc imageset_esc region_esc
+  name_esc="$(sed_escape "${spoke_name}")"
+  site_esc="$(sed_escape "${site_id}")"
+  domain_esc="$(sed_escape "${base_domain}")"
+  imageset_esc="$(sed_escape "${HIVE_CLUSTER_IMAGE_SET}")"
+  region_esc="$(sed_escape "${HIVE_AWS_REGION}")"
   sed \
-    -e "s/__SPOKE_NAME__/${spoke_name}/g" \
-    -e "s/__SITE_ID__/${site_id}/g" \
-    -e "s/__BASE_DOMAIN__/${base_domain}/g" \
-    -e "s/__IMAGE_SET__/${HIVE_CLUSTER_IMAGE_SET}/g" \
-    -e "s/__AWS_REGION__/${HIVE_AWS_REGION}/g" \
+    -e "s|__SPOKE_NAME__|${name_esc}|g" \
+    -e "s|__SITE_ID__|${site_esc}|g" \
+    -e "s|__BASE_DOMAIN__|${domain_esc}|g" \
+    -e "s|__IMAGE_SET__|${imageset_esc}|g" \
+    -e "s|__AWS_REGION__|${region_esc}|g" \
     "${TEMPLATE}"
 }
 

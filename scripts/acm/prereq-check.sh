@@ -100,7 +100,11 @@ fi
 if [[ "${argocd_ok}" -ne 1 ]]; then
   fail "ArgoCD/GitOps not found (no applications.argoproj.io CRD and no openshift-gitops/argocd namespace)"
 fi
-log "ArgoCD/GitOps: OK"
+# ApplicationSet is required for edge fan-out (make argocd-apply).
+if ! "${oc_bin}" get crd applicationsets.argoproj.io >/dev/null 2>&1; then
+  fail "ArgoCD ApplicationSet CRD missing: applicationsets.argoproj.io (enable ApplicationSet on OpenShift GitOps)"
+fi
+log "ArgoCD/GitOps: OK (Application + ApplicationSet CRDs)"
 
 log "Checking ManagedClusters Available for ${#expected_spokes[@]} spoke(s)..."
 missing=()

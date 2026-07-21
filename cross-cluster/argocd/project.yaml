@@ -1,0 +1,49 @@
+# ADNR edge AppProject: restricts destinations to spoke namespaces and
+# allows only the resources the edge chart needs (Namespace + ClusterRoleBinding).
+# Applied into the OpenShift GitOps / ArgoCD namespace by scripts/acm/argocd-apply.sh.
+#
+# Sample values below are valid for kubectl --dry-run=client. Apply script
+# substitutes the sample repo URL, openshift-gitops namespace, dark-noc-edge
+# destination, and ADNR_KAFKA_EXTERNAL_HOST from env.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: adnr-edge
+  namespace: openshift-gitops
+  labels:
+    app.kubernetes.io/part-of: adnr
+    adnr.io/component: argocd-edge
+spec:
+  description: ADNR edge chart fan-out (path edge/helm only) to spoke ManagedClusters
+  sourceRepos:
+    - https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
+  destinations:
+    # Spoke ManagedClusters registered in ArgoCD (ACM GitOps integration).
+    - namespace: dark-noc-edge
+      name: "*"
+    # Allow the Application controller to manage apps in the GitOps namespace.
+    - namespace: openshift-gitops
+      name: in-cluster
+      server: https://kubernetes.default.svc
+  # Edge chart creates Namespace (optional) and ClusterRoleBinding for CLF.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: ServiceAccount
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+    - group: apps
+      kind: Deployment
+    - group: observability.openshift.io
+      kind: ClusterLogForwarder
+  orphanedResources:
+    warn: false
