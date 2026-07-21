@@ -1,4 +1,4 @@
-{{- if .Values.edgeRbac.enabled }}
+{{- if and .Values.edgeRbac.enabled (ne .Values.topology.deploymentMode "hub-spoke") }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:

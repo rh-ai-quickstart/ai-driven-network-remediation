@@ -70,6 +70,7 @@ def test_render_values_yaml_single_cluster():
     assert "spokeCount: 0" in text
     assert "spokes: []" in text
     assert "edge-site-01" not in text
+    assert "mcp-servers:" not in text
 
 
 def test_render_values_yaml_two_spokes():
@@ -80,6 +81,12 @@ def test_render_values_yaml_two_spokes():
     assert "siteId: edge-01" in text
     assert "name: edge-site-02" in text
     assert "siteId: edge-02" in text
+    assert "secretName: noc-openshift-kubeconfig-edge-site-01" in text
+    assert "secretName: noc-openshift-kubeconfig-edge-site-02" in text
+    assert 'mountPath: /kubeconfigs/edge-site-01' in text
+    assert 'KUBECONFIG_DIR: "/kubeconfigs"' in text
+    assert 'DEPLOYMENT_MODE: "hub-spoke"' in text
+    assert "serviceAccountName: mcp-noc-openshift" in text
 
 
 def test_validate_single_cluster_ok():

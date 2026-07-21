@@ -258,8 +258,11 @@ servicenowMock:
     tag: "0.1.0"
 
 # ══════════════════════════════════════════════════════════════════════
-# Edge RBAC hook (pre-install Job)
+# Edge RBAC hook (pre-install Job) — single-cluster only
 # ══════════════════════════════════════════════════════════════════════
+# Enabled via Makefile when ROUTES_ENABLED=true and CLUSTER_COUNT=1.
+# Forced off when topology.deploymentMode=hub-spoke (real spokes use
+# multi-cluster-creds-job + per-spoke kubeconfig secrets instead).
 
 edgeRbac:
   enabled: false
@@ -267,6 +270,19 @@ edgeRbac:
   edgeNamespace: "hub"
   edgeApiServer: "https://kubernetes.default.svc"
   image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+
+# ══════════════════════════════════════════════════════════════════════
+# Multi-cluster MCP kubeconfig Job (hub-spoke only)
+# ══════════════════════════════════════════════════════════════════════
+# When topology.deploymentMode=hub-spoke, a pre-install Job builds one
+# kubeconfig secret per spoke (noc-openshift-kubeconfig-<spoke-name>)
+# via ACM cluster-proxy (Hive admin-kubeconfig fallback).
+# Proxy kubeconfigs use tokenFile (MCP pod SA); C7 must wait for ManagedClusters
+# before helm-install. TLS skip is lab-only (C9).
+
+multiClusterCreds:
+  image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+  serviceAccountName: mcp-noc-openshift
 
 # ══════════════════════════════════════════════════════════════════════
 # AAP Credential hook (post-install Job)

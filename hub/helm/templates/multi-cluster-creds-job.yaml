@@ -1,0 +1,275 @@
+{{- /* Hub-spoke only: per-spoke kubeconfigs for mcp-noc-openshift via ACM cluster-proxy. */ -}}
+{{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 0) }}
+{{- $mcpSA := .Values.multiClusterCreds.serviceAccountName | default "mcp-noc-openshift" }}
+{{/*
+  Permanent SA used by the mcp-noc-openshift Deployment.
+  Proxy kubeconfigs reference tokenFile under this SA (auto-rotated); do not embed Job tokens.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $mcpSA }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "hub.fullname" . }}-mcp-openshift-proxy-{{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["managedclusters"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "hub.fullname" . }}-mcp-openshift-proxy-{{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "hub.fullname" . }}-mcp-openshift-proxy-{{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $mcpSA }}
+    namespace: {{ .Release.Namespace }}
+---
+{{/*
+  Pre-install Job (C7 must wait for ManagedClusters before helm-install).
+  Secret writes are namespaced; Hive secret reads stay cluster-scoped get/list only.
+*/}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hub.fullname" . }}-multi-cluster-creds
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds-{{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources: ["services", "namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cluster.open-cluster-management.io"]
+    resources: ["managedclusters"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds-{{ .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds-{{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "hub.fullname" . }}-multi-cluster-creds
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: multi-cluster-creds-setup
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "hub.fullname" . }}-multi-cluster-creds
+      containers:
+        - name: setup
+          image: {{ .Values.multiClusterCreds.image | default .Values.edgeRbac.image | default "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest" }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+
+              HUB_NAMESPACE="{{ .Release.Namespace }}"
+              EDGE_NAMESPACE="{{ .Values.topology.edgeNamespace | default "dark-noc-edge" }}"
+              TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+              SPOKES=(
+              {{- range .Values.topology.spokes }}
+                {{ .name | quote }}
+              {{- end }}
+              )
+
+              discover_proxy_base() {
+                local ns port
+                for ns in open-cluster-management-addon multicluster-engine open-cluster-management; do
+                  if oc get svc cluster-proxy-addon-user -n "$ns" >/dev/null 2>&1; then
+                    port="$(oc get svc cluster-proxy-addon-user -n "$ns" \
+                      -o jsonpath='{.spec.ports[0].port}')"
+                    echo "https://cluster-proxy-addon-user.${ns}.svc:${port}"
+                    return 0
+                  fi
+                done
+                return 1
+              }
+
+              # Durable auth: tokenFile is re-read by clients; MCP pod SA token rotates.
+              # insecure-skip-tls-verify is lab-only (document CA pinning in C9).
+              build_proxy_kubeconfig() {
+                local spoke="$1" out="$2" proxy_base="$3"
+                cat > "$out" <<EOF
+              apiVersion: v1
+              kind: Config
+              clusters:
+              - cluster:
+                  server: ${proxy_base}/${spoke}
+                  insecure-skip-tls-verify: true
+                name: ${spoke}
+              contexts:
+              - context:
+                  cluster: ${spoke}
+                  user: hub-proxy
+                  namespace: ${EDGE_NAMESPACE}
+                name: ${spoke}
+              current-context: ${spoke}
+              users:
+              - name: hub-proxy
+                user:
+                  tokenFile: ${TOKEN_FILE}
+              EOF
+              }
+
+              extract_hive_kubeconfig() {
+                local spoke="$1" out="$2"
+                local secret
+                for secret in "${spoke}-admin-kubeconfig" "${spoke}-kubeconfig"; do
+                  if oc get secret "$secret" -n "$spoke" >/dev/null 2>&1; then
+                    if oc get secret "$secret" -n "$spoke" \
+                      -o jsonpath='{.data.kubeconfig}' 2>/dev/null | base64 -d > "$out" \
+                      && [ -s "$out" ]; then
+                      echo "Using Hive/import secret ${secret} in namespace ${spoke}"
+                      return 0
+                    fi
+                  fi
+                done
+                return 1
+              }
+
+              PROXY_BASE=""
+              if PROXY_BASE="$(discover_proxy_base)"; then
+                echo "ACM cluster-proxy base: ${PROXY_BASE}"
+              else
+                echo "WARN: cluster-proxy-addon-user not found; will try Hive kubeconfig secrets"
+              fi
+
+              for spoke in "${SPOKES[@]}"; do
+                echo "=== Preparing kubeconfig for spoke ${spoke} ==="
+
+                if ! oc get managedcluster "$spoke" >/dev/null 2>&1; then
+                  echo "ERROR: ManagedCluster ${spoke} not found on hub"
+                  echo "C7 must wait for spokes before helm-install (pre-install hook)."
+                  exit 1
+                fi
+
+                KC="$(mktemp)"
+                built=0
+                if [ -n "$PROXY_BASE" ]; then
+                  build_proxy_kubeconfig "$spoke" "$KC" "$PROXY_BASE"
+                  # Smoke-check uses this Job's projected SA token via tokenFile.
+                  if KUBECONFIG="$KC" oc get ns >/dev/null 2>&1; then
+                    echo "Cluster-proxy kubeconfig verified for ${spoke}"
+                    built=1
+                  else
+                    echo "WARN: cluster-proxy smoke check failed for ${spoke}; trying Hive secret"
+                    rm -f "$KC"
+                    KC="$(mktemp)"
+                  fi
+                fi
+
+                if [ "$built" -eq 0 ]; then
+                  if ! extract_hive_kubeconfig "$spoke" "$KC"; then
+                    echo "ERROR: could not build kubeconfig for ${spoke}"
+                    echo "Need ACM cluster-proxy-addon-user or ${spoke}-admin-kubeconfig secret"
+                    rm -f "$KC"
+                    exit 1
+                  fi
+                fi
+
+                secret_name="noc-openshift-kubeconfig-${spoke}"
+                oc create secret generic "$secret_name" \
+                  --from-file=kubeconfig="$KC" \
+                  -n "$HUB_NAMESPACE" --dry-run=client -o yaml | oc apply -f -
+                rm -f "$KC"
+                echo "Created/updated secret ${secret_name} in ${HUB_NAMESPACE}"
+              done
+
+              echo "Multi-cluster MCP credentials ready for ${#SPOKES[@]} spoke(s)"
+{{- end }}

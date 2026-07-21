@@ -3,7 +3,7 @@
 import json
 import subprocess
 
-from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp
+from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp, resolve_kubeconfig
 
 OC_TIMEOUT = 30
 
@@ -29,15 +29,22 @@ def _run_oc(
         return {"stdout": "", "stderr": str(e), "returncode": -1, "success": False}
 
 
+def _kubeconfig_for(edge_site_id: str = "") -> str:
+    return resolve_kubeconfig(edge_site_id or None)
+
+
 @mcp.tool()
-def get_namespaces() -> dict:
+def get_namespaces(edge_site_id: str = "") -> dict:
     """
     List all namespaces on the cluster with their status.
+
+    Args:
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
         Dict with namespaces list: [{name, status}]
     """
-    result = _run_oc(["get", "namespaces", "-o", "json"])
+    result = _run_oc(["get", "namespaces", "-o", "json"], kubeconfig=_kubeconfig_for(edge_site_id))
 
     if not result["success"]:
         return {"error": result["stderr"], "namespaces": []}
@@ -58,17 +65,21 @@ def get_namespaces() -> dict:
 
 
 @mcp.tool()
-def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
+def get_pods(namespace: str = DEFAULT_NAMESPACE, edge_site_id: str = "") -> dict:
     """
     List all pods in the specified namespace with their status.
 
     Args:
         namespace: OpenShift namespace to query (default: dark-noc-edge)
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
         Dict with pods list: [{name, status, restart_count, node, ready}]
     """
-    result = _run_oc(["get", "pods", "-n", namespace, "-o", "json"])
+    result = _run_oc(
+        ["get", "pods", "-n", namespace, "-o", "json"],
+        kubeconfig=_kubeconfig_for(edge_site_id),
+    )
 
     if not result["success"]:
         return {"error": result["stderr"], "pods": []}
@@ -97,18 +108,26 @@ def get_pods(namespace: str = DEFAULT_NAMESPACE) -> dict:
 
 
 @mcp.tool()
-def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
+def get_events(
+    namespace: str = DEFAULT_NAMESPACE,
+    limit: int = 20,
+    edge_site_id: str = "",
+) -> dict:
     """
     Get recent OpenShift events (especially warnings) from a namespace.
 
     Args:
         namespace: OpenShift namespace (default: dark-noc-edge)
         limit:     Maximum number of events to return (default: 20)
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
         Dict with events list: [{type, reason, message, object, time, count}]
     """
-    result = _run_oc(["get", "events", "-n", namespace, "--sort-by=lastTimestamp", "-o", "json"])
+    result = _run_oc(
+        ["get", "events", "-n", namespace, "--sort-by=lastTimestamp", "-o", "json"],
+        kubeconfig=_kubeconfig_for(edge_site_id),
+    )
 
     if not result["success"]:
         return {"error": result["stderr"], "events": []}
@@ -134,18 +153,27 @@ def get_events(namespace: str = DEFAULT_NAMESPACE, limit: int = 20) -> dict:
 
 
 @mcp.tool()
-def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict:
+def rollout_restart(
+    deployment: str,
+    namespace: str = DEFAULT_NAMESPACE,
+    edge_site_id: str = "",
+) -> dict:
     """
     Trigger a rolling restart of a deployment (safe — no downtime if replicas > 1).
 
     Args:
         deployment: Name of the Deployment to restart
         namespace:  Namespace of the deployment (default: dark-noc-edge)
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
         Dict with restart status and message
     """
-    result = _run_oc(["rollout", "restart", f"deployment/{deployment}", "-n", namespace])
+    kc = _kubeconfig_for(edge_site_id)
+    result = _run_oc(
+        ["rollout", "restart", f"deployment/{deployment}", "-n", namespace],
+        kubeconfig=kc,
+    )
 
     if not result["success"]:
         return {"success": False, "error": result["stderr"]}
@@ -159,6 +187,7 @@ def rollout_restart(deployment: str, namespace: str = DEFAULT_NAMESPACE) -> dict
             namespace,
             "--timeout=90s",
         ],
+        kubeconfig=kc,
         timeout=120,
     )
 
@@ -175,6 +204,7 @@ def patch_deployment_memory(
     deployment: str,
     memory_limit: str,
     namespace: str = DEFAULT_NAMESPACE,
+    edge_site_id: str = "",
 ) -> dict:
     """
     Patch a deployment's memory limit (useful for OOMKilled remediation).
@@ -183,6 +213,7 @@ def patch_deployment_memory(
         deployment:   Deployment name
         memory_limit: New memory limit (e.g., "512Mi", "1Gi")
         namespace:    Namespace (default: dark-noc-edge)
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
         Dict with patch status
@@ -206,7 +237,8 @@ def patch_deployment_memory(
             namespace,
             "--type=json",
             f"-p={patch}",
-        ]
+        ],
+        kubeconfig=_kubeconfig_for(edge_site_id),
     )
 
     return {
@@ -223,6 +255,7 @@ def get_pod_logs(
     namespace: str = DEFAULT_NAMESPACE,
     container: str = "",
     tail_lines: int = 50,
+    edge_site_id: str = "",
 ) -> dict:
     """
     Get recent logs from a specific pod.
@@ -232,6 +265,7 @@ def get_pod_logs(
         namespace:  Namespace (default: dark-noc-edge)
         container:  Container name (optional, for multi-container pods)
         tail_lines: Number of log lines to return (default: 50)
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
         Dict with logs string
@@ -240,7 +274,7 @@ def get_pod_logs(
     if container:
         args += ["-c", container]
 
-    result = _run_oc(args)
+    result = _run_oc(args, kubeconfig=_kubeconfig_for(edge_site_id))
     return {
         "pod": pod_name,
         "namespace": namespace,

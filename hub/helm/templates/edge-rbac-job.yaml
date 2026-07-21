@@ -1,4 +1,8 @@
-{{- if .Values.edgeRbac.enabled }}
+{{/*
+  Same-cluster edge RBAC is only valid in single-cluster mode.
+  Hub-spoke uses multi-cluster-creds-job (ACM cluster proxy) instead.
+*/}}
+{{- if and .Values.edgeRbac.enabled (ne .Values.topology.deploymentMode "hub-spoke") }}
 apiVersion: batch/v1
 kind: Job
 metadata:

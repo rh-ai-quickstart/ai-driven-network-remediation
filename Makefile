@@ -27,9 +27,13 @@ HIVE_AWS_REGION        ?= us-east-1
 ifeq ($(CLUSTER_COUNT),1)
   DEPLOYMENT_MODE := single-cluster
   SPOKE_COUNT     := 0
+  # Same-cluster edge RBAC hook (simulated edge namespace).
+  EDGE_RBAC_ENABLED := $(ROUTES_ENABLED)
 else
   DEPLOYMENT_MODE := hub-spoke
   SPOKE_COUNT     := $(CLUSTER_COUNT)
+  # Real spokes: per-spoke kubeconfigs from multi-cluster-creds-job.
+  EDGE_RBAC_ENABLED := false
 endif
 
 CHATBOT_IMG        := $(REGISTRY)/noc-chatbot-service:$(VERSION)
@@ -266,7 +270,7 @@ helm_all_args = \
 	--set image.frontend=noc-frontend \
 	--set image.tag=$(VERSION) \
 	--set global.routes.enabled=$(ROUTES_ENABLED) \
-	--set edgeRbac.enabled=$(ROUTES_ENABLED) \
+	--set edgeRbac.enabled=$(EDGE_RBAC_ENABLED) \
 	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
