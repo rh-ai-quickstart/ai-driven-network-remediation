@@ -103,6 +103,12 @@ class TestIncidentState:
         assert state.total_duration_ms == 0.0
         assert state.error_message == ""
 
+    def test_investigation_fields_have_defaults(self):
+        state = IncidentState(raw_event="pod crashloop")
+        assert state.cluster_events == []
+        assert state.pod_logs == ""
+        assert state.log_search_results == []
+
     def test_state_with_log_event(self):
         event = LogEvent(
             timestamp="2024-01-01T00:00:00Z",
@@ -210,6 +216,12 @@ class TestGraphConfig:
         config = GraphConfig()
         assert config.remediate_threshold == 0.8
         assert config.escalate_threshold == 0.7
+
+    def test_investigation_defaults(self):
+        config = GraphConfig()
+        assert config.tool_call_timeout == 10
+        assert config.investigate_timeout == 45
+        assert config.investigate_max_iterations == 3
 
     def test_custom_thresholds(self):
         config = GraphConfig(remediate_threshold=0.9, escalate_threshold=0.6)

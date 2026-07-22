@@ -31,6 +31,10 @@ def _analyze_stub(state: dict) -> dict:
     return {"root_cause_analysis": rca}
 
 
+def _enrich_stub(state: dict) -> dict:
+    return {"pod_status": {"items": [{"metadata": {"name": "stub-pod"}}]}}
+
+
 def _rag_stub(state: dict) -> dict:
     log_event = state.log_event
     query = f"{log_event.message} namespace={log_event.namespace} pod={log_event.pod_name}"
@@ -124,6 +128,7 @@ async def _mock_escalate_invoke(tool_name, kwargs):
 def _patch_graph_nodes():
     _als_mock.reset_mock()
     with (
+        patch("agent_service.graph.enrich_node", _enrich_stub),
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
@@ -150,12 +155,21 @@ class TestGraphCompilation:
         self.edges = g.edges
 
     def test_expected_nodes_present(self):
-        for name in ("remediate", "lightspeed", "audit"):
+        for name in ("remediate", "lightspeed", "audit", "enrich"):
             assert name in self.nodes
 
     def test_audit_is_terminal_node_before_end(self):
         end_sources = [e.source for e in self.edges if e.target == "__end__"]
         assert end_sources == ["audit"]
+
+    def test_normalize_connects_to_enrich(self):
+        normalize_targets = [e.target for e in self.edges if e.source == "normalize"]
+        assert "enrich" in normalize_targets
+        assert "rag_retrieval" not in normalize_targets
+
+    def test_enrich_connects_to_rag_retrieval(self):
+        enrich_targets = [e.target for e in self.edges if e.source == "enrich"]
+        assert "rag_retrieval" in enrich_targets
 
     def test_notify_connects_to_audit_not_end(self):
         notify_targets = [e.target for e in self.edges if e.source == "notify"]
@@ -215,6 +229,10 @@ class TestLinearFlow:
         assert isinstance(result["root_cause_analysis"].confidence, float)
         assert result["root_cause_analysis"].failure_type is not None
         assert result["decision"] != ""
+
+    async def test_pod_status_appears_in_end_to_end_state(self, graph):
+        result = await graph.ainvoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert "pod_status" in result
 
 
 class TestConditionalRouting:

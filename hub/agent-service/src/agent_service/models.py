@@ -68,6 +68,9 @@ class GraphConfig(BaseModel):
     escalate_threshold: float = 0.7
     max_retries: int = 1
     job_timeout: float = 120.0
+    tool_call_timeout: int = 10
+    investigate_timeout: int = 45
+    investigate_max_iterations: int = 3
 
 
 class IncidentState(BaseModel):
@@ -88,6 +91,9 @@ class IncidentState(BaseModel):
     should_retry: bool = False
     remediation_result: Optional[RemediationResult] = None
     pod_status: dict = {}
+    cluster_events: list[dict] = []
+    pod_logs: str = ""
+    log_search_results: list[dict] = []
     recent_errors: list[dict] = []
     slack_thread_ts: str = ""
     servicenow_ticket: str = ""

@@ -1,6 +1,7 @@
 from agent_service.nodes.analyze import analyze_node
 from agent_service.nodes.audit import audit_node
 from agent_service.nodes.decide import make_decide_node
+from agent_service.nodes.enrich import enrich_node
 from agent_service.nodes.escalate import escalate_node
 from agent_service.nodes.lightspeed import lightspeed_node
 from agent_service.nodes.normalize import normalize_node
