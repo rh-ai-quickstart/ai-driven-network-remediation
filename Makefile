@@ -312,6 +312,7 @@ validate-topology:
 .PHONY: acm-prereq-check
 acm-prereq-check: validate-topology
 	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
 	SPOKES_GENERATED=$(SPOKES_GENERATED) \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/prereq-check.sh
@@ -326,10 +327,50 @@ acm-create-clusters: validate-topology
 	HIVE_AWS_REGION='$(HIVE_AWS_REGION)' \
 	bash scripts/acm/create-clusters.sh $(ACM_CREATE_ARGS)
 
+.PHONY: acm-wait-for-clusters
+acm-wait-for-clusters: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	ACM_WAIT_TIMEOUT_SECONDS='$(ACM_WAIT_TIMEOUT_SECONDS)' \
+	ACM_WAIT_INTERVAL_SECONDS='$(ACM_WAIT_INTERVAL_SECONDS)' \
+	bash scripts/acm/wait-for-clusters.sh
+
+.PHONY: acm-label-spokes
+acm-label-spokes: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	bash scripts/acm/label-spokes.sh
+
+.PHONY: acm-distribute-kafka-certs
+acm-distribute-kafka-certs: validate-topology
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	NAMESPACE='$(NAMESPACE)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	ACM_MANIFESTWORK_TIMEOUT_SECONDS='$(ACM_MANIFESTWORK_TIMEOUT_SECONDS)' \
+	ACM_MANIFESTWORK_INTERVAL_SECONDS='$(ACM_MANIFESTWORK_INTERVAL_SECONDS)' \
+	bash scripts/acm/distribute-kafka-certs.sh $(ACM_DISTRIBUTE_ARGS)
+
+.PHONY: acm-apply-placement
+acm-apply-placement:
+	@# Apply Placement + Policy only (never the Hive ClusterDeployment template).
+	oc apply -f cross-cluster/acm/placement.yaml
+	oc apply -f cross-cluster/acm/namespace-policy.yaml
+
 # ArgoCD edge fan-out (CLUSTER_COUNT>=2). Dry-run: ARGOCD_APPLY_ARGS=--dry-run
 KAFKA_EXTERNAL_HOST ?=
 ARGOCD_NAMESPACE    ?=
 ARGOCD_APPLY_ARGS   ?=
+ACM_CREATE_ARGS     ?=
+ACM_DISTRIBUTE_ARGS ?=
+ACM_TEARDOWN_ARGS   ?=
+ACM_WAIT_TIMEOUT_SECONDS  ?=
+ACM_WAIT_INTERVAL_SECONDS ?=
+ACM_MANIFESTWORK_TIMEOUT_SECONDS  ?=
+ACM_MANIFESTWORK_INTERVAL_SECONDS ?=
 
 .PHONY: argocd-apply
 argocd-apply: validate-topology
@@ -348,6 +389,71 @@ argocd-wait-spokes: validate-topology
 	SPOKES_GENERATED=$(SPOKES_GENERATED) \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
 	bash scripts/acm/argocd-wait-spokes.sh
+
+# ── acm-deploy / acm-teardown (C7 orchestration) ─────────────────
+# CLUSTER_COUNT=1  → helm-install + simulated edge workload
+# CLUSTER_COUNT>=2 → ACM prereq → optional Hive → label → hub helm →
+#                    kafka certs → placement → ArgoCD edge fan-out
+.PHONY: acm-deploy
+acm-deploy: validate-topology
+ifeq ($(CLUSTER_COUNT),1)
+	@echo "=== acm-deploy: single-cluster (CLUSTER_COUNT=1) ==="
+	$(MAKE) helm-install
+	$(MAKE) deploy-edge-workload
+	@echo "OK: acm-deploy single-cluster complete"
+else
+	@echo "=== acm-deploy: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT), spokes=$(SPOKE_COUNT)) ==="
+	$(MAKE) acm-prereq-check
+	$(MAKE) acm-create-clusters
+ifneq ($(filter true TRUE yes YES 1,$(CLUSTER_CREATE)),)
+	$(MAKE) acm-wait-for-clusters
+endif
+	$(MAKE) acm-label-spokes
+	$(MAKE) helm-install
+	# distribute-kafka-certs reads hub secret kafka-client-tls directly (no cwd cert files).
+	$(MAKE) acm-distribute-kafka-certs
+	$(MAKE) acm-apply-placement
+	@if [ -z "$(KAFKA_EXTERNAL_HOST)" ]; then \
+		_host=$$(oc get route kafka-external -n $(NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null || true); \
+		if [ -z "$$_host" ]; then \
+			echo "ERROR: KAFKA_EXTERNAL_HOST unset and route kafka-external not found in $(NAMESPACE)"; \
+			exit 1; \
+		fi; \
+		echo "Auto-detected KAFKA_EXTERNAL_HOST=$$_host"; \
+		$(MAKE) argocd-apply KAFKA_EXTERNAL_HOST="$$_host"; \
+	else \
+		$(MAKE) argocd-apply; \
+	fi
+	$(MAKE) argocd-wait-spokes
+	@echo "OK: acm-deploy hub-spoke complete ($(SPOKE_COUNT) spokes)"
+endif
+
+.PHONY: acm-teardown
+acm-teardown: validate-topology
+ifeq ($(CLUSTER_COUNT),1)
+	@echo "=== acm-teardown: single-cluster ==="
+ifneq ($(filter true TRUE yes YES 1,$(SKIP_OC_CHECK)),)
+	@echo "SKIP: helm-uninstall (SKIP_OC_CHECK set)"
+else
+	$(MAKE) helm-uninstall
+endif
+else
+	@echo "=== acm-teardown: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
+	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	NAMESPACE='$(NAMESPACE)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	bash scripts/acm/acm-teardown.sh $(ACM_TEARDOWN_ARGS)
+ifneq ($(filter true TRUE yes YES 1,$(SKIP_OC_CHECK)),)
+	@echo "SKIP: helm-uninstall (SKIP_OC_CHECK set)"
+else
+	$(MAKE) helm-uninstall
+endif
+endif
+	@echo "OK: acm-teardown complete"
 
 .PHONY: helm-install
 helm-install: namespace helm-depend validate-topology

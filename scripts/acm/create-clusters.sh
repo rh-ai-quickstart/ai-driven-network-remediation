@@ -15,6 +15,10 @@
 #   CLUSTER_DEPLOYMENT_TEMPLATE  path to template YAML
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib-spokes.sh"
+
 CLUSTER_COUNT="${CLUSTER_COUNT:-1}"
 CLUSTER_CREATE="${CLUSTER_CREATE:-false}"
 SPOKES_GENERATED="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
@@ -38,8 +42,8 @@ for arg in "$@"; do
   esac
 done
 
-log() { printf '%s\n' "$*"; }
-fail() { log "ERROR: $*"; exit 1; }
+log() { adnr_log "$@"; }
+fail() { adnr_fail "$@"; }
 
 # Escape sed replacement specials: \ & and the | delimiter we use.
 sed_escape() {
@@ -71,46 +75,21 @@ if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ! -f "${SPOKES_GENERATED}" ]]; then
-  fail "missing ${SPOKES_GENERATED}; run 'make validate-topology CLUSTER_COUNT=${CLUSTER_COUNT}' first"
-fi
+adnr_require_spokes_file
 
 if [[ ! -f "${TEMPLATE}" ]]; then
   fail "missing ClusterDeployment template: ${TEMPLATE}"
 fi
 
-# Parse "name|siteId" pairs from spokes.generated.yaml
+# Parse name|siteId pairs from topology.spokes
 spokes=()
 while IFS= read -r _line; do
-  [[ -n "${_line}" ]] && spokes+=("${_line}")
-done < <(
-  awk '
-    /^[[:space:]]*spokes:[[:space:]]*\[\][[:space:]]*$/ { exit }
-    /^[[:space:]]*- name:[[:space:]]+/ {
-      if (name != "") {
-        if (site == "") site = "unknown"
-        print name "|" site
-      }
-      name = $0
-      sub(/^[[:space:]]*- name:[[:space:]]+/, "", name)
-      gsub(/[[:space:]]+$/, "", name)
-      site = ""
-      next
-    }
-    /^[[:space:]]*siteId:[[:space:]]+/ {
-      site = $0
-      sub(/^[[:space:]]*siteId:[[:space:]]+/, "", site)
-      gsub(/[[:space:]]+$/, "", site)
-      next
-    }
-    END {
-      if (name != "") {
-        if (site == "") site = "unknown"
-        print name "|" site
-      }
-    }
-  ' "${SPOKES_GENERATED}"
-)
+  [[ -n "${_line}" ]] || continue
+  name="${_line%%|*}"
+  rest="${_line#*|}"
+  site="${rest%%|*}"
+  spokes+=("${name}|${site}")
+done < <(adnr_spoke_triples)
 
 if [[ "${#spokes[@]}" -eq 0 ]]; then
   fail "no spokes listed in ${SPOKES_GENERATED} (expected CLUSTER_COUNT=${CLUSTER_COUNT})"

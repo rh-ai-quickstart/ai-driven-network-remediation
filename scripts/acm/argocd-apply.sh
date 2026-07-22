@@ -15,6 +15,10 @@
 #   ARGOCD_DIR           default cross-cluster/argocd
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib-spokes.sh"
+
 CLUSTER_COUNT="${CLUSTER_COUNT:-1}"
 SPOKES_GENERATED="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
 GITOPS_REPO_URL="${GITOPS_REPO_URL:-}"
@@ -41,8 +45,8 @@ for arg in "$@"; do
   esac
 done
 
-log() { printf '%s\n' "$*"; }
-fail() { log "ERROR: $*"; exit 1; }
+log() { adnr_log "$@"; }
+fail() { adnr_fail "$@"; }
 
 # Escape sed replacement specials: \ & and the | delimiter we use.
 sed_escape() {
@@ -58,9 +62,7 @@ if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ! -f "${SPOKES_GENERATED}" ]]; then
-  fail "missing ${SPOKES_GENERATED}; run 'make validate-topology CLUSTER_COUNT=${CLUSTER_COUNT}' first"
-fi
+adnr_require_spokes_file
 
 if [[ ! -f "${PROJECT_TEMPLATE}" || ! -f "${APPSET_TEMPLATE}" ]]; then
   fail "missing ArgoCD templates under ${ARGOCD_DIR}/"
@@ -74,47 +76,11 @@ if [[ -z "${GITOPS_REVISION}" ]]; then
   fail "GITOPS_REVISION is required when CLUSTER_COUNT>=2"
 fi
 
-# Parse "name|siteId|namespace" triples from spokes.generated.yaml
+# Parse "name|siteId|namespace" triples from topology.spokes
 spokes=()
 while IFS= read -r _line; do
   [[ -n "${_line}" ]] && spokes+=("${_line}")
-done < <(
-  awk '
-    /^[[:space:]]*spokes:[[:space:]]*\[\][[:space:]]*$/ { exit }
-    /^[[:space:]]*- name:[[:space:]]+/ {
-      if (name != "") {
-        if (site == "") site = "unknown"
-        if (ns == "") ns = "dark-noc-edge"
-        print name "|" site "|" ns
-      }
-      name = $0
-      sub(/^[[:space:]]*- name:[[:space:]]+/, "", name)
-      gsub(/[[:space:]]+$/, "", name)
-      site = ""
-      ns = ""
-      next
-    }
-    /^[[:space:]]*siteId:[[:space:]]+/ {
-      site = $0
-      sub(/^[[:space:]]*siteId:[[:space:]]+/, "", site)
-      gsub(/[[:space:]]+$/, "", site)
-      next
-    }
-    /^[[:space:]]*namespace:[[:space:]]+/ {
-      ns = $0
-      sub(/^[[:space:]]*namespace:[[:space:]]+/, "", ns)
-      gsub(/[[:space:]]+$/, "", ns)
-      next
-    }
-    END {
-      if (name != "") {
-        if (site == "") site = "unknown"
-        if (ns == "") ns = "dark-noc-edge"
-        print name "|" site "|" ns
-      }
-    }
-  ' "${SPOKES_GENERATED}"
-)
+done < <(adnr_spoke_triples)
 
 if [[ "${#spokes[@]}" -eq 0 ]]; then
   fail "no spokes listed in ${SPOKES_GENERATED} (expected CLUSTER_COUNT=${CLUSTER_COUNT})"

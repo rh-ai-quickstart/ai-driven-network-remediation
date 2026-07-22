@@ -4,15 +4,22 @@
 # CLUSTER_COUNT=1  → skip (single-cluster mode), exit 0
 # CLUSTER_COUNT>=2 → require ACM operator, ArgoCD, and N Available ManagedClusters
 #                    matching names from hub/helm/spokes.generated.yaml
+# CLUSTER_CREATE=true → still require ACM + ArgoCD; skip ManagedCluster Available
+#                       checks (Hive will create them; wait-for-clusters follows)
 # SKIP_OC_CHECK=1  → still validates spoke list; skips live cluster probes
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib-spokes.sh"
+
 CLUSTER_COUNT="${CLUSTER_COUNT:-1}"
+CLUSTER_CREATE="${CLUSTER_CREATE:-false}"
 SPOKES_GENERATED="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
 SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 
-log() { printf '%s\n' "$*"; }
-fail() { log "ERROR: $*"; exit 1; }
+log() { adnr_log "$@"; }
+fail() { adnr_fail "$@"; }
 
 if ! [[ "${CLUSTER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${CLUSTER_COUNT}" -lt 1 ]]; then
   fail "CLUSTER_COUNT must be an integer >= 1 (got: ${CLUSTER_COUNT})"
@@ -23,25 +30,9 @@ if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ! -f "${SPOKES_GENERATED}" ]]; then
-  fail "missing ${SPOKES_GENERATED}; run 'make validate-topology CLUSTER_COUNT=${CLUSTER_COUNT}' first"
-fi
-
-# Extract spoke ManagedCluster names from generated Helm values.
-expected_spokes=()
-while IFS= read -r _spoke; do
-  [[ -n "${_spoke}" ]] && expected_spokes+=("${_spoke}")
-done < <(
-  awk '
-    /^[[:space:]]*spokes:[[:space:]]*\[\][[:space:]]*$/ { exit }
-    /^[[:space:]]*- name:[[:space:]]+/ {
-      name = $0
-      sub(/^[[:space:]]*- name:[[:space:]]+/, "", name)
-      gsub(/[[:space:]]+$/, "", name)
-      if (name != "") print name
-    }
-  ' "${SPOKES_GENERATED}"
-)
+adnr_require_spokes_file
+adnr_load_spoke_names
+expected_spokes=("${ADNR_SPOKE_NAMES[@]}")
 
 if [[ "${#expected_spokes[@]}" -eq 0 ]]; then
   fail "no spokes listed in ${SPOKES_GENERATED} (expected CLUSTER_COUNT=${CLUSTER_COUNT})"
@@ -106,6 +97,18 @@ if ! "${oc_bin}" get crd applicationsets.argoproj.io >/dev/null 2>&1; then
 fi
 log "ArgoCD/GitOps: OK (Application + ApplicationSet CRDs)"
 
+create_raw="$(printf '%s' "${CLUSTER_CREATE}" | tr '[:upper:]' '[:lower:]')"
+create_enabled=0
+case "${create_raw}" in
+  1|true|yes) create_enabled=1 ;;
+esac
+
+if [[ "${create_enabled}" -eq 1 ]]; then
+  log "CLUSTER_CREATE=true: skipping ManagedCluster Available checks (Hive will provision)"
+  log "OK: acm-prereq-check passed (ACM + ArgoCD ready; ${#expected_spokes[@]} spokes expected after create)"
+  exit 0
+fi
+
 log "Checking ManagedClusters Available for ${#expected_spokes[@]} spoke(s)..."
 missing=()
 not_available=()
@@ -130,7 +133,7 @@ for name in "${expected_spokes[@]}"; do
 done
 
 if [[ "${#missing[@]}" -gt 0 ]]; then
-  fail "ManagedCluster(s) not found: ${missing[*]}"
+  fail "ManagedCluster(s) not found: ${missing[*]} (import spokes or set CLUSTER_CREATE=true)"
 fi
 if [[ "${#not_available[@]}" -gt 0 ]]; then
   fail "ManagedCluster(s) not Available: ${not_available[*]}"

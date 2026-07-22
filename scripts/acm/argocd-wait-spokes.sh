@@ -11,14 +11,18 @@
 #   ARGOCD_WAIT_INTERVAL_SECONDS default 10
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/lib-spokes.sh"
+
 CLUSTER_COUNT="${CLUSTER_COUNT:-1}"
 SPOKES_GENERATED="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-}"
 TIMEOUT_SECONDS="${ARGOCD_WAIT_TIMEOUT_SECONDS:-600}"
 INTERVAL_SECONDS="${ARGOCD_WAIT_INTERVAL_SECONDS:-10}"
 
-log() { printf '%s\n' "$*"; }
-fail() { log "ERROR: $*"; exit 1; }
+log() { adnr_log "$@"; }
+fail() { adnr_fail "$@"; }
 
 if ! [[ "${CLUSTER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${CLUSTER_COUNT}" -lt 1 ]]; then
   fail "CLUSTER_COUNT must be an integer >= 1 (got: ${CLUSTER_COUNT})"
@@ -29,24 +33,9 @@ if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ! -f "${SPOKES_GENERATED}" ]]; then
-  fail "missing ${SPOKES_GENERATED}; run 'make validate-topology CLUSTER_COUNT=${CLUSTER_COUNT}' first"
-fi
-
-spokes=()
-while IFS= read -r _spoke; do
-  [[ -n "${_spoke}" ]] && spokes+=("${_spoke}")
-done < <(
-  awk '
-    /^[[:space:]]*spokes:[[:space:]]*\[\][[:space:]]*$/ { exit }
-    /^[[:space:]]*- name:[[:space:]]+/ {
-      name = $0
-      sub(/^[[:space:]]*- name:[[:space:]]+/, "", name)
-      gsub(/[[:space:]]+$/, "", name)
-      if (name != "") print name
-    }
-  ' "${SPOKES_GENERATED}"
-)
+adnr_require_spokes_file
+adnr_load_spoke_names
+spokes=("${ADNR_SPOKE_NAMES[@]}")
 
 if [[ "${#spokes[@]}" -eq 0 ]]; then
   fail "no spokes listed in ${SPOKES_GENERATED}"
@@ -56,18 +45,8 @@ if [[ "${#spokes[@]}" -ne "${CLUSTER_COUNT}" ]]; then
   fail "spoke count mismatch: file has ${#spokes[@]}, CLUSTER_COUNT=${CLUSTER_COUNT}"
 fi
 
-oc_bin=""
-if command -v oc >/dev/null 2>&1; then
-  oc_bin=oc
-elif command -v kubectl >/dev/null 2>&1; then
-  oc_bin=kubectl
-else
-  fail "oc or kubectl not found on PATH"
-fi
-
-if ! "${oc_bin}" whoami >/dev/null 2>&1; then
-  fail "not logged into hub cluster (${oc_bin} whoami failed)"
-fi
+oc_bin="$(adnr_resolve_oc)"
+adnr_require_hub_login "${oc_bin}"
 
 argocd_ns="${ARGOCD_NAMESPACE}"
 if [[ -z "${argocd_ns}" ]]; then
