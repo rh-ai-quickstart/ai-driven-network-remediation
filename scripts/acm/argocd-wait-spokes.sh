@@ -61,22 +61,25 @@ fi
 
 log "Waiting for ${#spokes[@]} Application(s) in ${argocd_ns} (timeout=${TIMEOUT_SECONDS}s)..."
 
+# Prefer argoproj.io: bare "application" can resolve to app.k8s.io on ACM hubs.
+ARGOCD_APP_RESOURCE="applications.argoproj.io"
+
 dump_app_diagnostics() {
   local name="$1"
   local app="adnr-edge-${name}"
-  if ! "${oc_bin}" get application "${app}" -n "${argocd_ns}" >/dev/null 2>&1; then
+  if ! "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" >/dev/null 2>&1; then
     log "  ${app}: Application not found in ${argocd_ns}"
     return 0
   fi
   local sync health message
-  sync="$("${oc_bin}" get application "${app}" -n "${argocd_ns}" \
+  sync="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" \
     -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
-  health="$("${oc_bin}" get application "${app}" -n "${argocd_ns}" \
+  health="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" \
     -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
-  message="$("${oc_bin}" get application "${app}" -n "${argocd_ns}" \
+  message="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" \
     -o jsonpath='{.status.conditions[?(@.type=="ComparisonError")].message}' 2>/dev/null || true)"
   if [[ -z "${message}" ]]; then
-    message="$("${oc_bin}" get application "${app}" -n "${argocd_ns}" \
+    message="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" \
       -o jsonpath='{.status.operationState.message}' 2>/dev/null || true)"
   fi
   log "  ${app}: sync=${sync:-unknown} health=${health:-unknown}"
@@ -102,14 +105,14 @@ while [[ "${#pending[@]}" -gt 0 ]]; do
   still_pending=()
   for name in "${pending[@]}"; do
     app="adnr-edge-${name}"
-    if ! "${oc_bin}" get application "${app}" -n "${argocd_ns}" >/dev/null 2>&1; then
+    if ! "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" >/dev/null 2>&1; then
       log "  ${app}: not found yet"
       still_pending+=("${name}")
       continue
     fi
-    sync="$("${oc_bin}" get application "${app}" -n "${argocd_ns}" \
+    sync="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" \
       -o jsonpath='{.status.sync.status}' 2>/dev/null || true)"
-    health="$("${oc_bin}" get application "${app}" -n "${argocd_ns}" \
+    health="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${argocd_ns}" \
       -o jsonpath='{.status.health.status}' 2>/dev/null || true)"
     if [[ "${sync}" == "Synced" && "${health}" == "Healthy" ]]; then
       log "  ${app}: Synced Healthy"
