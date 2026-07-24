@@ -5,11 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from ingestion_pipeline.clients.llamastack import (
-    LlamaStackVectorStoreClient,
-    VectorStoreFileContentSummary,
-    VectorStoreSummary,
-)
+from ingestion_pipeline.clients.llamastack import VectorStoreFileContentSummary, VectorStoreSummary
 from ingestion_pipeline.config import settings
 from ingestion_pipeline.service import IngestionPipelineService
 
@@ -30,7 +26,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
             try:
                 _auto_ingest()
             except Exception:
-                logger.exception("Auto-ingest failed — retry via POST /runbooks/ingest")
+                logger.exception("Auto-ingest failed — retry via POST /runbooks/ingest or /telco-docs/ingest")
 
         thread = threading.Thread(target=_run_ingest, daemon=True, name="auto-ingest")
         thread.start()
@@ -40,44 +36,56 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="Ingestion Pipeline",
-    description="Syncs packaged runbooks to MinIO and ingests them into a Llama Stack vector store",
+    description=(
+        "Syncs packaged runbooks and RAN/ORAN vendor documentation to MinIO "
+        "and ingests them into Llama Stack vector stores"
+    ),
     version="0.1.0",
     lifespan=lifespan,
 )
 
 
 def _auto_ingest() -> None:
-    """Sync packaged runbooks to MinIO and ingest into the vector store.
-
-    Checked here (rather than inside the service) so a missing MinIO/vector store just logs a
-    warning and skips at startup, instead of failing deep inside sync()/ingest().
-    """
+    """Sync packaged runbooks and vendor docs to MinIO and ingest into their vector stores."""
     if not settings.minio_is_configured:
         logger.warning("MinIO not configured — skipping auto-ingest")
         return
-    if not settings.vector_store_name:
-        logger.warning("VECTOR_STORE_NAME not set — skipping auto-ingest")
+    if not settings.vector_store_name and not settings.telco_vector_store_name:
+        logger.warning("No vector store configured — skipping auto-ingest")
         return
 
-    sync_result = service.sync()
-    logger.info(
-        "Runbook sync complete: uploaded=%d skipped=%d",
-        sync_result["uploaded_count"],
-        sync_result["skipped_count"],
-    )
+    if settings.vector_store_name:
+        sync_result = service.sync()
+        logger.info(
+            "Runbook sync complete: uploaded=%d skipped=%d",
+            sync_result["uploaded_count"],
+            sync_result["skipped_count"],
+        )
 
-    ingested = service.ingest()
-    logger.info("Auto-ingest complete: %d runbooks ingested into '%s'", len(ingested), settings.vector_store_name)
+        ingest_result = service.ingest()
+        logger.info(
+            "Auto-ingest complete: %d runbooks ingested into '%s'",
+            ingest_result["ingested_count"],
+            settings.vector_store_name,
+        )
+    else:
+        logger.warning("VECTOR_STORE_NAME not set — skipping runbook auto-ingest")
 
+    if settings.telco_vector_store_name:
+        sync_result = service.sync_telco_docs()
+        logger.info(
+            "Telco vendor doc conversion complete: %d document(s) converted to markdown",
+            sync_result["converted_count"],
+        )
 
-def _get_client() -> LlamaStackVectorStoreClient:
-    return LlamaStackVectorStoreClient(
-        base_url=settings.llamastack_base_url,
-        vector_store_name=settings.vector_store_name,
-        embedding_model=settings.embedding_model,
-        chunk_size_tokens=settings.chunk_size_tokens,
-        chunk_overlap_tokens=settings.chunk_overlap_tokens,
-    )
+        ingest_result = service.ingest_telco_docs()
+        logger.info(
+            "Telco vendor doc auto-ingest complete: %d units ingested into '%s'",
+            ingest_result["ingested_count"],
+            settings.telco_vector_store_name,
+        )
+    else:
+        logger.warning("TELCO_VECTOR_STORE_NAME not set — skipping telco doc auto-ingest")
 
 
 def _get_service() -> IngestionPipelineService:
@@ -93,14 +101,12 @@ def health() -> dict[str, str]:
 
 @app.get("/models")
 def models() -> dict[str, Any]:
-    client = _get_client()
-    return {"models": client.list_models()}
+    return {"models": service.list_models()}
 
 
 @app.get("/vector-store")
 def vector_store() -> dict[str, Any]:
-    client = _get_client()
-    summary: VectorStoreSummary = client.ensure_vector_store()
+    summary: VectorStoreSummary = service.vector_store_summary()
     return {
         "id": summary.id,
         "name": summary.name,
@@ -111,27 +117,27 @@ def vector_store() -> dict[str, Any]:
 
 @app.post("/runbooks/sync")
 def sync_runbooks() -> dict[str, Any]:
-    service = _get_service()
-    return service.sync()
+    return _get_service().sync()
 
 
 @app.post("/runbooks/ingest")
 def ingest_runbooks() -> dict[str, Any]:
-    service = _get_service()
-    ingested = service.ingest()
+    return _get_service().ingest()
 
-    return {
-        "bucket": settings.minio_bucket,
-        "prefix": settings.minio_runbook_prefix,
-        "ingested_count": len(ingested),
-        "objects": ingested,
-    }
+
+@app.post("/telco-docs/sync")
+def sync_telco_docs() -> dict[str, Any]:
+    return _get_service().sync_telco_docs()
+
+
+@app.post("/telco-docs/ingest")
+def ingest_telco_docs() -> dict[str, Any]:
+    return _get_service().ingest_telco_docs()
 
 
 @app.get("/vector-store/files/{file_id}/content")
-def vector_store_file_content(file_id: str) -> dict[str, Any]:
-    client = _get_client()
-    summary: VectorStoreFileContentSummary = client.get_file_content(file_id=file_id)
+def vector_store_file_content(file_id: str, vector_store_id: str) -> dict[str, Any]:
+    summary: VectorStoreFileContentSummary = service.vector_store_file_content(file_id, vector_store_id)
     return {
         "id": summary.id,
         "vector_store_id": summary.vector_store_id,

@@ -36,19 +36,6 @@ class MinioDocumentClient:
         if not self._client.bucket_exists(self._bucket):
             self._client.make_bucket(self._bucket)
 
-    def put_text_object_if_missing(self, object_name: str, content: str) -> bool:
-        if self.object_exists(object_name):
-            return False
-        data = content.encode("utf-8")
-        self._client.put_object(
-            self._bucket,
-            object_name,
-            BytesIO(data),
-            length=len(data),
-            content_type="text/markdown; charset=utf-8",
-        )
-        return True
-
     def object_exists(self, object_name: str) -> bool:
         try:
             self._client.stat_object(self._bucket, object_name)
@@ -57,6 +44,26 @@ class MinioDocumentClient:
             if exc.code in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
                 return False
             raise
+
+    def put_text_object_if_missing(self, object_name: str, content: str) -> bool:
+        if self.object_exists(object_name):
+            return False
+        self._put_text(object_name, content)
+        return True
+
+    def put_text_object(self, object_name: str, content: str) -> None:
+        """Write a text object, overwriting any existing object of the same name."""
+        self._put_text(object_name, content)
+
+    def _put_text(self, object_name: str, content: str) -> None:
+        data = content.encode("utf-8")
+        self._client.put_object(
+            self._bucket,
+            object_name,
+            BytesIO(data),
+            length=len(data),
+            content_type="text/markdown; charset=utf-8",
+        )
 
     def load_text_object(self, object_name: str) -> str:
         response = None

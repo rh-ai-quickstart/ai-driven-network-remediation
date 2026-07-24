@@ -61,13 +61,18 @@ spec:
               protocol: TCP
           env:
             - name: AUTO_INGEST_ON_STARTUP
-              value: {{ .Values.ingestionPipeline.autoIngestOnStartup | default "true" | quote }}
+              # No `default` here: values.yaml already supplies one, and Sprig's `default`
+              # treats boolean `false` as an empty value, silently discarding explicit
+              # `--set ingestionPipeline.autoIngestOnStartup=false` overrides.
+              value: {{ .Values.ingestionPipeline.autoIngestOnStartup | quote }}
             - name: LLAMASTACK_HOST
               value: {{ .Values.ingestionPipeline.llamastackHost | default (index .Values "llama-stack" "host") | quote }}
             - name: LLAMASTACK_PORT
               value: {{ index .Values "llama-stack" "port" | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
+            - name: TELCO_VECTOR_STORE_NAME
+              value: {{ .Values.ingestionPipeline.telcoVectorStoreName | quote }}
             - name: EMBEDDING_MODEL
               value: {{ .Values.ingestionPipeline.embeddingModel | quote }}
             - name: CHUNK_SIZE_TOKENS
@@ -92,6 +97,8 @@ spec:
               value: {{ .Values.ingestionPipeline.minio.secure | quote }}
             - name: MINIO_RUNBOOK_PREFIX
               value: {{ .Values.ingestionPipeline.minio.runbookPrefix | quote }}
+            - name: MINIO_TELCO_DOCS_PREFIX
+              value: {{ .Values.ingestionPipeline.minio.telcoDocsPrefix | quote }}
           livenessProbe:
             {{- toYaml .Values.ingestionPipeline.livenessProbe | nindent 12 }}
           readinessProbe:

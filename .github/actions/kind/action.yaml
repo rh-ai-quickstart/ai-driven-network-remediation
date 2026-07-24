@@ -73,14 +73,13 @@ runs:
     - name: Helm Install
       run: |
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
-          ENABLE_SERVICENOW_MOCK=true \
+          ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
             --set mcpSecrets.openshift.create=true \
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
             --set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.hub.svc:8080 \
             --set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false \
-            --set ingestionPipeline.autoIngestOnStartup=false \
             --set kafka.kafka.storage.storageClass=standard \
             --set kafka.kafka.storage.size=256Mi \
             --set kafka.kafka.retention.hours=1 \

@@ -21,6 +21,7 @@ FROM python:3.13-slim
 
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/runbooks /app/runbooks
+COPY --from=builder /app/telco-docs /app/telco-docs
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000

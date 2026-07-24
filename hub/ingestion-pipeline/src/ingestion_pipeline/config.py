@@ -22,6 +22,9 @@ class Settings:
     minio_bucket: str
     minio_secure: bool
     minio_runbook_prefix: str
+    telco_docs_dir: Path
+    telco_vector_store_name: str
+    minio_telco_docs_prefix: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -39,6 +42,9 @@ class Settings:
             minio_bucket=os.environ.get("MINIO_BUCKET", ""),
             minio_secure=_get_bool_env("MINIO_SECURE"),
             minio_runbook_prefix=os.environ.get("MINIO_RUNBOOK_PREFIX", "runbooks/"),
+            telco_docs_dir=Path(os.environ.get("TELCO_DOCS_DIR", "/app/telco-docs")),
+            telco_vector_store_name=os.environ.get("TELCO_VECTOR_STORE_NAME", ""),
+            minio_telco_docs_prefix=os.environ.get("MINIO_TELCO_DOCS_PREFIX", "telco-docs/"),
         )
 
     @property

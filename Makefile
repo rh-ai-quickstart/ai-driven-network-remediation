@@ -39,6 +39,7 @@ ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
+AUTO_INGEST_ON_STARTUP ?= true
 AAP_NAMESPACE          ?= aap
 ENABLE_SLACK           ?= false
 ENABLE_MULTICLUSTER    ?= false
@@ -241,6 +242,7 @@ helm_all_args = \
 	--set edgeRbac.enabled=$(ROUTES_ENABLED) \
 	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
+	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
 	$(helm_infra_args) \
 	$(helm_lokistack_args) \
 	$(helm_mcp_image_args) \
@@ -504,6 +506,7 @@ unit-tests:
 	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-lokistack && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-aap && uv sync --group dev && AAP_TOKEN=test uv run pytest
+	cd hub/ingestion-pipeline && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-kafka && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-servicenow && uv sync --group dev && uv run pytest
 	cd hub/infra/servicenow-mock && uv sync --group dev && uv run pytest

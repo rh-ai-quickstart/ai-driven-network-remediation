@@ -127,19 +127,19 @@ class LlamaStackVectorStoreClient:
         self,
         *,
         file_id: str,
+        vector_store_id: str,
         wait_timeout_seconds: float = 30,
         poll_interval_seconds: float = 1,
     ) -> VectorStoreFileContentSummary:
-        vector_store = self.ensure_vector_store()
         vector_file = self._wait_for_file_ready(
             file_id=file_id,
-            vector_store_id=vector_store.id,
+            vector_store_id=vector_store_id,
             wait_timeout_seconds=wait_timeout_seconds,
             poll_interval_seconds=poll_interval_seconds,
         )
         content = self._client.vector_stores.files.content(
             file_id,
-            vector_store_id=vector_store.id,
+            vector_store_id=vector_store_id,
             include_embeddings=True,
             include_metadata=True,
         )

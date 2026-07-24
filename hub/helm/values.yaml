@@ -287,6 +287,7 @@ ingestionPipeline:
   autoIngestOnStartup: "true"
   waitForDeps: true
   vectorStoreName: noc_runbooks
+  telcoVectorStoreName: telco_oran_docs
   llamastackHost: llamastack-service
   embeddingModel: sentence-transformers/nomic-ai/nomic-embed-text-v1.5
   chunkSizeTokens: 800
@@ -295,6 +296,7 @@ ingestionPipeline:
     bucket: runbooks
     secure: false
     runbookPrefix: runbooks/
+    telcoDocsPrefix: telco-docs/
   resources: {}
   livenessProbe:
     httpGet:

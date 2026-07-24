@@ -1,5 +1,5 @@
 def _sync_runbooks(ingestion_client) -> dict:
-    response = ingestion_client.post("/runbooks/sync", timeout=30.0)
+    response = ingestion_client.post("/runbooks/sync")
     assert response.status_code == 200
     return response.json()
 
@@ -63,7 +63,7 @@ def test_runbooks_sync_ingest_and_content_flow(ingestion_client):
 
     response = ingestion_client.get(
         f"/vector-store/files/{ingest_data['objects'][0]['id']}/content",
-        timeout=30.0,
+        params={"vector_store_id": ingest_data["objects"][0]["vector_store_id"]},
     )
     assert response.status_code == 200
     data = response.json()

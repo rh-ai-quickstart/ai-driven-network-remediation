@@ -29,10 +29,16 @@ echo "Pushing images"
 REGISTRY="${REGISTRY}" VERSION="${VERSION}" make push-all-images
 
 echo "Deploying"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make helm-install
+# Avoid racing the startup auto-ingest against the integration tests' own explicit sync/ingest
+# calls (see CI's kind action for the same override).
+REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" \
+	AUTO_INGEST_ON_STARTUP=false make helm-install
 
 echo "Creating edge workload in namespace ${EDGE_NAMESPACE}"
 EDGE_NAMESPACE="${EDGE_NAMESPACE}" make deploy-edge-workload
 
 echo "Running integration tests"
 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make integration-tests
+
+echo "Running unit tests"
+NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make unit-tests
