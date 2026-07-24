@@ -1,7 +1,7 @@
-import os
-
-import pytest
-from common_helpers import sync_runbooks
+def _sync_runbooks(ingestion_client) -> dict:
+    response = ingestion_client.post("/runbooks/sync", timeout=30.0)
+    assert response.status_code == 200
+    return response.json()
 
 
 def test_models_list_not_empty(ingestion_client):
@@ -24,10 +24,6 @@ def test_sentence_transformers_model_registered(ingestion_client):
     )
 
 
-@pytest.mark.skipif(
-    not os.environ.get("GITHUB_ACTIONS"),
-    reason="adnr-llm model only provisioned in CI",
-)
 def test_adnr_llm_model_registered(llamastack_client):
     """Hub llamastack still serves the foundation LLM for chatbot/MCP."""
     response = llamastack_client.get("/v1/models")
@@ -46,7 +42,7 @@ def test_vector_store_endpoint_returns_summary(ingestion_client):
 
 
 def test_runbooks_sync_ingest_and_content_flow(ingestion_client):
-    sync_data = sync_runbooks(ingestion_client)
+    sync_data = _sync_runbooks(ingestion_client)
     assert sync_data["bucket"] == "runbooks"
     assert sync_data["prefix"] == "runbooks/"
     assert sync_data["uploaded_count"] + sync_data["skipped_count"] > 0

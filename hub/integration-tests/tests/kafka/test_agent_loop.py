@@ -14,8 +14,8 @@ from __future__ import annotations
 import os
 import time
 
+import httpx
 import pytest
-from common_helpers import wait_for_agent_ready
 
 # Demo scenarios without _overrides invoke Granite LLM analysis and can exceed the
 # agent graph timeout in CI before audit_node runs. lightspeed embeds confidence overrides.
@@ -26,6 +26,26 @@ _DEMO_SITE = "edge-01"
 _AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "120"))
 
 _COMPLETED_WORKFLOW_STAGES = frozenset({"Auto-Remediated", "Remediated", "Escalated"})
+
+
+def _wait_for_agent_ready() -> None:
+    """Wait until agent-service reports Kafka consumer connected (PR #105 ready gate)."""
+    timeout_s = int(os.environ.get("AGENT_READY_TIMEOUT_SECONDS", "120"))
+    base_url = os.environ.get("AGENT_SERVICE_URL", "http://localhost:8007")
+    deadline = time.monotonic() + timeout_s
+    last_status: int | None = None
+    last_body = ""
+
+    with httpx.Client(base_url=base_url, timeout=10.0) as client:
+        while time.monotonic() < deadline:
+            response = client.get("/ready")
+            last_status = response.status_code
+            last_body = response.text
+            if response.status_code == 200 and response.json().get("ready") is True:
+                return
+            time.sleep(2)
+
+    pytest.fail(f"agent-service not ready within {timeout_s}s (last /ready status={last_status}, body={last_body})")
 
 
 def _kafka_reachable(deps: dict) -> bool:
@@ -71,7 +91,7 @@ def _poll_incident_movie(chatbot_client, incident_id: str) -> dict:
 @pytest.mark.flaky(reruns=1)
 def test_kafka_agent_loop(chatbot_client):
     """Demo trigger publishes to system-alerts; agent consumes and writes incident-audit."""
-    wait_for_agent_ready()
+    _wait_for_agent_ready()
 
     trigger_resp = chatbot_client.post(
         "/api/demo/trigger",
@@ -92,8 +112,8 @@ def test_kafka_agent_loop(chatbot_client):
     movie_entry = _poll_incident_movie(chatbot_client, incident_id)
 
     assert movie_entry["incident_id"] == incident_id
-    assert (
-        movie_entry["stage"] in _COMPLETED_WORKFLOW_STAGES
-    ), f"Workflow did not complete; stage={movie_entry.get('stage')!r}"
+    assert movie_entry["stage"] in _COMPLETED_WORKFLOW_STAGES, (
+        f"Workflow did not complete; stage={movie_entry.get('stage')!r}"
+    )
     assert _DEMO_SITE in movie_entry.get("title", "")
     assert movie_entry.get("summary")
