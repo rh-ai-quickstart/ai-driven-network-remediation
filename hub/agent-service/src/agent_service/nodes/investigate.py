@@ -33,7 +33,64 @@ _TOOLS = [
                 "required": ["namespace"],
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_error_patterns",
+            "description": "Find recurring error patterns in logs for an application",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "app": {"type": "string", "description": "Application name"},
+                    "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
+                    "top_n": {"type": "integer", "description": "Max patterns to return", "default": 10},
+                    "tenant": {"type": "string", "description": "Tenant identifier"},
+                    "regex": {"type": "string", "description": "Optional regex filter"},
+                },
+                "required": ["namespace", "app"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pod_logs",
+            "description": "Get logs from a specific pod",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pod_name": {"type": "string", "description": "Pod name"},
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "container": {"type": "string", "description": "Container name"},
+                    "tail_lines": {"type": "integer", "description": "Number of lines from the end", "default": 100},
+                },
+                "required": ["pod_name", "namespace"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_logs",
+            "description": "Search aggregated logs via Loki",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "pod": {"type": "string", "description": "Pod name filter"},
+                    "container": {"type": "string", "description": "Container name filter"},
+                    "labels": {"type": "string", "description": "Label selector"},
+                    "text": {"type": "string", "description": "Text to search for"},
+                    "tenant": {"type": "string", "description": "Tenant identifier"},
+                    "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
+                    "limit": {"type": "integer", "description": "Max results", "default": 50},
+                },
+                "required": ["namespace"],
+            },
+        },
+    },
 ]
 
 _SYSTEM_PROMPT = """\
@@ -42,19 +99,46 @@ an incident by calling available tools. You are NOT analyzing or deciding — ju
 
 Available tools:
 - get_events(namespace, limit): Get recent Kubernetes events for a namespace
+- find_error_patterns(namespace, app, duration, top_n, tenant, regex): Find recurring error patterns in logs
+- get_pod_logs(pod_name, namespace, container, tail_lines): Get logs from a specific pod
+- search_logs(namespace, pod, container, labels, text, tenant, duration, limit): Search aggregated logs via Loki
 
-Given the log event and any enriched pod status, decide whether to call a tool to \
-gather more evidence. If you have enough context or cannot gather more useful \
-information, stop calling tools.
+You may call multiple tools in a single response when it would be efficient. \
+If one tool fails, consider using an alternative (e.g., search_logs via Loki \
+when get_pod_logs times out).
+
+Given the log event and any enriched pod status, decide which tools to call to \
+gather evidence. Stop when you have enough context or cannot gather more useful information.
 
 Do NOT analyze root causes or recommend fixes — just gather raw evidence."""
 
 
+def _extract_events(result: dict) -> list[dict]:
+    items = result.get("items", result.get("events", []))
+    if isinstance(items, list):
+        return items
+    return [result]
+
+
 def make_investigate_node(config: GraphConfig):
+    async def _call_tool(tool_name: str, tool_args: dict) -> dict:
+        try:
+            async with asyncio.timeout(config.tool_call_timeout):
+                return await invoke_tool(tool_name, tool_args)
+        except TimeoutError:
+            logger.warning(f"Tool call {tool_name} timed out after {config.tool_call_timeout}s")
+            return {"error": f"{tool_name} timed out after {config.tool_call_timeout}s"}
+        except Exception as exc:
+            logger.warning(f"Tool call {tool_name} failed: {exc}")
+            return {"error": str(exc)}
+
     async def investigate_node(state) -> dict:
         logger.info("Investigate node invoked")
         log_event = state.log_event
         cluster_events = list(state.cluster_events)
+        recent_errors = list(state.recent_errors)
+        pod_logs = state.pod_logs
+        log_search_results = list(state.log_search_results)
 
         pod_status_summary = ""
         if state.pod_status:
@@ -80,22 +164,28 @@ def make_investigate_node(config: GraphConfig):
 
                     messages.append(response)
 
-                    for tool_call in response.tool_calls:
+                    tasks = [
+                        (tc, asyncio.create_task(_call_tool(tc["name"], tc["args"])))
+                        for tc in response.tool_calls
+                    ]
+
+                    for tool_call, task in tasks:
+                        tool_result = await task
                         tool_name = tool_call["name"]
-                        tool_args = tool_call["args"]
 
-                        try:
-                            tool_result = await invoke_tool(tool_name, tool_args)
-                        except Exception as exc:
-                            tool_result = {"error": str(exc)}
-                            logger.warning(f"Tool call {tool_name} failed: {exc}")
-
-                        if tool_name == "get_events" and "error" not in tool_result:
-                            items = tool_result.get("items", tool_result.get("events", []))
-                            if isinstance(items, list):
-                                cluster_events.extend(items)
-                            else:
-                                cluster_events.append(tool_result)
+                        if "error" not in tool_result:
+                            if tool_name == "get_events":
+                                cluster_events.extend(_extract_events(tool_result))
+                            elif tool_name == "find_error_patterns":
+                                patterns = tool_result.get("patterns", [])
+                                recent_errors.extend(patterns)
+                            elif tool_name == "get_pod_logs":
+                                logs = tool_result.get("logs", "")
+                                if logs:
+                                    pod_logs = logs if not pod_logs else pod_logs + "\n" + logs
+                            elif tool_name == "search_logs":
+                                results = tool_result.get("results", [])
+                                log_search_results.extend(results)
 
                         messages.append(
                             ToolMessage(
@@ -108,6 +198,11 @@ def make_investigate_node(config: GraphConfig):
         except Exception:
             logger.opt(exception=True).warning("Investigate node failed, returning partial evidence")
 
-        return {"cluster_events": cluster_events}
+        return {
+            "cluster_events": cluster_events,
+            "recent_errors": recent_errors,
+            "pod_logs": pod_logs,
+            "log_search_results": log_search_results,
+        }
 
     return investigate_node

@@ -21,12 +21,29 @@ def _llm_with_tool_call(name="get_events", args=None, call_id="call-1"):
     return response
 
 
+def _llm_with_multi_tool_call():
+    """LLM response requesting all four tools at once."""
+    response = AsyncMock()
+    response.tool_calls = [
+        {"name": "get_events", "args": {"namespace": "prod"}, "id": "call-ev"},
+        {"name": "find_error_patterns", "args": {"namespace": "prod", "app": "nginx"}, "id": "call-err"},
+        {"name": "get_pod_logs", "args": {"pod_name": "nginx-abc", "namespace": "prod"}, "id": "call-logs"},
+        {"name": "search_logs", "args": {"namespace": "prod", "text": "error"}, "id": "call-search"},
+    ]
+    response.content = ""
+    return response
+
+
 _STUB_EVENTS = {
     "items": [
         {"reason": "OOMKilled", "message": "container killed", "metadata": {"namespace": "prod"}},
         {"reason": "Pulling", "message": "pulling image", "metadata": {"namespace": "prod"}},
     ]
 }
+
+_STUB_ERROR_PATTERNS = [{"pattern": "OOMKilled", "count": 5}]
+_STUB_POD_LOGS = "2024-01-01 ERROR: container killed\n2024-01-01 INFO: restarting"
+_STUB_LOG_SEARCH = [{"timestamp": "2024-01-01", "message": "error found", "pod": "nginx-abc"}]
 
 
 class TestInvestigateNode:
@@ -132,3 +149,146 @@ class TestInvestigateNode:
         assert elapsed < 5
         assert "cluster_events" in result
         assert result["cluster_events"] == [{"reason": "pre-existing"}]
+
+    async def test_multi_tool_response_populates_all_state_fields(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        async def _mock_invoke(tool_name, tool_args):
+            if tool_name == "get_events":
+                return _STUB_EVENTS
+            if tool_name == "find_error_patterns":
+                return {"patterns": _STUB_ERROR_PATTERNS}
+            if tool_name == "get_pod_logs":
+                return {"logs": _STUB_POD_LOGS}
+            if tool_name == "search_logs":
+                return {"results": _STUB_LOG_SEARCH}
+            return {}
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[_llm_with_multi_tool_call(), _llm_no_tool_call()])
+        with (
+            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", _mock_invoke),
+        ):
+            result = await node(state)
+
+        assert len(result["cluster_events"]) == 2
+        assert result["cluster_events"][0]["reason"] == "OOMKilled"
+        assert result["recent_errors"] == _STUB_ERROR_PATTERNS
+        assert result["pod_logs"] == _STUB_POD_LOGS
+        assert result["log_search_results"] == _STUB_LOG_SEARCH
+
+    async def test_multi_tool_calls_execute_concurrently(self):
+        import time
+
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        call_times = []
+
+        async def _slow_invoke(tool_name, tool_args):
+            import asyncio
+            call_times.append(time.monotonic())
+            await asyncio.sleep(0.3)
+            return _STUB_EVENTS if tool_name == "get_events" else {"patterns": []}
+
+        two_tools = AsyncMock()
+        two_tools.tool_calls = [
+            {"name": "get_events", "args": {"namespace": "prod"}, "id": "c1"},
+            {"name": "find_error_patterns", "args": {"namespace": "prod", "app": "x"}, "id": "c2"},
+        ]
+        two_tools.content = ""
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[two_tools, _llm_no_tool_call()])
+        t0 = time.monotonic()
+        with (
+            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", _slow_invoke),
+        ):
+            await node(state)
+        elapsed = time.monotonic() - t0
+
+        assert len(call_times) == 2
+        assert abs(call_times[1] - call_times[0]) < 0.1, "Tools should start near-simultaneously"
+        assert elapsed < 0.8, f"Two 0.3s tools in parallel should take < 0.8s, took {elapsed:.2f}s"
+
+    async def test_per_tool_timeout_returns_error_and_does_not_block(self):
+        import asyncio
+        import time
+
+        config = GraphConfig(tool_call_timeout=1)
+        node = make_investigate_node(config)
+        state = make_state()
+
+        async def _invoke_with_one_hang(tool_name, tool_args):
+            if tool_name == "get_pod_logs":
+                await asyncio.sleep(60)
+                return {"logs": "should never reach"}
+            return _STUB_EVENTS
+
+        two_tools = AsyncMock()
+        two_tools.tool_calls = [
+            {"name": "get_events", "args": {"namespace": "prod"}, "id": "c1"},
+            {"name": "get_pod_logs", "args": {"pod_name": "x", "namespace": "prod"}, "id": "c2"},
+        ]
+        two_tools.content = ""
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[two_tools, _llm_no_tool_call()])
+        t0 = time.monotonic()
+        with (
+            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", _invoke_with_one_hang),
+        ):
+            result = await node(state)
+        elapsed = time.monotonic() - t0
+
+        assert elapsed < 5, f"Should be bounded by per-tool timeout, took {elapsed:.2f}s"
+        assert len(result["cluster_events"]) == 2
+        assert result["pod_logs"] == ""
+        last_call_msgs = mock_llm.ainvoke.call_args_list[1][0][0]
+        tool_msgs = [m for m in last_call_msgs if hasattr(m, "tool_call_id")]
+        error_msg = [m for m in tool_msgs if "timed out" in m.content]
+        assert len(error_msg) == 1, "Timeout error should be fed back to LLM"
+
+    async def test_tool_failure_adaptation_llm_switches_to_alternative(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        async def _invoke_with_failure(tool_name, tool_args):
+            if tool_name == "get_pod_logs":
+                raise ConnectionError("connection refused")
+            if tool_name == "search_logs":
+                return {"results": _STUB_LOG_SEARCH}
+            return {}
+
+        iter1_logs_fail = AsyncMock()
+        iter1_logs_fail.tool_calls = [
+            {"name": "get_pod_logs", "args": {"pod_name": "x", "namespace": "prod"}, "id": "c1"},
+        ]
+        iter1_logs_fail.content = ""
+
+        iter2_search_fallback = AsyncMock()
+        iter2_search_fallback.tool_calls = [
+            {"name": "search_logs", "args": {"namespace": "prod", "text": "error"}, "id": "c2"},
+        ]
+        iter2_search_fallback.content = ""
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(
+            side_effect=[iter1_logs_fail, iter2_search_fallback, _llm_no_tool_call()]
+        )
+        with (
+            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", _invoke_with_failure),
+        ):
+            result = await node(state)
+
+        assert result["pod_logs"] == ""
+        assert result["log_search_results"] == _STUB_LOG_SEARCH
+        assert mock_llm.ainvoke.call_count == 3
