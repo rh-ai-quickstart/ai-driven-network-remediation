@@ -98,6 +98,18 @@ class TestInvestigateNode:
         assert mock_llm.ainvoke.call_count == 2
         assert len(result["cluster_events"]) > 0
 
+    async def test_llm_error_returns_partial_evidence(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state(cluster_events=[{"reason": "pre-existing"}])
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LlamaStack unreachable"))
+        with patch("agent_service.nodes.investigate._llm", mock_llm):
+            result = await node(state)
+
+        assert result["cluster_events"] == [{"reason": "pre-existing"}]
+
     async def test_timeout_writes_partial_evidence_and_does_not_raise(self):
         import time
 

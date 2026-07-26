@@ -105,6 +105,8 @@ def make_investigate_node(config: GraphConfig):
                         )
         except TimeoutError:
             logger.warning("Investigate node timed out, returning partial evidence")
+        except Exception:
+            logger.opt(exception=True).warning("Investigate node failed, returning partial evidence")
 
         return {"cluster_events": cluster_events}
 
