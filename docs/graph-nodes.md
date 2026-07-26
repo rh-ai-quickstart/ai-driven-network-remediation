@@ -12,6 +12,24 @@ The agent service processes incidents through a LangGraph state machine. Each no
 
 Parses `raw_event` into a structured `LogEvent` (namespace, pod, container, severity).
 
+### enrich
+
+Calls `get_pods` via the MCP observability server to populate `pod_status` on state. Failures are caught and fall back to an empty dict so the pipeline continues.
+
+### investigate
+
+LLM-driven ReAct loop that gathers evidence about the incident. Uses Granite via LlamaStack with four tools: `get_events`, `find_error_patterns`, `get_pod_logs`, and `search_logs`. The LLM decides which tools to call each iteration; tool calls within an iteration run in parallel.
+
+Populates `cluster_events`, `recent_errors`, `pod_logs`, and `log_search_results` on state. On timeout or error, writes partial evidence and proceeds without raising.
+
+**Configuration (`GraphConfig`):**
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `tool_call_timeout` | `10` | Per-tool call timeout (seconds) |
+| `investigate_timeout` | `45` | Overall node timeout (seconds) |
+| `investigate_max_iterations` | `3` | Max ReAct loop iterations |
+
 ### rag_retrieval
 
 Queries the knowledge base for runbook snippets relevant to the log event. Populates `context_snippets` and `rag_query_used`.

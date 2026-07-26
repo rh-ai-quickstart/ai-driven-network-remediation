@@ -82,39 +82,7 @@ Use for production edge operations across multiple sites.
 
 ## AI Analysis Workflow
 
-<p align="center">
-  <img src="images/graph.png" alt="AI analysis workflow graph">
-</p>
-
-```
-1. NORMALIZE
-   └─ Parse raw Kafka event into structured LogEvent
-
-2. RAG RETRIEVAL (LlamaStack)
-   └─ Vector-store search retrieves relevant runbook context
-
-3. ANALYZE (Granite 4.0)
-   └─ RootCauseAnalysis struct (JSON schema enforced)
-
-4. DECIDE (LangGraph Router)
-   ├─ High confidence + known playbook type: REMEDIATE
-   ├─ High confidence + unknown playbook type: LIGHTSPEED
-   └─ Low confidence: ESCALATE
-
-5. ACT (conditional branch)
-   ├─ REMEDIATE (AAP)
-   │   └─ Launch & poll AAP job template (retry → DECIDE on failure)
-   ├─ LIGHTSPEED (ALS + AAP)
-   │   └─ ALS generates Ansible playbook, then executes via AAP
-   └─ ESCALATE (ServiceNow)
-       └─ Create ServiceNow incident
-
-6. NOTIFY
-   └─ Send notifications
-
-7. AUDIT
-   └─ Publish incident-audit record to Kafka
-```
+See [Graph Nodes](graph-nodes.md) for the full pipeline diagram and per-node reference.
 
 ## Data Persistence
 
