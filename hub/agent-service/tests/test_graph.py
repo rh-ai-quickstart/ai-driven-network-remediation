@@ -249,6 +249,11 @@ class TestLinearFlow:
         assert "cluster_events" in result
         assert len(result["cluster_events"]) > 0
 
+    async def test_evidence_fields_preserved_for_audit(self, graph):
+        result = await graph.ainvoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert result["pod_status"] == {"items": [{"metadata": {"name": "stub-pod"}}]}
+        assert result["cluster_events"] == [{"reason": "Pulled", "message": "stub event"}]
+
 
 class TestConditionalRouting:
     async def test_high_confidence_known_type_routes_through_remediate(self, graph):

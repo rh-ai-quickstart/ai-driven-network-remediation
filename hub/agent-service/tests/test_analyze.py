@@ -101,6 +101,48 @@ class TestLlmErrorFallback:
         assert rca.estimated_severity == "critical"
 
 
+class TestEvidenceInPrompt:
+    @pytest.mark.asyncio
+    async def test_evidence_appears_in_llm_prompt(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
+
+        with patch("agent_service.nodes.analyze._llm", mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            state = make_state(
+                context_snippets=["some context"],
+                pod_status={"items": [{"metadata": {"name": "nginx-abc"}}]},
+                cluster_events=[{"reason": "OOMKilled"}],
+            )
+            await analyze_node(state)
+
+        call_args = mock_llm.ainvoke.call_args
+        messages = call_args[0][0]
+        user_msg = messages[1].content
+        assert "Investigation evidence:" in user_msg
+        assert "Pod Status" in user_msg
+        assert "nginx-abc" in user_msg
+        assert "OOMKilled" in user_msg
+
+    @pytest.mark.asyncio
+    async def test_empty_evidence_no_regression(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
+
+        with patch("agent_service.nodes.analyze._llm", mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            state = make_state(context_snippets=["some context"])
+            await analyze_node(state)
+
+        call_args = mock_llm.ainvoke.call_args
+        messages = call_args[0][0]
+        user_msg = messages[1].content
+        assert "Investigation evidence:" not in user_msg
+        assert user_msg.startswith("Log event:")
+
+
 class TestOverrideBypass:
     @pytest.mark.asyncio
     async def test_override_skips_llm_and_returns_synthetic_rca(self):

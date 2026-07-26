@@ -45,3 +45,33 @@ class TestBuildEvidencePrompt:
         result = build_evidence_prompt(state)
         assert "event-0" in result
         assert "event-99" not in result
+
+    def test_pod_logs_included_when_populated(self):
+        state = make_state(pod_logs="ERROR: container OOMKilled\nRestarting pod")
+        result = build_evidence_prompt(state)
+        assert "Pod Logs" in result
+        assert "OOMKilled" in result
+
+    def test_pod_logs_truncated_to_last_n_lines(self):
+        lines = [f"log line {i}" for i in range(200)]
+        state = make_state(pod_logs="\n".join(lines))
+        result = build_evidence_prompt(state)
+        assert "log line 0" not in result
+        assert "log line 99" not in result
+        assert "log line 100" in result
+        assert "log line 199" in result
+
+    def test_log_search_results_included_when_populated(self):
+        results = [{"query": "error", "hits": 5}]
+        state = make_state(log_search_results=results)
+        result = build_evidence_prompt(state)
+        assert "Log Search Results" in result
+        assert "error" in result
+
+    def test_log_search_results_truncated_to_limit(self):
+        results = [{"query": f"q-{i}"} for i in range(40)]
+        state = make_state(log_search_results=results)
+        result = build_evidence_prompt(state)
+        assert "q-0" in result
+        assert "q-19" in result
+        assert "q-20" not in result
