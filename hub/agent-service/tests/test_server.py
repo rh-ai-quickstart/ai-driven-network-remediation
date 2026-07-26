@@ -10,12 +10,20 @@ from agent_service.server import _invoke_graph_for_alert, app
 INCIDENT_STATE_FIELDS = set(IncidentState.model_fields.keys())
 
 
+def _investigate_no_op(config):
+    async def investigate_node(state) -> dict:
+        return {"cluster_events": []}
+
+    return investigate_node
+
+
 @pytest.fixture
 def client():
     with (
         patch("agent_service.server.AlertConsumer"),
         patch("agent_service.nodes.audit.KafkaProducer"),
         patch("agent_service.server.warm_tool_cache", return_value=True),
+        patch("agent_service.graph.make_investigate_node", _investigate_no_op),
     ):
         with TestClient(app) as test_client:
             yield test_client

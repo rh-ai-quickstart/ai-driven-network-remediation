@@ -35,6 +35,10 @@ def _enrich_stub(state: dict) -> dict:
     return {"pod_status": {"items": [{"metadata": {"name": "stub-pod"}}]}}
 
 
+async def _investigate_stub(state: dict) -> dict:
+    return {"cluster_events": [{"reason": "Pulled", "message": "stub event"}]}
+
+
 def _rag_stub(state: dict) -> dict:
     log_event = state.log_event
     query = f"{log_event.message} namespace={log_event.namespace} pod={log_event.pod_name}"
@@ -129,6 +133,7 @@ def _patch_graph_nodes():
     _als_mock.reset_mock()
     with (
         patch("agent_service.graph.enrich_node", _enrich_stub),
+        patch("agent_service.graph.make_investigate_node", lambda config: _investigate_stub),
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
@@ -155,7 +160,7 @@ class TestGraphCompilation:
         self.edges = g.edges
 
     def test_expected_nodes_present(self):
-        for name in ("remediate", "lightspeed", "audit", "enrich"):
+        for name in ("remediate", "lightspeed", "audit", "enrich", "investigate"):
             assert name in self.nodes
 
     def test_audit_is_terminal_node_before_end(self):
@@ -167,9 +172,14 @@ class TestGraphCompilation:
         assert "enrich" in normalize_targets
         assert "rag_retrieval" not in normalize_targets
 
-    def test_enrich_connects_to_rag_retrieval(self):
+    def test_enrich_connects_to_investigate(self):
         enrich_targets = [e.target for e in self.edges if e.source == "enrich"]
-        assert "rag_retrieval" in enrich_targets
+        assert "investigate" in enrich_targets
+        assert "rag_retrieval" not in enrich_targets
+
+    def test_investigate_connects_to_rag_retrieval(self):
+        investigate_targets = [e.target for e in self.edges if e.source == "investigate"]
+        assert "rag_retrieval" in investigate_targets
 
     def test_notify_connects_to_audit_not_end(self):
         notify_targets = [e.target for e in self.edges if e.source == "notify"]
@@ -233,6 +243,11 @@ class TestLinearFlow:
     async def test_pod_status_appears_in_end_to_end_state(self, graph):
         result = await graph.ainvoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
         assert "pod_status" in result
+
+    async def test_cluster_events_appears_in_end_to_end_state(self, graph):
+        result = await graph.ainvoke({"raw_event": "nginx CrashLoopBackOff in namespace prod"})
+        assert "cluster_events" in result
+        assert len(result["cluster_events"]) > 0
 
 
 class TestConditionalRouting:
