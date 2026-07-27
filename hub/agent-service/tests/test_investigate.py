@@ -54,7 +54,7 @@ class TestInvestigateNode:
 
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_llm_no_tool_call())
-        with patch("agent_service.nodes.investigate._llm", mock_llm):
+        with patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm):
             result = await node(state)
 
         assert result["cluster_events"] == []
@@ -68,7 +68,7 @@ class TestInvestigateNode:
         mock_llm.ainvoke = AsyncMock(side_effect=[_llm_with_tool_call(), _llm_no_tool_call()])
         mock_invoke = AsyncMock(return_value=_STUB_EVENTS)
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
         ):
             result = await node(state)
@@ -86,7 +86,7 @@ class TestInvestigateNode:
         mock_llm.ainvoke = AsyncMock(side_effect=[_llm_with_tool_call(), _llm_no_tool_call()])
         mock_invoke = AsyncMock(side_effect=ConnectionError("connection refused"))
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
         ):
             result = await node(state)
@@ -107,7 +107,7 @@ class TestInvestigateNode:
         mock_llm.ainvoke = AsyncMock(return_value=always_call)
         mock_invoke = AsyncMock(return_value=_STUB_EVENTS)
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
         ):
             result = await node(state)
@@ -122,7 +122,7 @@ class TestInvestigateNode:
 
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LlamaStack unreachable"))
-        with patch("agent_service.nodes.investigate._llm", mock_llm):
+        with patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm):
             result = await node(state)
 
         assert result["cluster_events"] == [{"reason": "pre-existing"}]
@@ -142,7 +142,7 @@ class TestInvestigateNode:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = _slow_llm
         t0 = time.monotonic()
-        with patch("agent_service.nodes.investigate._llm", mock_llm):
+        with patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm):
             result = await node(state)
         elapsed = time.monotonic() - t0
 
@@ -163,13 +163,13 @@ class TestInvestigateNode:
             if tool_name == "get_pod_logs":
                 return {"logs": _STUB_POD_LOGS}
             if tool_name == "search_logs":
-                return {"results": _STUB_LOG_SEARCH}
+                return {"logs": _STUB_LOG_SEARCH}
             return {}
 
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=[_llm_with_multi_tool_call(), _llm_no_tool_call()])
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", _mock_invoke),
         ):
             result = await node(state)
@@ -206,7 +206,7 @@ class TestInvestigateNode:
         mock_llm.ainvoke = AsyncMock(side_effect=[two_tools, _llm_no_tool_call()])
         t0 = time.monotonic()
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", _slow_invoke),
         ):
             await node(state)
@@ -241,7 +241,7 @@ class TestInvestigateNode:
         mock_llm.ainvoke = AsyncMock(side_effect=[two_tools, _llm_no_tool_call()])
         t0 = time.monotonic()
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", _invoke_with_one_hang),
         ):
             result = await node(state)
@@ -264,7 +264,7 @@ class TestInvestigateNode:
             if tool_name == "get_pod_logs":
                 raise ConnectionError("connection refused")
             if tool_name == "search_logs":
-                return {"results": _STUB_LOG_SEARCH}
+                return {"logs": _STUB_LOG_SEARCH}
             return {}
 
         iter1_logs_fail = AsyncMock()
@@ -284,7 +284,7 @@ class TestInvestigateNode:
             side_effect=[iter1_logs_fail, iter2_search_fallback, _llm_no_tool_call()]
         )
         with (
-            patch("agent_service.nodes.investigate._llm", mock_llm),
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", _invoke_with_failure),
         ):
             result = await node(state)

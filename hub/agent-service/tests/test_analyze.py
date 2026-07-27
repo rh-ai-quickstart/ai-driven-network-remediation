@@ -32,7 +32,7 @@ class TestSuccessfulLlmCall:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
 
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(context_snippets=["some runbook context"])
@@ -53,7 +53,7 @@ class TestRagContextTruncation:
         mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
 
         long_snippet = "x" * 6000
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(context_snippets=[long_snippet])
@@ -72,7 +72,7 @@ class TestTokenAndLatencyTracking:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response(input_tokens=200, output_tokens=80))
 
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(context_snippets=["context"])
@@ -88,7 +88,7 @@ class TestLlmErrorFallback:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("vLLM unreachable"))
 
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(context_snippets=["some context"])
@@ -107,7 +107,7 @@ class TestEvidenceInPrompt:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
 
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(
@@ -130,7 +130,7 @@ class TestEvidenceInPrompt:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
 
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(context_snippets=["some context"])
@@ -148,7 +148,7 @@ class TestOverrideBypass:
     async def test_override_skips_llm_and_returns_synthetic_rca(self):
         mock_llm = AsyncMock()
 
-        with patch("agent_service.nodes.analyze._llm", mock_llm):
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
 
             state = make_state(

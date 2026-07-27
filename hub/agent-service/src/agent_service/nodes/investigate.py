@@ -1,22 +1,11 @@
 import asyncio
-import os
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-from langchain_openai import ChatOpenAI
 from loguru import logger
 
+from agent_service.config import get_llm
 from agent_service.models import GraphConfig
 from agent_service.utils import invoke_tool
-
-_LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
-_LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
-_GRANITE_MODEL = os.environ.get("GRANITE_MODEL_NAME", "granite-4.0-8b")
-
-_llm = ChatOpenAI(
-    base_url=f"http://{_LLAMASTACK_HOST}:{_LLAMASTACK_PORT}/v1",
-    model=_GRANITE_MODEL,
-    api_key="unused",
-)
 
 _TOOLS = [
     {
@@ -81,7 +70,7 @@ _TOOLS = [
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
                     "pod": {"type": "string", "description": "Pod name filter"},
                     "container": {"type": "string", "description": "Container name filter"},
-                    "labels": {"type": "string", "description": "Label selector"},
+                    "labels": {"type": "object", "description": "Label selector", "additionalProperties": {"type": "string"}},
                     "text": {"type": "string", "description": "Text to search for"},
                     "tenant": {"type": "string", "description": "Tenant identifier"},
                     "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
@@ -120,6 +109,31 @@ def _extract_events(result: dict) -> list[dict]:
     return [result]
 
 
+def _pin_tool_args(tool_args: dict, log_event) -> dict:
+    """Override LLM-chosen namespace/tenant with incident-scoped values."""
+    pinned = dict(tool_args)
+    pinned["namespace"] = log_event.namespace
+    if "tenant" in pinned:
+        pinned["tenant"] = log_event.edge_site_id
+    return pinned
+
+
+def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict) -> None:
+    if tool_result.get("error"):
+        return
+    if tool_name == "get_events":
+        evidence["cluster_events"].extend(_extract_events(tool_result))
+    elif tool_name == "find_error_patterns":
+        evidence["recent_errors"].extend(tool_result.get("patterns", []))
+    elif tool_name == "get_pod_logs":
+        logs = tool_result.get("logs", "")
+        if logs:
+            prev = evidence["pod_logs"]
+            evidence["pod_logs"] = logs if not prev else prev + "\n" + logs
+    elif tool_name == "search_logs":
+        evidence["log_search_results"].extend(tool_result.get("logs", []))
+
+
 def make_investigate_node(config: GraphConfig):
     async def _call_tool(tool_name: str, tool_args: dict) -> dict:
         try:
@@ -134,75 +148,42 @@ def make_investigate_node(config: GraphConfig):
 
     async def investigate_node(state) -> dict:
         logger.info("Investigate node invoked")
-        log_event = state.log_event
-        cluster_events = list(state.cluster_events)
-        recent_errors = list(state.recent_errors)
-        pod_logs = state.pod_logs
-        log_search_results = list(state.log_search_results)
 
-        pod_status_summary = ""
-        if state.pod_status:
-            pod_status_summary = f"\nEnriched pod status: {state.pod_status}"
+        evidence = {
+            "cluster_events": list(state.cluster_events),
+            "recent_errors": list(state.recent_errors),
+            "pod_logs": state.pod_logs,
+            "log_search_results": list(state.log_search_results),
+        }
 
-        user_content = (
-            f"Log event: {log_event.raw}"
-            f"{pod_status_summary}"
-        )
-
+        pod_status_summary = f"\nEnriched pod status: {state.pod_status}" if state.pod_status else ""
         messages = [
             SystemMessage(content=_SYSTEM_PROMPT),
-            HumanMessage(content=user_content),
+            HumanMessage(content=f"Log event: {state.log_event.raw}{pod_status_summary}"),
         ]
 
         try:
             async with asyncio.timeout(config.investigate_timeout):
                 for _ in range(config.investigate_max_iterations):
-                    response = await _llm.ainvoke(messages, tools=_TOOLS)
-
+                    response = await get_llm().ainvoke(messages, tools=_TOOLS)
                     if not response.tool_calls:
                         break
 
                     messages.append(response)
+                    tool_calls = response.tool_calls
+                    results = await asyncio.gather(
+                        *[_call_tool(tc["name"], _pin_tool_args(tc["args"], state.log_event))
+                          for tc in tool_calls]
+                    )
 
-                    tasks = [
-                        (tc, asyncio.create_task(_call_tool(tc["name"], tc["args"])))
-                        for tc in response.tool_calls
-                    ]
-
-                    for tool_call, task in tasks:
-                        tool_result = await task
-                        tool_name = tool_call["name"]
-
-                        if "error" not in tool_result:
-                            if tool_name == "get_events":
-                                cluster_events.extend(_extract_events(tool_result))
-                            elif tool_name == "find_error_patterns":
-                                patterns = tool_result.get("patterns", [])
-                                recent_errors.extend(patterns)
-                            elif tool_name == "get_pod_logs":
-                                logs = tool_result.get("logs", "")
-                                if logs:
-                                    pod_logs = logs if not pod_logs else pod_logs + "\n" + logs
-                            elif tool_name == "search_logs":
-                                results = tool_result.get("results", [])
-                                log_search_results.extend(results)
-
-                        messages.append(
-                            ToolMessage(
-                                content=str(tool_result),
-                                tool_call_id=tool_call["id"],
-                            )
-                        )
+                    for tool_call, tool_result in zip(tool_calls, results):
+                        _merge_tool_result(tool_call["name"], tool_result, evidence)
+                        messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
         except TimeoutError:
             logger.warning("Investigate node timed out, returning partial evidence")
         except Exception:
             logger.opt(exception=True).warning("Investigate node failed, returning partial evidence")
 
-        return {
-            "cluster_events": cluster_events,
-            "recent_errors": recent_errors,
-            "pod_logs": pod_logs,
-            "log_search_results": log_search_results,
-        }
+        return evidence
 
     return investigate_node

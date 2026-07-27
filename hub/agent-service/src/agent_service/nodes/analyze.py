@@ -1,30 +1,19 @@
 import json
-import os
 import time
 from typing import get_args
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from loguru import logger
 
+from agent_service.config import get_llm
 from agent_service.evidence import build_evidence_prompt
 from agent_service.models import FailureType, RootCauseAnalysis
-
-_LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
-_LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
-_GRANITE_MODEL = os.environ.get("GRANITE_MODEL_NAME", "granite-4.0-8b")
-
-_llm = ChatOpenAI(
-    base_url=f"http://{_LLAMASTACK_HOST}:{_LLAMASTACK_PORT}/v1",
-    model=_GRANITE_MODEL,
-    api_key="unused",
-)
 
 _FAILURE_TYPES = ", ".join(get_args(FailureType))
 
 _SYSTEM_PROMPT = f"""\
 You are a senior NOC engineer performing root cause analysis on Kubernetes log events.
-Analyze the provided log event, any retrieved runbook context, and investigation evidence, then produce a structured JSON diagnosis.
+Analyze the provided log event, any retrieved runbook context and investigation evidence, then produce a structured JSON diagnosis.
 
 Valid failure_type values: {_FAILURE_TYPES}
 Valid estimated_severity values: critical, high, medium, low
@@ -73,7 +62,7 @@ async def analyze_node(state: dict) -> dict:
 
     try:
         t0 = time.monotonic()
-        response = await _llm.ainvoke(
+        response = await get_llm().ainvoke(
             messages,
             response_format={
                 "type": "json_schema",

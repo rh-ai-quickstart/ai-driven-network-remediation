@@ -23,7 +23,7 @@ class TestEnrichNode:
         assert result["pod_status"] == {}
 
     async def test_calls_get_pods_with_correct_namespace(self):
-        state = make_state(log_event=make_state().log_event)
+        state = make_state()
         mock_invoke = AsyncMock(return_value={})
         with patch("agent_service.nodes.enrich.invoke_tool", mock_invoke):
             await enrich_node(state)

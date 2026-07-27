@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+from langchain_openai import ChatOpenAI
+
 from agent_service.kafka.alerts import ALERT_TOPICS
 
 _DEFAULT_CONSUME_TOPICS = ",".join(sorted(ALERT_TOPICS))
@@ -42,6 +44,20 @@ VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "noc_runbooks")
 # Chunking params for vector store file ingestion (must match ingestion-pipeline defaults)
 VECTOR_STORE_CHUNK_SIZE_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_SIZE_TOKENS", "800"))
 VECTOR_STORE_CHUNK_OVERLAP_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_OVERLAP_TOKENS", "80"))
+GRANITE_MODEL = os.environ.get("GRANITE_MODEL_NAME", "granite-4.0-8b")
+
+_llm: ChatOpenAI | None = None
+
+
+def get_llm() -> ChatOpenAI:
+    global _llm
+    if _llm is None:
+        _llm = ChatOpenAI(
+            base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}/v1",
+            model=GRANITE_MODEL,
+            api_key="unused",
+        )
+    return _llm
 
 # Lightspeed (Ansible Lightspeed playbook generation)
 LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")
