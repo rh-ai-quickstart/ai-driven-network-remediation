@@ -1,6 +1,12 @@
 """Integration tests verifying noc-aap exposes and executes its MCP tools."""
 
+import os
+
+import pytest
 from conftest import mcp_call, mcp_list_tools
+
+_aap_mock_disabled = os.environ.get("ENABLE_AAP_MOCK", "true").lower() != "true"
+_skip_mock_only = pytest.mark.skipif(_aap_mock_disabled, reason="requires AAP mock")
 
 EXPECTED_TOOLS = {
     "list_job_templates",
@@ -9,6 +15,8 @@ EXPECTED_TOOLS = {
     "get_job_status",
     "get_job_output",
     "commit_playbook",
+    "sync_project",
+    "get_project_update_status",
 }
 
 
@@ -39,6 +47,7 @@ def test_launch_job(mcp_aap_client):
     assert result["template_name"] == "restart-nginx"
 
 
+@_skip_mock_only
 def test_get_job_status(mcp_aap_client):
     """Launch a job then check its status."""
     launch = mcp_call(
@@ -55,6 +64,7 @@ def test_get_job_status(mcp_aap_client):
     assert result["failed"] is False
 
 
+@_skip_mock_only
 def test_get_job_output(mcp_aap_client):
     """Launch a job then retrieve its stdout."""
     launch = mcp_call(
@@ -75,6 +85,7 @@ def test_get_job_output(mcp_aap_client):
     assert result["total_lines"] >= 1
 
 
+@_skip_mock_only
 def test_upsert_job_template(mcp_aap_client):
     """Create a new template via upsert (copy from seed) and verify."""
     result = mcp_call(

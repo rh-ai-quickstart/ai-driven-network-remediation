@@ -23,12 +23,11 @@ gitea_router = APIRouter(prefix="/api/v1/repos/noc/generated-playbooks")
 job_templates_db: dict[int, dict[str, Any]] = {}
 jobs_db: dict[int, dict[str, Any]] = {}
 job_events_db: dict[int, list[dict[str, Any]]] = {}
-gitea_files_db: dict[str, dict[str, Any]] = {}
-
+projects_db: dict[int, dict[str, Any]] = {}
+project_updates_db: dict[int, dict[str, Any]] = {}
 _next_template_id = 1
 _next_job_id = 1
 _next_event_id = 1
-_next_file_id = 1
 
 
 def _now() -> str:
@@ -40,6 +39,12 @@ def _now() -> str:
 # ---------------------------------------------------------------------------
 def _seed() -> None:
     global _next_template_id
+    projects_db[1] = {
+        "id": 1,
+        "name": "lightspeed-generated",
+        "scm_url": "http://gitea:3000/noc/generated-playbooks.git",
+        "current_update": None,
+    }
     for name, playbook, desc in [
         ("restart-nginx", "restart.yml", "Restart nginx on edge"),
         ("scale-up-workers", "scale.yml", "Scale up worker replicas"),
@@ -187,7 +192,7 @@ def patch_template(template_id: int, body: dict[str, Any]):
         raise HTTPException(404, "Job template not found")
 
     tmpl = job_templates_db[template_id]
-    for key in ("name", "playbook", "description", "ask_variables_on_launch"):
+    for key in ("name", "playbook", "description", "ask_variables_on_launch", "ask_credential_on_launch", "project"):
         if key in body:
             tmpl[key] = body[key]
     tmpl["modified"] = _now()
@@ -223,17 +228,75 @@ def get_job_stdout(job_id: int, format: str = Query("json")):
     }
 
 
-@gitea_router.post("/contents/{filepath:path}")
-def create_gitea_file(filepath: str, body: dict[str, Any]):
-    global _next_file_id
-    file_id = _next_file_id
-    _next_file_id += 1
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
 
-    entry = {"sha": f"mock-sha-{file_id}", "path": filepath, "content": body.get("content", "")}
-    gitea_files_db[filepath] = entry
 
-    logger.info("Created Gitea file %s (sha=%s)", filepath, entry["sha"])
-    return {"content": {"sha": entry["sha"], "path": filepath}}
+@router.get("/projects/")
+def list_projects(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    name: str | None = Query(None),
+):
+    projects = list(projects_db.values())
+    if name is not None:
+        projects = [p for p in projects if p["name"] == name]
+
+    total = len(projects)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {
+        "count": total,
+        "next": f"{router.prefix}/projects/?page={page + 1}&page_size={page_size}" if end < total else None,
+        "previous": None,
+        "results": projects[start:end],
+    }
+
+
+@router.get("/projects/{project_id}/")
+def get_project(project_id: int):
+    if project_id not in projects_db:
+        raise HTTPException(404, "Project not found")
+    return projects_db[project_id]
+
+
+@router.post("/projects/{project_id}/update/")
+def update_project(project_id: int):
+    global _next_job_id
+    if project_id not in projects_db:
+        raise HTTPException(404, "Project not found")
+
+    project = projects_db[project_id]
+    update_id = _next_job_id
+    _next_job_id += 1
+    project_updates_db[update_id] = {
+        "id": update_id,
+        "status": "successful",
+        "finished": _now(),
+        "project": project_id,
+    }
+    project["current_update"] = update_id
+    logger.info("Triggered project sync for project %d (%s), update_id=%d", project_id, project["name"], update_id)
+    return {"project_update": update_id}
+
+
+@router.get("/project_updates/{update_id}/")
+def get_project_update(update_id: int):
+    if update_id not in project_updates_db:
+        raise HTTPException(404, "Project update not found")
+    return project_updates_db[update_id]
+
+
+# ---------------------------------------------------------------------------
+# Gitea-compatible file creation
+# ---------------------------------------------------------------------------
+
+
+@gitea_router.api_route("/contents/{filepath:path}", methods=["GET", "POST", "PUT"])
+def gitea_contents(filepath: str, body: dict[str, Any] | None = None):
+    logger.info("Gitea mock: %s", filepath)
+    return {"content": {"sha": "mock", "path": filepath}}
 
 
 app.include_router(router)

@@ -11,8 +11,10 @@ from mcp_aap.tools import (
     commit_playbook,
     get_job_output,
     get_job_status,
+    get_project_update_status,
     launch_job,
     list_job_templates,
+    sync_project,
     upsert_job_template,
 )
 
@@ -43,6 +45,15 @@ def mock_ctx():
     return ctx
 
 
+def _posted_json(mock_ctx):
+    """Extract the JSON payload from the last post() or patch() call."""
+    for method in (mock_ctx.post, mock_ctx.patch):
+        if method.called:
+            call = method.call_args
+            return call.kwargs.get("json", call[1].get("json", {}))
+    return {}
+
+
 class TestAapClient:
     """Tests for the _aap_client helper."""
 
@@ -64,6 +75,8 @@ class TestAapClient:
         assert kwargs["headers"]["Authorization"] == "Bearer my-oauth-token"
 
     def test_no_token_raises(self):
+        # Reload config module with empty AAP_TOKEN to trigger the
+        # RuntimeError validation that runs at import time.
         import importlib
 
         import mcp_aap.config
@@ -145,8 +158,7 @@ class TestLaunchJob:
 
         result = launch_job(job_template_name="restart-nginx", extra_vars={"namespace": "dark-noc-edge"})
         assert result["success"] is True
-        posted = mock_ctx.post.call_args.kwargs.get("json", mock_ctx.post.call_args[1].get("json", {}))
-        assert "extra_vars" in posted
+        assert "extra_vars" in _posted_json(mock_ctx)
 
     def test_template_not_found(self, mock_client, mock_ctx):
         mock_ctx.get.return_value = _mock_response(json_data={"results": []})
@@ -172,6 +184,47 @@ class TestLaunchJob:
         assert result["success"] is False
         assert "connection error" in result["error"].lower()
 
+    def test_with_credential_ids(self, mock_client, mock_ctx):
+        search_data = {"results": [{"id": 10, "name": "restart-nginx"}]}
+        launch_data = {"id": 44, "status": "pending"}
+        mock_ctx.get.return_value = _mock_response(json_data=search_data)
+        mock_ctx.post.return_value = _mock_response(json_data=launch_data)
+        mock_client.return_value = mock_ctx
+
+        result = launch_job(job_template_name="restart-nginx", credential_ids=[5, 6])
+        assert result["success"] is True
+        assert _posted_json(mock_ctx)["credentials"] == [5, 6]
+
+    def test_with_credential_name_found(self, mock_client, mock_ctx):
+        search_data = {"results": [{"id": 10, "name": "restart-nginx"}]}
+        cred_data = {"results": [{"id": 7, "name": "edge-prod"}]}
+        launch_data = {"id": 45, "status": "pending"}
+        mock_ctx.get.side_effect = [
+            _mock_response(json_data=search_data),
+            _mock_response(json_data=cred_data),
+        ]
+        mock_ctx.post.return_value = _mock_response(json_data=launch_data)
+        mock_client.return_value = mock_ctx
+
+        result = launch_job(job_template_name="restart-nginx", credential_name="edge-prod")
+        assert result["success"] is True
+        assert _posted_json(mock_ctx)["credentials"] == [7]
+
+    def test_with_credential_name_not_found(self, mock_client, mock_ctx):
+        search_data = {"results": [{"id": 10, "name": "restart-nginx"}]}
+        cred_data = {"results": []}
+        mock_ctx.get.side_effect = [
+            _mock_response(json_data=search_data),
+            _mock_response(json_data=cred_data),
+        ]
+        mock_client.return_value = mock_ctx
+
+        result = launch_job(job_template_name="restart-nginx", credential_name="edge-missing")
+        assert result == {
+            "success": False,
+            "error": "Credential 'edge-missing' not found",
+        }
+
 
 @patch("mcp_aap.tools._aap_client")
 class TestUpsertJobTemplate:
@@ -189,6 +242,16 @@ class TestUpsertJobTemplate:
         assert result["created"] is False
         assert result["template_id"] == 5
         assert result["playbook"] == "fix.yml"
+
+    def test_ask_credential_on_launch_in_patch(self, mock_client, mock_ctx):
+        existing_data = {"results": [{"id": 5, "name": "my-template"}]}
+        patched_data = {"id": 5, "name": "my-template", "playbook": "fix.yml"}
+        mock_ctx.get.return_value = _mock_response(json_data=existing_data)
+        mock_ctx.patch.return_value = _mock_response(json_data=patched_data)
+        mock_client.return_value = mock_ctx
+
+        upsert_job_template(template_name="my-template", playbook="fix.yml")
+        assert _posted_json(mock_ctx)["ask_credential_on_launch"] is True
 
     def test_create_from_base(self, mock_client, mock_ctx):
         copied_data = {"id": 99}
@@ -250,6 +313,22 @@ class TestUpsertJobTemplate:
         result = upsert_job_template(template_name="my-template", playbook="fix.yml")
         assert result["success"] is False
         assert "patch failed" in result["error"]
+
+    def test_project_not_found(self, mock_client, mock_ctx):
+        existing_data = {"results": [{"id": 5, "name": "my-template"}]}
+        mock_ctx.get.side_effect = [
+            _mock_response(json_data=existing_data),
+            _mock_response(json_data={"results": []}),
+        ]
+        mock_client.return_value = mock_ctx
+
+        result = upsert_job_template(
+            template_name="my-template",
+            playbook="fix.yml",
+            project_name="nonexistent-project",
+        )
+        assert result["success"] is False
+        assert "not found" in result["error"]
 
     def test_api_error(self, mock_client, mock_ctx):
         mock_ctx.get.return_value = _mock_response(status_code=500)
@@ -462,4 +541,95 @@ class TestCommitPlaybook:
 
         result = commit_playbook(playbook_name="bad", playbook_content="")
         assert result["success"] is False
+        assert "connection error" in result["error"].lower()
+
+
+@patch("mcp_aap.tools._aap_client")
+class TestSyncProject:
+    """Tests for the sync_project tool."""
+
+    def test_success(self, mock_client, mock_ctx):
+        proj_data = {"results": [{"id": 1, "name": "lightspeed-generated"}]}
+        update_resp = {"project_update": 42}
+        mock_ctx.get.return_value = _mock_response(json_data=proj_data)
+        mock_ctx.post.return_value = _mock_response(json_data=update_resp)
+        mock_client.return_value = mock_ctx
+
+        result = sync_project(project_name="lightspeed-generated")
+        assert result["success"] is True
+        assert result["project_id"] == 1
+        assert result["update_id"] == 42
+
+    def test_project_not_found(self, mock_client, mock_ctx):
+        mock_ctx.get.return_value = _mock_response(json_data={"results": []})
+        mock_client.return_value = mock_ctx
+
+        result = sync_project(project_name="nonexistent")
+        assert result["success"] is False
+        assert "not found" in result["error"]
+
+    def test_api_error(self, mock_client, mock_ctx):
+        mock_ctx.get.return_value = _mock_response(status_code=500)
+        mock_client.return_value = mock_ctx
+
+        result = sync_project()
+        assert result["success"] is False
+        assert "500" in result["error"]
+
+    def test_connection_error(self, mock_client, mock_ctx):
+        mock_ctx.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client.return_value = mock_ctx
+
+        result = sync_project()
+        assert result["success"] is False
+        assert "connection error" in result["error"].lower()
+
+
+@patch("mcp_aap.tools._aap_client")
+class TestGetProjectUpdateStatus:
+    """Tests for the get_project_update_status tool."""
+
+    def test_success(self, mock_client, mock_ctx):
+        update_data = {
+            "status": "successful",
+            "finished": "2026-07-28T10:00:12Z",
+        }
+        mock_ctx.get.return_value = _mock_response(json_data=update_data)
+        mock_client.return_value = mock_ctx
+
+        result = get_project_update_status(update_id=42)
+        assert result["success"] is True
+        assert result["update_id"] == 42
+        assert result["status"] == "successful"
+        assert result["finished"] == "2026-07-28T10:00:12Z"
+
+    def test_in_progress(self, mock_client, mock_ctx):
+        update_data = {
+            "status": "running",
+            "finished": None,
+        }
+        mock_ctx.get.return_value = _mock_response(json_data=update_data)
+        mock_client.return_value = mock_ctx
+
+        result = get_project_update_status(update_id=42)
+        assert result["success"] is True
+        assert result["status"] == "running"
+        assert result["finished"] is None
+
+    def test_api_error(self, mock_client, mock_ctx):
+        mock_ctx.get.return_value = _mock_response(status_code=404)
+        mock_client.return_value = mock_ctx
+
+        result = get_project_update_status(update_id=999)
+        assert result["success"] is False
+        assert result["update_id"] == 999
+        assert "404" in result["error"]
+
+    def test_connection_error(self, mock_client, mock_ctx):
+        mock_ctx.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client.return_value = mock_ctx
+
+        result = get_project_update_status(update_id=42)
+        assert result["success"] is False
+        assert result["update_id"] == 42
         assert "connection error" in result["error"].lower()

@@ -10,6 +10,7 @@ MCP server wrapping the Ansible Automation Platform REST API for the AI-driven n
 | `launch_job` | Trigger a job template execution by name |
 | `upsert_job_template` | Create or update a template for a playbook path |
 | `commit_playbook` | Commit a generated playbook file to the Gitea repository |
+| `sync_project` | Trigger an AAP project sync and wait for completion |
 | `get_job_status` | Poll job completion status |
 | `get_job_output` | Get stdout from a completed or failed job |
 
