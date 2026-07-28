@@ -384,8 +384,7 @@ mcpSecrets:
     kubeconfig: ""
   aap:
     create: true
-    username: ""
-    password: ""
+    token: ""
   servicenow:
     create: true
     username: ""
@@ -481,15 +480,18 @@ mcp-servers:
       env:
         MCP_TRANSPORT: "streamable-http"
         MCP_PORT: "8000"
-        AAP_URL: "https://aap.aap.svc"
-        AAP_VERIFY_SSL: "true"
+        # AAP uses edge TLS termination on OpenShift; internal services
+        # serve plain HTTP on port 80. To restore HTTPS here, mount AAP's
+        # CA cert (bundle_cacert_secret from the AAP CR) and set
+        # REQUESTS_CA_BUNDLE to the mount path.
+        AAP_URL: "http://aap.aap.svc"
+        AAP_API_PREFIX: "/api/controller/v2"
+        AAP_VERIFY_SSL: "false"
+        AAP_CA_BUNDLE: ""
       envSecrets:
-        AAP_USERNAME:
+        AAP_TOKEN:
           name: noc-aap-secret
-          key: AAP_USERNAME
-        AAP_PASSWORD:
-          name: noc-aap-secret
-          key: AAP_PASSWORD
+          key: AAP_TOKEN
 
     noc-servicenow:
       enabled: true

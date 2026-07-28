@@ -1,7 +1,4 @@
-"""
-Slim AAP Mock -- covers the AAP v2 REST API surface used by mcp-aap tools.
-
-"""
+"""Slim AAP Mock -- covers the AAP controller REST API surface used by mcp-aap tools."""
 
 from __future__ import annotations
 
@@ -10,13 +7,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AAP Mock", version="0.1.0")
+router = APIRouter(prefix="/api/controller/v2")
 
 # ---------------------------------------------------------------------------
 # In-memory databases
@@ -55,7 +53,7 @@ def _seed() -> None:
             "ask_variables_on_launch": True,
             "created": _now(),
             "modified": _now(),
-            "url": f"/api/v2/job_templates/{_next_template_id}/",
+            "url": f"{router.prefix}/job_templates/{_next_template_id}/",
         }
         _next_template_id += 1
 
@@ -77,7 +75,7 @@ def healthz():
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/v2/job_templates/")
+@router.get("/job_templates/")
 def list_templates(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -92,20 +90,20 @@ def list_templates(
     end = start + page_size
     return {
         "count": total,
-        "next": f"/api/v2/job_templates/?page={page + 1}&page_size={page_size}" if end < total else None,
+        "next": f"{router.prefix}/job_templates/?page={page + 1}&page_size={page_size}" if end < total else None,
         "previous": None,
         "results": templates[start:end],
     }
 
 
-@app.get("/api/v2/job_templates/{template_id}/")
+@router.get("/job_templates/{template_id}/")
 def get_template(template_id: int):
     if template_id not in job_templates_db:
         raise HTTPException(404, "Job template not found")
     return job_templates_db[template_id]
 
 
-@app.post("/api/v2/job_templates/{template_id}/launch/")
+@router.post("/job_templates/{template_id}/launch/")
 def launch_template(template_id: int, body: dict[str, Any] | None = None):
     if template_id not in job_templates_db:
         raise HTTPException(404, "Job template not found")
@@ -130,7 +128,7 @@ def launch_template(template_id: int, body: dict[str, Any] | None = None):
         "playbook": tmpl.get("playbook", "main.yml"),
         "extra_vars": body.get("extra_vars", "{}") if body else "{}",
         "result_traceback": "",
-        "url": f"/api/v2/jobs/{job_id}/",
+        "url": f"{router.prefix}/jobs/{job_id}/",
     }
     jobs_db[job_id] = job
 
@@ -160,7 +158,7 @@ def launch_template(template_id: int, body: dict[str, Any] | None = None):
     return job
 
 
-@app.post("/api/v2/job_templates/{template_id}/copy/")
+@router.post("/job_templates/{template_id}/copy/")
 def copy_template(template_id: int, body: dict[str, Any] | None = None):
     if template_id not in job_templates_db:
         raise HTTPException(404, "Job template not found")
@@ -173,14 +171,14 @@ def copy_template(template_id: int, body: dict[str, Any] | None = None):
     copy = {**src, "id": new_id, "created": _now(), "modified": _now()}
     if body and "name" in body:
         copy["name"] = body["name"]
-    copy["url"] = f"/api/v2/job_templates/{new_id}/"
+    copy["url"] = f"{router.prefix}/job_templates/{new_id}/"
     job_templates_db[new_id] = copy
 
     logger.info("Copied template %d -> %d", template_id, new_id)
     return copy
 
 
-@app.patch("/api/v2/job_templates/{template_id}/")
+@router.patch("/job_templates/{template_id}/")
 def patch_template(template_id: int, body: dict[str, Any]):
     if template_id not in job_templates_db:
         raise HTTPException(404, "Job template not found")
@@ -198,14 +196,14 @@ def patch_template(template_id: int, body: dict[str, Any]):
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/v2/jobs/{job_id}/")
+@router.get("/jobs/{job_id}/")
 def get_job(job_id: int):
     if job_id not in jobs_db:
         raise HTTPException(404, "Job not found")
     return jobs_db[job_id]
 
 
-@app.get("/api/v2/jobs/{job_id}/stdout/")
+@router.get("/jobs/{job_id}/stdout/")
 def get_job_stdout(job_id: int, format: str = Query("json")):
     if job_id not in job_events_db:
         raise HTTPException(404, "Job not found")
@@ -221,6 +219,8 @@ def get_job_stdout(job_id: int, format: str = Query("json")):
         "content": content,
     }
 
+
+app.include_router(router)
 
 # ---------------------------------------------------------------------------
 # Entrypoint

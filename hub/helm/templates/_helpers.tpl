@@ -42,6 +42,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+AAP controller URL from the noc-aap MCP server config.
+*/}}
+{{- define "hub.aapUrl" -}}
+{{- index .Values "mcp-servers" "mcp-servers" "noc-aap" "env" "AAP_URL" }}
+{{- end }}
+
+{{/*
 Loki gateway base URL, constructed from .Values.lokistack.name and .Values.lokistack.namespace.
 Namespace defaults to the release namespace when empty.
 */}}

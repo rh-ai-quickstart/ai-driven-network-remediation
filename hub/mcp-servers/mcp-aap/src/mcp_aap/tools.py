@@ -6,9 +6,9 @@ import httpx
 
 from .config import (
     AAP_API_PREFIX,
-    AAP_PASSWORD,
+    AAP_CA_BUNDLE,
+    AAP_TOKEN,
     AAP_URL,
-    AAP_USERNAME,
     AAP_VERIFY_SSL,
     mcp,
 )
@@ -18,10 +18,11 @@ def _aap_client() -> httpx.Client:
     """Create an authenticated httpx client for the AAP REST API."""
     base = AAP_URL.rstrip("/")
     prefix = "/" + AAP_API_PREFIX.strip("/")
+    verify = AAP_CA_BUNDLE if AAP_CA_BUNDLE else AAP_VERIFY_SSL
     return httpx.Client(
         base_url=f"{base}{prefix}",
-        auth=(AAP_USERNAME, AAP_PASSWORD),
-        verify=AAP_VERIFY_SSL,
+        headers={"Authorization": f"Bearer {AAP_TOKEN}"},
+        verify=verify,
         timeout=30,
     )
 
@@ -75,10 +76,9 @@ def launch_job(
     """
     try:
         with _aap_client() as client:
-            search_resp = client.get(f"/job_templates/?name={job_template_name}")
+            search_resp = client.get("/job_templates/", params={"name": job_template_name})
             search_resp.raise_for_status()
             results = search_resp.json().get("results", [])
-
             if not results:
                 return {"success": False, "error": f"Job template '{job_template_name}' not found"}
 
@@ -109,7 +109,7 @@ def launch_job(
 def upsert_job_template(
     template_name: str,
     playbook: str,
-    base_template_name: str = "lightspeed-generate-and-run",
+    base_template_name: str = "lightspeed-runner",
 ) -> dict:
     """
     Ensure a job template exists for the given playbook path.
@@ -119,7 +119,7 @@ def upsert_job_template(
     Args:
         template_name:      Name for the job template
         playbook:           Playbook path within the AAP project
-        base_template_name: Template to copy from if creating new (default: lightspeed-generate-and-run)
+        base_template_name: Template to copy from if creating new (default: lightspeed-runner)
 
     Returns:
         Dict with template_id, created flag, and status

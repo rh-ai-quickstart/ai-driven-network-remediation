@@ -85,6 +85,53 @@ For hub-spoke mode, each edge cluster requires OpenShift 4.21+ (SNO supported) w
 | OpenShift Logging + Loki Operator | 6.4+ |
 | Ansible Automation Platform Operator | 2.5+ |
 
+**AAP controller setup:**
+
+By default, `make helm-install` deploys an AAP mock. To use a real AAP controller, set `ENABLE_AAP_MOCK=false` and provide an OAuth2 token via `AAP_TOKEN` or reference a pre-existing secret via `AAP_SECRET_NAME`.
+
+The controller API prefix defaults to `/api/controller/v2` (AAP 2.5+ gateway). Ensure the controller is enabled in the `AnsibleAutomationPlatform` CR (`spec.controller.disabled: false`).
+
+For AAP operator installation on OpenShift, see the [AAP Operator Installation Guide](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html-single/installing_on_openshift_container_platform/index).
+
+**AAP authentication:**
+
+The MCP AAP server authenticates using an API token. Create one in the AAP web UI:
+
+1. Navigate to **Access Management > OAuth Applications > Create OAuth Application**. Set a name (e.g., `noc-bot`), select your organization, and set **Authorization grant type** to `Resource owner password-based` with **Client type** `Confidential`. Save the Client ID and Client Secret; they are only displayed once.
+2. Navigate to **Access Management > API Tokens > Create token**. Select the OAuth application created above (e.g., `noc-bot`), set **Scope** to `Write`.
+3. Copy the token and refresh token immediately. They are only displayed once and cannot be retrieved after closing the dialog. Tokens expire after 1 year by default. To renew, create a new token from the AAP UI or use the refresh token with the Client ID/Secret via the AAP `/o/token/` endpoint.
+
+The token's user must have the following [RBAC roles](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/access_management_and_authentication/gw-managing-access):
+
+| Role | Reason |
+|------|--------|
+| **Admin** on Job Templates | Create, copy, and patch job templates (`upsert_job_template`) |
+| **Execute** on Job Templates | Launch job templates (`launch_job`) |
+| **Use** on Projects, Inventories, Credentials | Required when creating templates that reference these objects |
+
+Provide the AAP API token at deploy time:
+
+```bash
+ENABLE_AAP_MOCK=false AAP_TOKEN=<token> make helm-install
+```
+
+Or create a K8s secret and reference it:
+
+```bash
+oc create secret generic my-aap-secret \
+  --from-literal=AAP_TOKEN='<token>' \
+  -n <namespace>
+ENABLE_AAP_MOCK=false AAP_SECRET_NAME=my-aap-secret make helm-install
+```
+
+If the secret is in a different namespace, copy it first:
+
+```bash
+oc get secret my-aap-secret -n aap -o json | \
+  jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp)' | \
+  oc apply -n <target-namespace> -f -
+```
+
 **Ansible Lightspeed setup:**
 
 Ansible Lightspeed (the intelligent assistant chatbot) is required for playbook generation. Deploy the AAP operator and enable Lightspeed in the `AnsibleAutomationPlatform` CR (`spec.lightspeed.disabled: false`). For installation instructions, see the [AAP on OpenShift documentation](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/installing_on_openshift_container_platform/deploying-chatbot-operator).

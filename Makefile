@@ -35,6 +35,22 @@ ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
 AAP_NAMESPACE          ?= aap
 ENABLE_SLACK           ?= false
+AAP_SECRET_NAME ?=
+AAP_TOKEN       ?=
+
+# Token is set inline only when: mock is off, no pre-existing secret, and token is provided
+_aap_set_token = $(and $(filter false,$(ENABLE_AAP_MOCK)),$(if $(AAP_SECRET_NAME),,y),$(AAP_TOKEN))
+
+ifeq ($(ENABLE_AAP_MOCK),false)
+ifndef AAP_SECRET_NAME
+ifndef AAP_TOKEN
+$(error ENABLE_AAP_MOCK=false requires AAP_TOKEN or AAP_SECRET_NAME. \
+Create an OAuth2 token in AAP and pass AAP_TOKEN=<token>, \
+or provide an existing K8s secret name via AAP_SECRET_NAME=<name>.)
+endif
+endif
+endif
+
 SLACK_BOT_TOKEN        ?=
 SLACK_CHANNEL          ?= \#ai-driven-network
 SERVICENOW_INSTANCE_URL ?=
@@ -116,7 +132,14 @@ helm_mock_args = \
 	--set servicenowMock.image.tag=$(VERSION) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,)
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string mcpSecrets.aap.token=mock,) \
+	$(if $(AAP_SECRET_NAME),--set mcpSecrets.aap.create=false,) \
+	$(if $(AAP_SECRET_NAME),--set-string mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
+	$(if $(AAP_SECRET_NAME),--set-string mcp-servers.mcp-servers.noc-aap.envSecrets.AAP_TOKEN.name='$(AAP_SECRET_NAME)',) \
+	$(if $(_aap_set_token),--set-string mcpSecrets.aap.token='$(AAP_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026,)
 
 helm_lokistack_args = \
 	--set lokistack.enabled=$(ENABLE_LOKISTACK) \
@@ -184,6 +207,9 @@ helm_all_args = \
 
 .PHONY: helm-install
 helm-install: namespace helm-depend
+ifeq ($(ENABLE_AAP_MOCK),false)
+	$(MAKE) _check-aap-operator
+endif
 ifeq ($(ENABLE_LIGHTSPEED),true)
 	$(MAKE) _check-lightspeed-operator
 endif
@@ -240,20 +266,20 @@ check-adnr-llm-config:
 		exit 1; \
 	fi
 
-.PHONY: _check-lightspeed-operator
-_check-lightspeed-operator:
+.PHONY: _require-aap-operator
+_require-aap-operator:
 	@oc get csv -A 2>/dev/null | grep -q "aap-operator" || \
-		{ echo ""; \
-		  echo "ERROR: AAP Operator is not installed on this cluster."; \
-		  echo ""; \
-		  echo "To install the AAP Operator with Lightspeed:"; \
-		  echo "  1. In the OpenShift web console, navigate to:"; \
-		  echo "     Operators → OperatorHub"; \
-		  echo "  2. Search for 'Ansible Automation Platform'"; \
-		  echo "  3. Click 'Install' and follow the installation wizard"; \
-		  echo "  4. Create an AnsibleAutomationPlatform CR with lightspeed.disabled=false"; \
-		  echo ""; \
+		{ echo "ERROR: AAP Operator is not installed on this cluster. See README.md for installation instructions."; \
 		  exit 1; }
+
+.PHONY: _check-aap-operator
+_check-aap-operator: _require-aap-operator
+	@oc get svc aap -n $(AAP_NAMESPACE) --no-headers 2>/dev/null | grep -q "aap" || \
+		{ echo "ERROR: AAP Operator found but no controller service in namespace '$(AAP_NAMESPACE)'. See README.md for setup."; \
+		  exit 1; }
+
+.PHONY: _check-lightspeed-operator
+_check-lightspeed-operator: _require-aap-operator
 	@oc get svc -A --no-headers 2>/dev/null | grep -q "lightspeed-chatbot-api" || \
 		{ echo ""; \
 		  echo "ERROR: AAP Operator found but no lightspeed-chatbot-api service detected."; \
@@ -420,7 +446,7 @@ unit-tests:
 	cd hub/agent-service && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-lokistack && uv sync --group dev && uv run pytest
-	cd hub/mcp-servers/mcp-aap && uv sync --group dev && AAP_USERNAME=test AAP_PASSWORD=test uv run pytest
+	cd hub/mcp-servers/mcp-aap && uv sync --group dev && AAP_TOKEN=test uv run pytest
 	cd hub/mcp-servers/mcp-kafka && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-servicenow && uv sync --group dev && uv run pytest
 	cd hub/infra/servicenow-mock && uv sync --group dev && uv run pytest

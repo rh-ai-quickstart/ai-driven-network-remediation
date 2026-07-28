@@ -1,5 +1,6 @@
 """Unit tests for mcp_aap tools (AAP REST API is always mocked)."""
 
+import os
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -49,8 +50,26 @@ class TestAapClient:
         mock_client_cls.assert_called_once()
         kwargs = mock_client_cls.call_args.kwargs
         assert "aap.aap.svc" in kwargs["base_url"]
-        assert "/api/v2" in kwargs["base_url"]
+        assert "/api/controller/v2" in kwargs["base_url"]
         assert kwargs["timeout"] == 30
+
+    @patch("mcp_aap.tools.AAP_TOKEN", "my-oauth-token")
+    @patch("mcp_aap.tools.httpx.Client")
+    def test_token_auth(self, mock_client_cls):
+        _ = _aap_client()
+        mock_client_cls.assert_called_once()
+        kwargs = mock_client_cls.call_args.kwargs
+        assert kwargs["headers"]["Authorization"] == "Bearer my-oauth-token"
+
+    def test_no_token_raises(self):
+        import importlib
+
+        import mcp_aap.config
+
+        env = {k: v for k, v in os.environ.items() if k != "AAP_TOKEN"}
+        with patch.dict("os.environ", env, clear=True):
+            with pytest.raises(KeyError):
+                importlib.reload(mcp_aap.config)
 
 
 @patch("mcp_aap.tools._aap_client")
@@ -124,8 +143,8 @@ class TestLaunchJob:
 
         result = launch_job(job_template_name="restart-nginx", extra_vars={"namespace": "dark-noc-edge"})
         assert result["success"] is True
-        posted_payload = mock_ctx.post.call_args.kwargs.get("json", mock_ctx.post.call_args[1].get("json", {}))
-        assert "extra_vars" in posted_payload
+        posted = mock_ctx.post.call_args.kwargs.get("json", mock_ctx.post.call_args[1].get("json", {}))
+        assert "extra_vars" in posted
 
     def test_template_not_found(self, mock_client, mock_ctx):
         mock_ctx.get.return_value = _mock_response(json_data={"results": []})
@@ -174,7 +193,7 @@ class TestUpsertJobTemplate:
         patched_data = {"id": 99, "name": "new-template", "playbook": "new.yml"}
         mock_ctx.get.side_effect = [
             _mock_response(json_data={"results": []}),
-            _mock_response(json_data={"results": [{"id": 1, "name": "lightspeed-generate-and-run"}]}),
+            _mock_response(json_data={"results": [{"id": 1, "name": "lightspeed-runner"}]}),
         ]
         mock_ctx.post.return_value = _mock_response(json_data=copied_data)
         mock_ctx.patch.return_value = _mock_response(json_data=patched_data)

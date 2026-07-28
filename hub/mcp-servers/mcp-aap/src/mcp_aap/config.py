@@ -12,10 +12,10 @@ MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 
 AAP_URL = os.getenv("AAP_URL", "https://aap.aap.svc")
-AAP_API_PREFIX = os.getenv("AAP_API_PREFIX", "/api/v2")
-AAP_USERNAME = os.environ["AAP_USERNAME"]
-AAP_PASSWORD = os.environ["AAP_PASSWORD"]
+AAP_API_PREFIX = os.getenv("AAP_API_PREFIX", "/api/controller/v2")
+AAP_TOKEN = os.environ["AAP_TOKEN"]
 AAP_VERIFY_SSL = os.getenv("AAP_VERIFY_SSL", "true").lower() == "true"
+AAP_CA_BUNDLE = os.getenv("AAP_CA_BUNDLE", "")
 
 mcp = FastMCP(
     "noc-aap",
