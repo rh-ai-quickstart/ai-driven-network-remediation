@@ -34,6 +34,8 @@ ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
 AAP_NAMESPACE          ?= aap
+ENABLE_SLACK           ?= false
+ENABLE_MULTICLUSTER    ?= false
 ENABLE_GITEA           ?= $(if $(filter false,$(ENABLE_AAP_MOCK)),true,false)
 GITEA_EXTERNAL         ?= false
 GITEA_URL              ?=
@@ -42,7 +44,8 @@ GITEA_TOKEN            ?=
 GITEA_ADMIN_USER       ?=
 GITEA_ADMIN_PASSWORD   ?=
 GITEA_ADMIN_EMAIL      ?=
-ENABLE_SLACK           ?= false
+CLUSTER_PROXY_URL      ?=
+RHACM_HUB_TOKEN        ?=
 AAP_SECRET_NAME ?=
 AAP_TOKEN       ?=
 
@@ -131,6 +134,17 @@ helm_mcp_image_args = \
 	--set mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
 	--set mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION)
 
+ifeq ($(ENABLE_MULTICLUSTER),true)
+ifndef CLUSTER_PROXY_URL
+$(error ENABLE_MULTICLUSTER=true requires CLUSTER_PROXY_URL. \
+Run: oc get route -n multicluster-engine cluster-proxy-addon-user -o jsonpath='{.spec.host}')
+endif
+ifndef RHACM_HUB_TOKEN
+$(error ENABLE_MULTICLUSTER=true requires RHACM_HUB_TOKEN. \
+Run: oc create token aap-integration-serviceaccount -n aap --duration=8760h)
+endif
+endif
+
 helm_mock_args = \
 	--set aapMock.enabled=$(ENABLE_AAP_MOCK) \
 	--set aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
@@ -148,7 +162,9 @@ helm_mock_args = \
 	$(if $(_aap_set_token),--set-string mcpSecrets.aap.token='$(AAP_TOKEN)',) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026,)
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026,) \
+	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set aapCredential.enabled=true,) \
+	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set-string aapCredential.saNamespace='$(EDGE_NAMESPACE)',)
 
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
@@ -158,7 +174,8 @@ helm_gitea_args = \
 	$(if $(GITEA_URL),--set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_URL='$(GITEA_URL)',) \
 	$(if $(GITEA_REPO),--set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_REPO='$(GITEA_REPO)',) \
 	$(if $(filter true,$(GITEA_EXTERNAL)),$(if $(GITEA_TOKEN),--set mcpSecrets.gitea.create=true,),) \
-	$(if $(GITEA_TOKEN),--set-string mcpSecrets.gitea.token='$(GITEA_TOKEN)',)
+	$(if $(GITEA_TOKEN),--set-string mcpSecrets.gitea.token='$(GITEA_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,)
 
 helm_lokistack_args = \
 	--set lokistack.enabled=$(ENABLE_LOKISTACK) \
@@ -192,6 +209,11 @@ helm_slack_args = \
 	$(if $(SERVICENOW_INSTANCE_URL),--set-string agentService.servicenowInstanceUrl='$(SERVICENOW_INSTANCE_URL)',) \
 	--set-string agentService.servicenowCreateResolved='$(SERVICENOW_CREATE_RESOLVED)'
 
+helm_multicluster_args = \
+	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set aapCredential.multicluster.enabled=true,) \
+	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string aapCredential.multicluster.clusterProxyUrl='$(CLUSTER_PROXY_URL)',) \
+	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string aapCredential.multicluster.hubToken='$(RHACM_HUB_TOKEN)',)
+
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
@@ -220,6 +242,7 @@ helm_all_args = \
 	$(helm_autorag_args) \
 	$(helm_lightspeed_args) \
 	$(helm_slack_args) \
+	$(helm_multicluster_args) \
 	$(HELM_EXTRA_ARGS)
 
 # ══════════════════════════════════════════════════════════════════════

@@ -263,7 +263,7 @@ edgeRbac:
 aapCredential:
   enabled: false
   apiServer: "https://kubernetes.default.svc"
-  saNamespace: "kube-system"
+  saNamespace: ""
   credentialName: "hub-remediation"
   organizationId: 1
   # RHACM multicluster: route cluster access through ACM hub proxy.

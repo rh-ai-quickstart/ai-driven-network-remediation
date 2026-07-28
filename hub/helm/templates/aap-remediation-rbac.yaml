@@ -1,0 +1,48 @@
+{{- if and .Values.aapCredential.enabled (not .Values.aapCredential.multicluster.enabled) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aap-remediation
+  namespace: {{ .Values.aapCredential.saNamespace | default .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: aap-remediation-{{ .Values.aapCredential.saNamespace | default .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+rules:
+  # Broad resources: Lightspeed generates patches for arbitrary kinds at runtime;
+  # verbs are limited to read + patch (single-cluster dev mode only).
+  - apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: aap-remediation-{{ .Values.aapCredential.saNamespace | default .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: aap-remediation-{{ .Values.aapCredential.saNamespace | default .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: aap-remediation
+    namespace: {{ .Values.aapCredential.saNamespace | default .Release.Namespace }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aap-remediation-token
+  namespace: {{ .Values.aapCredential.saNamespace | default .Release.Namespace }}
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/service-account.name: aap-remediation
+type: kubernetes.io/service-account-token
+{{- end }}

@@ -151,6 +151,45 @@ oc get secret my-aap-secret -n aap -o json | \
   oc apply -n <target-namespace> -f -
 ```
 
+**Cluster credentials for Lightspeed playbooks:**
+
+The `lightspeed-runner` template requires Kubernetes credentials so generated playbooks can patch resources on target clusters. In both modes, credentials are attached to the template at deploy time -- the agent service's `launch_job` call only passes `job_template_name` and `extra_vars` (including `edge_site_id`). Templates created by `upsert_job_template` (copied from `lightspeed-runner`) inherit credentials automatically.
+
+**Single-cluster mode (default, development only)**
+
+When `aapCredential.enabled=true` (set automatically when `ENABLE_AAP_MOCK=false`), the Helm chart creates a ServiceAccount with broad RBAC permissions (get/list/patch across core, apps, batch, and networking API groups), registers it as an AAP credential (`hub-remediation`), and attaches it to the `lightspeed-runner` template. This is intended for development where AAP and the target workloads share the same cluster.
+
+**RHACM multicluster (ACM hub proxy)**
+
+For environments with Red Hat Advanced Cluster Management (RHACM 2.9+), a single credential routes playbooks to any managed cluster through the ACM cluster proxy. The Helm chart creates a custom AAP credential type that injects `hub_url` and `token_acm` as extra vars, and attaches the credential to the `lightspeed-runner` template. Generated playbooks use `ansible.builtin.uri` for Kubernetes API calls and construct the K8s API URL as `hub_url/edge_site_id`, routing all calls through the ACM cluster proxy.
+
+Prerequisites (on the ACM hub cluster):
+1. Enable the ManagedServiceAccount addon
+2. Create a ServiceAccount with cluster-proxy access
+3. Get the cluster proxy URL and a hub token
+
+```bash
+# Get cluster proxy URL
+oc get route -n multicluster-engine cluster-proxy-addon-user \
+  -o jsonpath='https://{.spec.host}'
+
+# Generate hub token (valid for 1 year)
+oc create token <service-account> -n <namespace> --duration=8760h
+```
+
+Deploy with multicluster enabled:
+
+```bash
+make helm-install \
+  ENABLE_AAP_MOCK=false \
+  AAP_TOKEN=<token> \
+  ENABLE_MULTICLUSTER=true \
+  CLUSTER_PROXY_URL=<proxy-url> \
+  RHACM_HUB_TOKEN=<sa-token>
+```
+
+For a detailed guide, see [Multicluster authentication for Ansible Automation Platform](https://developers.redhat.com/articles/2025/09/08/multicluster-authentication-ansible-automation-platform).
+
 **Ansible Lightspeed setup:**
 
 Ansible Lightspeed (the intelligent assistant chatbot) is required for playbook generation. Deploy the AAP operator and enable Lightspeed in the `AnsibleAutomationPlatform` CR (`spec.lightspeed.disabled: false`). For installation instructions, see the [AAP on OpenShift documentation](https://docs.redhat.com/en/documentation/red_hat_ansible_automation_platform/2.5/html/installing_on_openshift_container_platform/deploying-chatbot-operator).
