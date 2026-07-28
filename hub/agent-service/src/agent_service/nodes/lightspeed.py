@@ -8,18 +8,18 @@ from loguru import logger
 
 from agent_service.config import (
     AAP_LIGHTSPEED_TEMPLATE,
+    GITEA_PROJECT_NAME,
     LIGHTSPEED_PROMPT_TEMPLATE,
     LIGHTSPEED_SKIP_AAP,
     LIGHTSPEED_TIMEOUT_SECONDS,
     LIGHTSPEED_TOKEN,
     LIGHTSPEED_URL,
     LIGHTSPEED_VERIFY_SSL,
-    LIGHTSPEED_WRAPPER_PLAYBOOK,
     now_iso,
 )
 from agent_service.models import RemediationResult
 from agent_service.nodes.rag_retrieval import store_generated_playbook
-from agent_service.utils import invoke_tool as _invoke_tool
+from agent_service.utils import build_launch_extra_vars, invoke_tool as _invoke_tool
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
@@ -122,27 +122,11 @@ async def drain_background_tasks(timeout_seconds: float = 10.0) -> None:
     if not _background_tasks:
         return
     logger.info(f"Draining {len(_background_tasks)} background task(s)")
-    done, pending = await asyncio.wait(
-        _background_tasks, timeout=timeout_seconds
-    )
+    done, pending = await asyncio.wait(_background_tasks, timeout=timeout_seconds)
     for task in pending:
         task.cancel()
     if pending:
         logger.warning(f"{len(pending)} background task(s) cancelled on shutdown")
-
-
-def _build_extra_vars(log_event, playbook_name, playbook_yaml):
-    ev = {
-        "generated_playbook_name": playbook_name,
-        "generated_playbook_yaml": playbook_yaml,
-        "generated_from_model": True,
-    }
-    if log_event:
-        ev["namespace"] = log_event.namespace
-        ev["pod_name"] = log_event.pod_name
-        ev["container"] = log_event.container
-        ev["edge_site_id"] = log_event.edge_site_id
-    return ev
 
 
 async def _call_als(prompt: str, attachments: list[dict]) -> dict:
@@ -154,13 +138,16 @@ async def _call_als(prompt: str, attachments: list[dict]) -> dict:
     return resp.json()
 
 
-async def _upsert_template(name: str) -> dict:
+async def _upsert_template(name: str, playbook_path: str) -> dict:
+    if not playbook_path:
+        raise ValueError(f"playbook_path is required for template '{name}'")
     return await _invoke_tool(
         "upsert_job_template",
         {
             "template_name": name,
-            "playbook": LIGHTSPEED_WRAPPER_PLAYBOOK,
+            "playbook": playbook_path,
             "base_template_name": AAP_LIGHTSPEED_TEMPLATE,
+            "project_name": GITEA_PROJECT_NAME,
         },
     )
 
@@ -246,12 +233,12 @@ async def lightspeed_node(state) -> dict:
                 playbook_yaml,
                 log_event,
             )
-    except Exception:
+    except Exception as exc:
         logger.exception(f"AAP execution failed for playbook '{playbook_name}'")
         result = result.model_copy(
             update={
                 "success": False,
-                "output_summary": f"AAP execution failed for {playbook_name}",
+                "output_summary": f"AAP execution failed for {playbook_name}: {exc}"[:1000],
                 "timestamp": now_iso(),
             }
         )
@@ -269,39 +256,81 @@ async def lightspeed_node(state) -> dict:
     return {"decision": "lightspeed", "remediation_result": result}
 
 
+def _aap_step_failed(
+    result: RemediationResult,
+    response: dict,
+    step_name: str,
+) -> RemediationResult:
+    error = response.get("error", f"{step_name} failed")
+    logger.warning(f"{step_name} failed: {error}")
+    return result.model_copy(
+        update={"success": False, "output_summary": error[:1000], "timestamp": now_iso()},
+    )
+
+
+_SYNC_POLL_INTERVAL = 2
+_SYNC_POLL_TIMEOUT = 60
+
+
+async def _await_project_sync(update_id: int) -> bool:
+    deadline = time.monotonic() + _SYNC_POLL_TIMEOUT
+    while time.monotonic() < deadline:
+        status = await _invoke_tool(
+            "get_project_update_status", {"update_id": update_id},
+        )
+        sync_status = status.get("status", "")
+        if sync_status == "successful":
+            return True
+        if sync_status in ("failed", "error", "canceled"):
+            logger.warning(f"Project sync {update_id} ended with status: {sync_status}")
+            return False
+        await asyncio.sleep(_SYNC_POLL_INTERVAL)
+    logger.warning(f"Project sync {update_id} timed out after {_SYNC_POLL_TIMEOUT}s")
+    return False
+
+
 async def _execute_in_aap(
     result: RemediationResult,
     name: str,
     yaml_content: str,
     log_event,
 ) -> RemediationResult:
-    upsert = await _upsert_template(name)
-    if not upsert.get("success"):
-        error = upsert.get("error", "upsert failed")
-        logger.warning(f"upsert_job_template failed: {error}")
-        return result.model_copy(
-            update={
-                "success": False,
-                "output_summary": error[:1000],
-                "timestamp": now_iso(),
-            }
-        )
+    # Push playbook to Gitea
+    commit = await _invoke_tool(
+        "commit_playbook",
+        {"playbook_name": name, "playbook_content": yaml_content},
+    )
+    if not commit.get("success"):
+        return _aap_step_failed(result, commit, "commit_playbook")
 
-    extra_vars = _build_extra_vars(log_event, name, yaml_content)
+    # Sync AAP project to pick up the new commit
+    sync = await _invoke_tool("sync_project", {"project_name": GITEA_PROJECT_NAME})
+    if not sync.get("success"):
+        return _aap_step_failed(result, sync, "sync_project")
+
+    update_id = sync.get("update_id")
+    if update_id is not None:
+        sync_ok = await _await_project_sync(update_id)
+        if not sync_ok:
+            return _aap_step_failed(
+                result,
+                {"error": f"Project sync timed out (update_id={update_id})"},
+                "sync_project",
+            )
+
+    # Create or update the job template
+    upsert = await _upsert_template(name, playbook_path=commit.get("file_path", ""))
+    if not upsert.get("success"):
+        return _aap_step_failed(result, upsert, "upsert_job_template")
+
+    # Launch the job with target-specific variables
+    extra_vars = build_launch_extra_vars(log_event)
     launch = await _invoke_tool(
         "launch_job",
         {"job_template_name": name, "extra_vars": extra_vars},
     )
     if not launch.get("success"):
-        error = launch.get("error", "launch failed")
-        logger.warning(f"launch_job failed: {error}")
-        return result.model_copy(
-            update={
-                "success": False,
-                "output_summary": error[:1000],
-                "timestamp": now_iso(),
-            }
-        )
+        return _aap_step_failed(result, launch, "launch_job")
 
     job_id = str(launch.get("job_id", ""))
     return result.model_copy(
@@ -309,5 +338,5 @@ async def _execute_in_aap(
             "job_id": job_id,
             "output_summary": f"Launched AAP job {job_id} for {name} (pending)",
             "timestamp": now_iso(),
-        }
+        },
     )

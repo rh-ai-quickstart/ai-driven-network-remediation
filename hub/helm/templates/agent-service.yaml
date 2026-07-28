@@ -59,8 +59,6 @@ spec:
             - name: LIGHTSPEED_VERIFY_SSL
               value: {{ .Values.agentService.lightspeed.verifySSL | quote }}
             {{- end }}
-            - name: LIGHTSPEED_WRAPPER_PLAYBOOK
-              value: {{ .Values.agentService.lightspeed.wrapperPlaybook | quote }}
             - name: AAP_LIGHTSPEED_TEMPLATE
               value: {{ .Values.agentService.lightspeed.baseTemplateName | quote }}
             - name: SLACK_ENABLED

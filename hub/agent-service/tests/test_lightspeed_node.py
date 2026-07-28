@@ -49,7 +49,37 @@ def _state(rca=None, log_event=None, use_defaults=True):
     )
 
 
+_COMMIT_OK = {
+    "success": True,
+    "file_path": "playbooks/remediate-oomkilled-nginx-abc123.yaml",
+    "sha": "abc123",
+}
+
+_SYNC_OK = {
+    "success": True,
+    "project_id": 1,
+    "update_id": 99,
+}
+
+_SYNC_STATUS_OK = {
+    "success": True,
+    "update_id": 99,
+    "status": "successful",
+    "finished": "2026-07-28T12:00:00Z",
+}
+
+
 async def _default_invoke(tool_name, kwargs):
+    if tool_name == "commit_playbook":
+        return {
+            "success": True,
+            "file_path": f"playbooks/{kwargs['playbook_name']}.yaml",
+            "sha": "abc123",
+        }
+    if tool_name == "sync_project":
+        return _SYNC_OK
+    if tool_name == "get_project_update_status":
+        return _SYNC_STATUS_OK
     if tool_name == "upsert_job_template":
         return _UPSERT_OK
     if tool_name == "launch_job":
@@ -211,7 +241,7 @@ class TestLightspeedNodeSuccess:
         assert "hosts: all" in rr.generated_playbook_preview
         assert "```" not in rr.generated_playbook_preview
         assert rr.duration_seconds >= 0
-        assert invoke_mock.call_count == 2
+        assert invoke_mock.call_count == 5
 
     async def test_passes_prompt_and_attachments_to_als(self):
         _, mock, _ = await _run_node(als_return=_ALS_RESPONSE)
@@ -254,37 +284,84 @@ class TestLightspeedNodeSuccess:
         assert rr.generated_playbook_preview == ""
 
 
-# -- AAP execution (upsert + launch) --
+# -- AAP execution (commit + sync + upsert + launch) --
 
 
 class TestAAPExecution:
-    async def test_upsert_uses_wrapper_playbook(self):
+    async def test_commit_playbook_called_first(self):
         _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
 
-        upsert_call = invoke_mock.call_args_list[0]
-        assert upsert_call[0][0] == "upsert_job_template"
+        first_call = invoke_mock.call_args_list[0]
+        assert first_call[0][0] == "commit_playbook"
+        args = first_call[0][1]
+        assert args["playbook_name"] == "remediate-oomkilled-nginx-abc123"
+        assert "hosts: all" in args["playbook_content"]
+
+    async def test_sync_project_called_after_commit(self):
+        _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
+
+        second_call = invoke_mock.call_args_list[1]
+        assert second_call[0][0] == "sync_project"
+
+    async def test_upsert_uses_committed_file_path(self):
+        _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
+
+        upsert_call = [c for c in invoke_mock.call_args_list if c[0][0] == "upsert_job_template"][0]
         args = upsert_call[0][1]
-        assert args["playbook"] == "playbooks/lightspeed-generate-and-run.yaml"
+        assert args["playbook"] == "playbooks/remediate-oomkilled-nginx-abc123.yaml"
         assert args["base_template_name"] == "lightspeed-runner"
         assert args["template_name"] == "remediate-oomkilled-nginx-abc123"
 
-    async def test_launch_extra_vars_contain_generated_yaml(self):
+    async def test_launch_extra_vars_contain_runtime_context_only(self):
         _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
 
-        launch_call = invoke_mock.call_args_list[1]
-        assert launch_call[0][0] == "launch_job"
+        launch_call = [c for c in invoke_mock.call_args_list if c[0][0] == "launch_job"][0]
         extra_vars = launch_call[0][1]["extra_vars"]
-        assert extra_vars["generated_from_model"] is True
-        assert extra_vars["generated_playbook_name"] == ("remediate-oomkilled-nginx-abc123")
-        assert "hosts: all" in extra_vars["generated_playbook_yaml"]
         assert extra_vars["namespace"] == "prod"
         assert extra_vars["pod_name"] == "nginx-abc123"
+        assert extra_vars["edge_site_id"] == "edge-1"
+        assert "generated_playbook_yaml" not in extra_vars
+        assert "generated_from_model" not in extra_vars
+
+    async def test_commit_failure_skips_remaining_steps(self):
+        async def commit_fails(tool_name, kwargs):
+            if tool_name == "commit_playbook":
+                return {"success": False, "error": "gitea unreachable"}
+            return await _default_invoke(tool_name, kwargs)
+
+        result, _, invoke_mock = await _run_node(
+            als_return=_ALS_RESPONSE,
+            invoke_fn=commit_fails,
+        )
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        tool_names = [c[0][0] for c in invoke_mock.call_args_list]
+        assert "sync_project" not in tool_names
+        assert "upsert_job_template" not in tool_names
+        assert "launch_job" not in tool_names
+
+    async def test_sync_failure_skips_remaining_steps(self):
+        async def sync_fails(tool_name, kwargs):
+            if tool_name == "sync_project":
+                return {"success": False, "error": "sync timed out"}
+            return await _default_invoke(tool_name, kwargs)
+
+        result, _, invoke_mock = await _run_node(
+            als_return=_ALS_RESPONSE,
+            invoke_fn=sync_fails,
+        )
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        tool_names = [c[0][0] for c in invoke_mock.call_args_list]
+        assert "launch_job" not in tool_names
 
     async def test_upsert_failure(self):
         async def upsert_fails(tool_name, kwargs):
             if tool_name == "upsert_job_template":
                 return {"success": False, "error": "template conflict"}
-            return _LAUNCH_OK
+            return await _default_invoke(tool_name, kwargs)
 
         result, _, invoke_mock = await _run_node(
             als_return=_ALS_RESPONSE,
@@ -299,9 +376,9 @@ class TestAAPExecution:
 
     async def test_launch_failure(self):
         async def launch_fails(tool_name, kwargs):
-            if tool_name == "upsert_job_template":
-                return _UPSERT_OK
-            return {"success": False, "error": "quota exceeded"}
+            if tool_name == "launch_job":
+                return {"success": False, "error": "quota exceeded"}
+            return await _default_invoke(tool_name, kwargs)
 
         result, _, _ = await _run_node(
             als_return=_ALS_RESPONSE,
@@ -312,7 +389,84 @@ class TestAAPExecution:
         assert rr.success is False
         assert rr.generated_playbook_name is not None
 
-    async def test_no_log_event_still_has_playbook_vars(self):
+    async def test_missing_file_path_from_commit(self):
+        async def commit_no_path(tool_name, kwargs):
+            if tool_name == "commit_playbook":
+                return {"success": True, "sha": "abc"}
+            return await _default_invoke(tool_name, kwargs)
+
+        result, _, invoke_mock = await _run_node(
+            als_return=_ALS_RESPONSE,
+            invoke_fn=commit_no_path,
+        )
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        assert "playbook_path is required" in rr.output_summary
+        tool_names = [c[0][0] for c in invoke_mock.call_args_list]
+        assert "launch_job" not in tool_names
+
+    async def test_sync_poll_waits_for_successful(self):
+        poll_count = 0
+
+        async def sync_pending_then_ok(tool_name, kwargs):
+            nonlocal poll_count
+            if tool_name == "get_project_update_status":
+                poll_count += 1
+                if poll_count < 3:
+                    return {"success": True, "update_id": 99, "status": "pending"}
+                return _SYNC_STATUS_OK
+            return await _default_invoke(tool_name, kwargs)
+
+        with patch("agent_service.nodes.lightspeed._SYNC_POLL_INTERVAL", 0):
+            result, _, invoke_mock = await _run_node(
+                als_return=_ALS_RESPONSE,
+                invoke_fn=sync_pending_then_ok,
+            )
+
+        assert result["remediation_result"].success is True
+        assert poll_count == 3
+
+    async def test_sync_poll_failure_stops_execution(self):
+        async def sync_fails_status(tool_name, kwargs):
+            if tool_name == "get_project_update_status":
+                return {"success": True, "update_id": 99, "status": "failed"}
+            return await _default_invoke(tool_name, kwargs)
+
+        with patch("agent_service.nodes.lightspeed._SYNC_POLL_INTERVAL", 0):
+            result, _, invoke_mock = await _run_node(
+                als_return=_ALS_RESPONSE,
+                invoke_fn=sync_fails_status,
+            )
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        tool_names = [c[0][0] for c in invoke_mock.call_args_list]
+        assert "upsert_job_template" not in tool_names
+        assert "launch_job" not in tool_names
+
+    async def test_sync_poll_timeout_stops_execution(self):
+        async def sync_always_pending(tool_name, kwargs):
+            if tool_name == "get_project_update_status":
+                return {"success": True, "update_id": 99, "status": "pending"}
+            return await _default_invoke(tool_name, kwargs)
+
+        with (
+            patch("agent_service.nodes.lightspeed._SYNC_POLL_INTERVAL", 0),
+            patch("agent_service.nodes.lightspeed._SYNC_POLL_TIMEOUT", 0.01),
+        ):
+            result, _, invoke_mock = await _run_node(
+                als_return=_ALS_RESPONSE,
+                invoke_fn=sync_always_pending,
+            )
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        assert "timed out" in rr.output_summary
+        tool_names = [c[0][0] for c in invoke_mock.call_args_list]
+        assert "upsert_job_template" not in tool_names
+
+    async def test_no_log_event_empty_extra_vars(self):
         result, _, invoke_mock = await _run_node(
             als_return=_ALS_RESPONSE,
             log_event=None,
@@ -322,11 +476,20 @@ class TestAAPExecution:
         rr = result["remediation_result"]
         assert rr.success is True
 
-        launch_call = invoke_mock.call_args_list[1]
+        launch_call = [c for c in invoke_mock.call_args_list if c[0][0] == "launch_job"][0]
         extra_vars = launch_call[0][1]["extra_vars"]
-        assert extra_vars["generated_from_model"] is True
-        assert "hosts: all" in extra_vars["generated_playbook_yaml"]
-        assert "namespace" not in extra_vars
+        assert extra_vars == {}
+
+
+# -- Multicluster credential --
+
+
+class TestClusterName:
+    async def test_edge_site_id_always_present(self):
+        _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
+        launch_call = [c for c in invoke_mock.call_args_list if c[0][0] == "launch_job"][0]
+        assert "credential_name" not in launch_call[0][1]
+        assert launch_call[0][1]["extra_vars"]["edge_site_id"] == "edge-1"
 
 
 # -- ALS failure --

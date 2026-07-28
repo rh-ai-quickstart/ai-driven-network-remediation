@@ -53,7 +53,7 @@
       "Check pods in openshift-dns with oc get pods -n openshift-dns and oc logs -l dns.operator.openshift.io/daemonset-dns -n openshift-dns --tail=50",
       "Inspect CoreDNS in the openshift-dns namespace using the dns-default daemonset label selector"
     ],
-    "correct_answer_document_ids": ["dns-failure.md"]
+    "correct_answer_document_ids": ["dns-failure.md", "dnsfailure"]
   },
   {
     "question": "How do I restart CoreDNS on OpenShift?",
@@ -61,7 +61,7 @@
       "oc rollout restart daemonset/dns-default -n openshift-dns",
       "Rollout restart the dns-default daemonset in openshift-dns"
     ],
-    "correct_answer_document_ids": ["dns-failure.md"]
+    "correct_answer_document_ids": ["dns-failure.md", "dnsfailure"]
   },
   {
     "question": "What dnsPolicy should pods use for cluster DNS resolution?",
@@ -69,7 +69,7 @@
       "dnsPolicy: ClusterFirst",
       "ClusterFirst (the default pod DNS policy)"
     ],
-    "correct_answer_document_ids": ["dns-failure.md"]
+    "correct_answer_document_ids": ["dns-failure.md", "dnsfailure"]
   },
   {
     "question": "How do I check consumer group lag for a Kafka consumer group?",

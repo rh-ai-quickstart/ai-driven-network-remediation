@@ -9,8 +9,10 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.models import GraphConfig, RemediationResult
-from agent_service.utils import invoke_tool as _invoke_tool
+from agent_service.utils import build_launch_extra_vars, invoke_tool as _invoke_tool
 
+# TODO: remove hardcoded templates before release; use Lightspeed flow only.
+# Demo-only: these templates must be pre-created in AAP manually.
 _TEMPLATE_KEYWORDS: dict[str, str] = {
     "nginx": "restart-nginx",
     "restart": "restart-nginx",
@@ -48,15 +50,12 @@ def _resolve_template(action: str, failure_type: str | None = None) -> str:
 
 async def _launch_job(template: str, log_event) -> dict:
     """Launch an AAP job template with context from the log event."""
-    extra_vars = {
-        "namespace": log_event.namespace,
-        "pod_name": log_event.pod_name,
-        "container": log_event.container,
-        "edge_site_id": log_event.edge_site_id,
-    }
     return await _invoke_tool(
         "launch_job",
-        {"job_template_name": template, "extra_vars": extra_vars},
+        {
+            "job_template_name": template,
+            "extra_vars": build_launch_extra_vars(log_event),
+        },
     )
 
 

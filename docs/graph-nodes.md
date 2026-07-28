@@ -81,9 +81,11 @@ Generates an Ansible playbook via Ansible Lightspeed (ALS) for failure types wit
 3. Sends the prompt with attachments to ALS (`POST {LIGHTSPEED_URL}/v1/query`).
 4. Extracts YAML from the response, stripping markdown fences if present.
 5. Derives a playbook name from the YAML `plays[0].name` or falls back to `remediate-{failure_type}-{scope}`.
-6. Upserts an AAP job template using a wrapper playbook (`lightspeed-generate-and-run.yaml`) and launches the job with extra vars containing the generated YAML. Unlike `remediate`, the node does not poll for job completion.
-7. Records the result in `remediation_result` (including `generated_playbook_preview`, `generated_template_id`, and job ID) and routes to `notify`.
-8. On failure at any step, records a failed result with diagnostics and routes to `notify`.
+6. Commits the generated playbook to a Gitea repository via `commit_playbook`.
+7. Triggers an AAP project sync via `sync_project` so AAP picks up the new file.
+8. Upserts an AAP job template pointing at the committed playbook file and launches the job. Unlike `remediate`, the node does not poll for job completion.
+9. Records the result in `remediation_result` (including `generated_playbook_preview`, `generated_template_id`, and job ID) and routes to `notify`.
+10. On failure at any step, records a failed result with diagnostics and routes to `notify`.
 
 **Configuration (env vars):**
 
@@ -92,6 +94,7 @@ Generates an Ansible playbook via Ansible Lightspeed (ALS) for failure types wit
 | `LIGHTSPEED_URL` | *(empty, disables node)* | ALS endpoint |
 | `LIGHTSPEED_TOKEN` | | Bearer auth token |
 | `LIGHTSPEED_VERIFY_SSL` | `false` | TLS verification |
+| `GITEA_PROJECT_NAME` | `lightspeed-generated` | AAP project name for the Gitea-backed repo |
 
 **Key files:**
 

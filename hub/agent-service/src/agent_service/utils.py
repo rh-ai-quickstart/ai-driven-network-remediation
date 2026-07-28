@@ -18,6 +18,18 @@ async def warm_tool_cache() -> bool:
     return True
 
 
+def build_launch_extra_vars(log_event) -> dict:
+    """Build the extra_vars dict from a log event for AAP job launches."""
+    if not log_event:
+        return {}
+    return {
+        "namespace": log_event.namespace,
+        "pod_name": log_event.pod_name,
+        "container": log_event.container,
+        "edge_site_id": log_event.edge_site_id,
+    }
+
+
 async def invoke_tool(tool_name: str, kwargs: dict) -> dict:
     """Call an MCP tool via LlamaStack's /v1/tool-runtime/invoke endpoint."""
     resp = await get_http_client().post(

@@ -67,8 +67,8 @@ LIGHTSPEED_VERIFY_SSL = os.getenv("LIGHTSPEED_VERIFY_SSL", "false").lower() == "
 # Configurable via env var to allow prompt experimentation without redeploying
 LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "LIGHTSPEED_PROMPT_TEMPLATE",
-    "Generate an Ansible playbook to remediate this OpenShift cluster issue. "
-    "Prefer the kubernetes.core collection when applicable.\n\n"
+    "Generate an Ansible playbook to remediate this OpenShift cluster issue.\n"
+    "\n"
     "Failure type: {failure_type}\n"
     "Severity: {severity}\n"
     "Namespace: {namespace}\n"
@@ -77,17 +77,35 @@ LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "Evidence:\n{evidence}\n\n"
     "Recommended actions: {recommended_actions}\n\n"
     "The playbook must apply a corrective fix, not investigate or diagnose. "
+    "Include all tasks needed for a complete remediation. "
+    "Use ansible.builtin.uri for Kubernetes API calls "
+    "(the execution environment does not have kubernetes.core). "
+    "The playbook must be self-contained and executable standalone.\n\n"
+    "Playbook structure rules:\n"
+    '- Every play MUST include "hosts: localhost" and '
+    '"connection: local" and "gather_facts: false".\n'
+    "- When patching a pod's resource limits, patch the parent Deployment "
+    "(not the Pod directly). Derive the deployment name by stripping the "
+    "replicaset hash suffix from the pod name "
+    '(e.g. pod "myapp-6b7f8c9d4-x2k9z" belongs to deployment "myapp").\n\n'
+    "Authentication rules:\n"
+    "- The playbook runs inside AAP with a Kubernetes Bearer Token credential attached.\n"
+    "- AAP injects the cluster URL and token as environment variables.\n"
+    "- Define these vars at the play level:\n"
+    """    k8s_api_url: "{{ lookup('env', 'K8S_AUTH_HOST') }}"\n"""
+    """    k8s_api_token: "{{ lookup('env', 'K8S_AUTH_API_KEY') }}"\n"""
+    "- Use k8s_api_url as the base URL and k8s_api_token in Authorization "
+    "headers for all ansible.builtin.uri tasks.\n"
+    "- NEVER use lookup('file', '/var/run/secrets/...') or hardcoded tokens.\n"
+    "- Always set validate_certs: false on uri tasks.\n\n"
     "Return ONLY valid Ansible YAML, no explanation or markdown fences.",
 )
 
-LIGHTSPEED_WRAPPER_PLAYBOOK = os.getenv(
-    "LIGHTSPEED_WRAPPER_PLAYBOOK",
-    "playbooks/lightspeed-generate-and-run.yaml",
-)
 AAP_LIGHTSPEED_TEMPLATE = os.getenv(
     "AAP_LIGHTSPEED_TEMPLATE",
     "lightspeed-runner",
 )
+GITEA_PROJECT_NAME = os.getenv("GITEA_PROJECT_NAME", "lightspeed-generated")
 LIGHTSPEED_SKIP_AAP = _env_bool("LIGHTSPEED_SKIP_AAP", False)
 
 HTTP_TIMEOUT_SECONDS = 30

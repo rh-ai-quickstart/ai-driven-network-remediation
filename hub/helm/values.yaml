@@ -255,6 +255,29 @@ edgeRbac:
   image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
 
 # ══════════════════════════════════════════════════════════════════════
+# AAP Credential hook (post-install Job)
+# Creates a k8s SA with remediation RBAC and registers the resulting
+# token as an AAP credential (type=3) for playbook execution.
+# ══════════════════════════════════════════════════════════════════════
+
+aapCredential:
+  enabled: false
+  apiServer: "https://kubernetes.default.svc"
+  saNamespace: "kube-system"
+  credentialName: "hub-remediation"
+  organizationId: 1
+  # RHACM multicluster: route cluster access through ACM hub proxy.
+  # Creates an AAP Custom Credential Type + credential instead of a per-cluster SA.
+  # Prerequisites (user-managed): RHACM 2.9+, ManagedServiceAccount addon,
+  # hub ServiceAccount with multicluster RBAC, cluster-proxy route.
+  multicluster:
+    enabled: false
+    clusterProxyUrl: ""
+    hubToken: ""
+    credentialTypeName: "RHACM Cluster Proxy"
+    credentialName: "rhacm-hub"
+
+# ══════════════════════════════════════════════════════════════════════
 # Hub application services
 # ══════════════════════════════════════════════════════════════════════
 
@@ -348,7 +371,6 @@ agentService:
     tokenSecretKey: "api_key"
     verifySSL: "false"
     namespace: "aap"
-    wrapperPlaybook: "playbooks/lightspeed-generate-and-run.yaml"
     baseTemplateName: "lightspeed-runner"
   slack:
     enabled: "false"

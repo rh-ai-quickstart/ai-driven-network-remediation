@@ -109,6 +109,25 @@ The token's user must have the following [RBAC roles](https://docs.redhat.com/en
 | **Execute** on Job Templates | Launch job templates (`launch_job`) |
 | **Use** on Projects, Inventories, Credentials | Required when creating templates that reference these objects |
 
+**AAP project and job template:**
+
+1. Navigate to **Automation Execution > Projects > Create project**:
+   - **Name**: `ai-driven-network-remediation`
+   - **Organization**: select your organization
+   - **Source control type**: `Git`
+   - **Source control URL**: `https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git`
+   - **Source control branch/tag/commit**: `main` (or leave blank for default)
+   - Under **Options**, check **Update revision on launch**
+2. Navigate to **Automation Execution > Templates > Create template > Create job template**:
+   - **Name**: `lightspeed-runner`
+   - **Job type**: `Run`
+   - **Inventory**: `Demo Inventory` (or your own inventory)
+   - **Project**: `ai-driven-network-remediation`
+   - **Playbook**: select any playbook (the agent will override this per generated playbook)
+   - Under **Variables**, check **Prompt on launch**
+
+A second AAP project (`lightspeed-generated`) is created automatically by the Helm credential job, pointing at the Gitea repository where generated playbooks are stored. The agent commits each generated playbook to Gitea, syncs this project, then upserts a job template referencing the committed file.
+
 Provide the AAP API token at deploy time:
 
 ```bash
