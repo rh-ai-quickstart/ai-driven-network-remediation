@@ -1,5 +1,6 @@
 """Unit tests for mcp_aap tools (AAP REST API is always mocked)."""
 
+import base64
 import os
 from unittest.mock import MagicMock, patch
 
@@ -7,6 +8,7 @@ import httpx
 import pytest
 from mcp_aap.tools import (
     _aap_client,
+    commit_playbook,
     get_job_output,
     get_job_status,
     launch_job,
@@ -366,5 +368,98 @@ class TestGetJobOutput:
         mock_client.return_value = mock_ctx
 
         result = get_job_output(job_id=42)
+        assert result["success"] is False
+        assert "connection error" in result["error"].lower()
+
+
+@patch("mcp_aap.tools.httpx.Client")
+class TestCommitPlaybook:
+    """Tests for the commit_playbook tool."""
+
+    def test_create_new_file(self, mock_client_cls):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.get.return_value = _mock_response(status_code=404)
+        ctx.post.return_value = _mock_response(
+            json_data={
+                "content": {"sha": "abc123", "path": "playbooks/my-fix.yaml"},
+            }
+        )
+        mock_client_cls.return_value = ctx
+
+        result = commit_playbook(
+            playbook_name="my-fix",
+            playbook_content="- hosts: all\n  tasks: []",
+        )
+        assert result["success"] is True
+        assert result["file_path"] == "playbooks/my-fix.yaml"
+        assert result["sha"] == "abc123"
+        ctx.post.assert_called_once()
+        ctx.put.assert_not_called()
+
+    def test_update_existing_file(self, mock_client_cls):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.get.return_value = _mock_response(
+            json_data={"sha": "old-sha-111"}
+        )
+        ctx.put.return_value = _mock_response(
+            json_data={
+                "content": {"sha": "new-sha-222", "path": "playbooks/my-fix.yaml"},
+            }
+        )
+        mock_client_cls.return_value = ctx
+
+        result = commit_playbook(
+            playbook_name="my-fix",
+            playbook_content="- hosts: all\n  tasks: [updated]",
+        )
+        assert result["success"] is True
+        assert result["sha"] == "new-sha-222"
+        put_payload = ctx.put.call_args.kwargs["json"]
+        assert put_payload["sha"] == "old-sha-111"
+        ctx.post.assert_not_called()
+
+    def test_base64_encoding(self, mock_client_cls):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.get.return_value = _mock_response(status_code=404)
+        ctx.post.return_value = _mock_response(
+            json_data={
+                "content": {"sha": "def456", "path": "playbooks/test.yaml"},
+            }
+        )
+        mock_client_cls.return_value = ctx
+
+        commit_playbook(playbook_name="test", playbook_content="key: value")
+        posted = ctx.post.call_args.kwargs.get(
+            "json",
+            ctx.post.call_args[1].get("json", {}),
+        )
+        assert base64.b64decode(posted["content"]).decode() == "key: value"
+
+    def test_api_error(self, mock_client_cls):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.get.return_value = _mock_response(status_code=404)
+        ctx.post.return_value = _mock_response(status_code=500)
+        mock_client_cls.return_value = ctx
+
+        result = commit_playbook(playbook_name="bad", playbook_content="")
+        assert result["success"] is False
+        assert "500" in result["error"]
+
+    def test_connection_error(self, mock_client_cls):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        ctx.get.side_effect = httpx.ConnectError("Connection refused")
+        mock_client_cls.return_value = ctx
+
+        result = commit_playbook(playbook_name="bad", playbook_content="")
         assert result["success"] is False
         assert "connection error" in result["error"].lower()

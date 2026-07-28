@@ -1,0 +1,4 @@
+apiVersion: v2
+name: gitea
+version: 0.1.0
+description: Gitea Git server for generated playbooks

@@ -1,0 +1,134 @@
+{{- if and .Values.gitea.enabled (not .Values.gitea.external) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "gitea.fullname" . }}-init
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app: gitea-init
+    spec:
+      serviceAccountName: {{ include "gitea.fullname" . }}-init
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: {{ .Values.gitea.initJob.image }}
+          env:
+            - name: GITEA_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: noc-gitea-secret
+                  key: GITEA_ADMIN_PASSWORD
+            - name: GITEA_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: noc-gitea-config
+                  key: GITEA_ADMIN_USER
+            - name: GITEA_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: noc-gitea-config
+                  key: GITEA_ADMIN_EMAIL
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              GITEA=http://gitea:{{ .Values.gitea.service.port }}
+              for i in $(seq 1 30); do
+                curl -fs "$GITEA/api/v1/version" && break
+                sleep 2
+              done
+              GITEA_POD=$(kubectl get pods -l app=gitea -o jsonpath='{.items[0].metadata.name}')
+              kubectl exec "$GITEA_POD" -- gitea admin user create \
+                --admin --username "$GITEA_USER" --password "$GITEA_PASS" \
+                --email "$GITEA_EMAIL" --must-change-password=false 2>/dev/null || true
+              curl -fs -X DELETE "$GITEA/api/v1/users/$GITEA_USER/tokens/aap-integration" \
+                -u "$GITEA_USER:$GITEA_PASS" || true
+              TOKEN=$(curl -fs -X POST "$GITEA/api/v1/users/$GITEA_USER/tokens" \
+                -u "$GITEA_USER:$GITEA_PASS" \
+                -H "Content-Type: application/json" \
+                -d '{"name":"aap-integration","scopes":["write:repository","write:user"]}' \
+                | grep -o '"sha1":"[^"]*"' | cut -d'"' -f4)
+              curl -fs -X POST "$GITEA/api/v1/user/repos" \
+                -H "Authorization: token $TOKEN" \
+                -H "Content-Type: application/json" \
+                -d '{"name":"generated-playbooks","auto_init":true,"default_branch":"main"}' || true
+              NS=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
+              SA_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              KUBE=https://kubernetes.default.svc
+              ENCODED=$(printf '%s' "$TOKEN" | base64)
+              PASS_ENCODED=$(printf '%s' "$GITEA_PASS" | base64)
+              SECRET_DATA="{\"GITEA_TOKEN\":\"$ENCODED\",\"GITEA_ADMIN_PASSWORD\":\"$PASS_ENCODED\"}"
+              curl -fs -k -X PUT \
+                "$KUBE/api/v1/namespaces/$NS/secrets/noc-gitea-secret" \
+                -H "Authorization: Bearer $SA_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"noc-gitea-secret\",\"namespace\":\"$NS\"},\"data\":$SECRET_DATA}" \
+              || curl -fs -k -X POST \
+                "$KUBE/api/v1/namespaces/$NS/secrets" \
+                -H "Authorization: Bearer $SA_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"apiVersion\":\"v1\",\"kind\":\"Secret\",\"metadata\":{\"name\":\"noc-gitea-secret\",\"namespace\":\"$NS\"},\"data\":$SECRET_DATA}"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "gitea.fullname" . }}-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "gitea.fullname" . }}-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "gitea.fullname" . }}-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "gitea.fullname" . }}-init
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "gitea.fullname" . }}-init
+    namespace: {{ .Release.Namespace }}
+{{- end }}

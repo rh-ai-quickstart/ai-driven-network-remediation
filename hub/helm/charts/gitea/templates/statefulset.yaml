@@ -1,0 +1,56 @@
+{{- if and .Values.gitea.enabled (not .Values.gitea.external) }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "gitea.fullname" . }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+    app: gitea
+spec:
+  serviceName: {{ include "gitea.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitea
+  template:
+    metadata:
+      labels:
+        app: gitea
+        {{- include "gitea.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: gitea
+          image: "{{ .Values.gitea.image.repository }}:{{ .Values.gitea.image.tag }}"
+          imagePullPolicy: {{ .Values.gitea.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.gitea.service.port }}
+              name: http
+          env:
+            - name: GITEA__database__DB_TYPE
+              value: sqlite3
+            - name: GITEA__server__ROOT_URL
+              value: "http://gitea:{{ .Values.gitea.service.port }}"
+            - name: GITEA__security__INSTALL_LOCK
+              value: "true"
+            - name: GITEA__service__DISABLE_REGISTRATION
+              value: "true"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/gitea
+            - name: config
+              mountPath: /etc/gitea
+          resources:
+            {{- toYaml .Values.gitea.resources | nindent 12 }}
+      volumes:
+        - name: config
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.gitea.storage.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.gitea.storage.size }}
+{{- end }}

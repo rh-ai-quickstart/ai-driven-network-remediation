@@ -14,8 +14,11 @@ dependencies:
 - name: minio
   repository: file://charts/minio
   version: 0.5.5
+- name: gitea
+  repository: file://charts/gitea
+  version: 0.1.0
 - name: lokistack
   repository: file://charts/lokistack
   version: 0.1.0
-digest: sha256:8fe8f12a44c6774630ca217fa02d6528e7b02abf70ae4dd530fe834794aeea45
-generated: "2026-07-03T06:16:58.021636+02:00"
+digest: sha256:0ef43fa88c2c6365a83add508103d67cfd224ecc6916e5eb2fa5573fe0914339
+generated: "2026-07-28T17:32:19.650980208+03:00"

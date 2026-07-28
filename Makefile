@@ -34,6 +34,14 @@ ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
 AAP_NAMESPACE          ?= aap
+ENABLE_GITEA           ?= $(if $(filter false,$(ENABLE_AAP_MOCK)),true,false)
+GITEA_EXTERNAL         ?= false
+GITEA_URL              ?=
+GITEA_REPO             ?=
+GITEA_TOKEN            ?=
+GITEA_ADMIN_USER       ?=
+GITEA_ADMIN_PASSWORD   ?=
+GITEA_ADMIN_EMAIL      ?=
 ENABLE_SLACK           ?= false
 AAP_SECRET_NAME ?=
 AAP_TOKEN       ?=
@@ -132,6 +140,7 @@ helm_mock_args = \
 	--set servicenowMock.image.tag=$(VERSION) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string mcpSecrets.aap.token=mock,) \
 	$(if $(AAP_SECRET_NAME),--set mcpSecrets.aap.create=false,) \
 	$(if $(AAP_SECRET_NAME),--set-string mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
@@ -140,6 +149,16 @@ helm_mock_args = \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026,)
+
+helm_gitea_args = \
+	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
+	$(if $(GITEA_ADMIN_USER),--set-string gitea.gitea.adminUser='$(GITEA_ADMIN_USER)' --set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_OWNER='$(GITEA_ADMIN_USER)',) \
+	$(if $(GITEA_ADMIN_PASSWORD),--set-string gitea.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)',) \
+	$(if $(GITEA_ADMIN_EMAIL),--set-string gitea.gitea.adminEmail='$(GITEA_ADMIN_EMAIL)',) \
+	$(if $(GITEA_URL),--set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_URL='$(GITEA_URL)',) \
+	$(if $(GITEA_REPO),--set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_REPO='$(GITEA_REPO)',) \
+	$(if $(filter true,$(GITEA_EXTERNAL)),$(if $(GITEA_TOKEN),--set mcpSecrets.gitea.create=true,),) \
+	$(if $(GITEA_TOKEN),--set-string mcpSecrets.gitea.token='$(GITEA_TOKEN)',)
 
 helm_lokistack_args = \
 	--set lokistack.enabled=$(ENABLE_LOKISTACK) \
@@ -178,7 +197,8 @@ helm_infra_args = \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 	--set kafka.kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
 	--set minio.enabled=$(ENABLE_MINIO) \
-	--set minio.route.enabled=$(ROUTES_ENABLED)
+	--set minio.route.enabled=$(ROUTES_ENABLED) \
+	--set gitea.enabled=$(ENABLE_GITEA)
 
 helm_all_args = \
 	--set image.registry=$(REGISTRY) \
@@ -195,6 +215,7 @@ helm_all_args = \
 	$(helm_lokistack_args) \
 	$(helm_mcp_image_args) \
 	$(helm_mock_args) \
+	$(helm_gitea_args) \
 	$(helm_adnr_llm_args) \
 	$(helm_autorag_args) \
 	$(helm_lightspeed_args) \
@@ -233,6 +254,7 @@ ifeq ($(ENABLE_HUB),true)
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc data-gitea-0 --namespace $(NAMESPACE) --ignore-not-found
 
 ifeq ($(ENABLE_LANGFUSE),true)
 	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found

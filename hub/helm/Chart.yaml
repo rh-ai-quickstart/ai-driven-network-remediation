@@ -26,6 +26,10 @@ dependencies:
     version: 0.5.5
     repository: "file://charts/minio"
     condition: minio.enabled
+  - name: gitea
+    version: 0.1.0
+    repository: "file://charts/gitea"
+    condition: gitea.enabled
   - name: lokistack
     version: 0.1.0
     repository: "file://charts/lokistack"

@@ -1,0 +1,33 @@
+nameOverride: "gitea"
+fullnameOverride: "gitea"
+
+gitea:
+  enabled: true
+  external: false
+
+  image:
+    repository: gitea/gitea
+    tag: "1.22-rootless"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 3000
+
+  adminUser: ""
+  adminPassword: ""
+  adminEmail: ""
+
+  storage:
+    size: 2Gi
+    storageClass: gp3-csi
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  initJob:
+    image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"

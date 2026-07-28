@@ -1,0 +1,11 @@
+{{- if .Values.gitea.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: noc-gitea-config
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+data:
+  GITEA_ADMIN_USER: {{ .Values.gitea.gitea.adminUser | quote }}
+  GITEA_ADMIN_EMAIL: {{ .Values.gitea.gitea.adminEmail | quote }}
+{{- end }}

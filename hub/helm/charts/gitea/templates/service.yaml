@@ -1,0 +1,16 @@
+{{- if and .Values.gitea.enabled (not .Values.gitea.external) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gitea.fullname" . }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+    app: gitea
+spec:
+  selector:
+    app: gitea
+  ports:
+    - name: http
+      port: {{ .Values.gitea.service.port }}
+      targetPort: {{ .Values.gitea.service.port }}
+{{- end }}

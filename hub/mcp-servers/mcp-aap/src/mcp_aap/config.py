@@ -17,6 +17,23 @@ AAP_TOKEN = os.environ["AAP_TOKEN"]
 AAP_VERIFY_SSL = os.getenv("AAP_VERIFY_SSL", "true").lower() == "true"
 AAP_CA_BUNDLE = os.getenv("AAP_CA_BUNDLE", "")
 
+GITEA_URL = os.getenv("GITEA_URL", "http://gitea.hub.svc:3000")
+GITEA_OWNER = os.getenv("GITEA_OWNER", "noc")
+GITEA_REPO = os.getenv("GITEA_REPO", "generated-playbooks")
+
+
+GITEA_TOKEN_PATH = os.getenv(
+    "GITEA_TOKEN_PATH", "/secrets/noc-gitea-secret/GITEA_TOKEN"
+)
+
+
+def get_gitea_token() -> str:
+    try:
+        return open(GITEA_TOKEN_PATH).read().strip()
+    except FileNotFoundError:
+        return os.getenv("GITEA_TOKEN", "")
+
+
 mcp = FastMCP(
     "noc-aap",
     instructions=(

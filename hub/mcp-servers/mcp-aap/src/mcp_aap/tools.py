@@ -1,5 +1,6 @@
 """AAP tool implementations."""
 
+import base64
 import json
 
 import httpx
@@ -10,6 +11,10 @@ from .config import (
     AAP_TOKEN,
     AAP_URL,
     AAP_VERIFY_SSL,
+    GITEA_OWNER,
+    GITEA_REPO,
+    GITEA_URL,
+    get_gitea_token,
     mcp,
 )
 
@@ -182,6 +187,64 @@ def upsert_job_template(
         "template_id": int(jt["id"]),
         "template_name": jt["name"],
         "playbook": jt.get("playbook", playbook),
+    }
+
+
+@mcp.tool()
+def commit_playbook(
+    playbook_name: str,
+    playbook_content: str,
+) -> dict:
+    """
+    Commit a generated playbook file to the Gitea repository.
+
+    Args:
+        playbook_name:    Name for the playbook (without .yaml extension)
+        playbook_content: The YAML content of the playbook
+
+    Returns:
+        Dict with success, file_path, and sha
+    """
+    filepath = f"playbooks/{playbook_name}.yaml"
+    encoded = base64.b64encode(playbook_content.encode()).decode()
+    url = (
+        f"{GITEA_URL}/api/v1/repos/{GITEA_OWNER}"
+        f"/{GITEA_REPO}/contents/{filepath}"
+    )
+
+    try:
+        with httpx.Client(
+            headers={"Authorization": f"token {get_gitea_token()}"},
+            timeout=30,
+        ) as client:
+            existing_sha = None
+            get_resp = client.get(url)
+            if get_resp.status_code == 200:
+                existing_sha = get_resp.json().get("sha")
+
+            payload = {
+                "content": encoded,
+                "message": f"generated: {playbook_name}",
+            }
+            if existing_sha:
+                payload["sha"] = existing_sha
+                resp = client.put(url, json=payload)
+            else:
+                resp = client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPStatusError as e:
+        return {
+            "success": False,
+            "error": f"Gitea API error: {e.response.status_code}",
+        }
+    except httpx.HTTPError as e:
+        return {"success": False, "error": f"Gitea connection error: {e}"}
+
+    return {
+        "success": True,
+        "file_path": filepath,
+        "sha": data.get("content", {}).get("sha", ""),
     }
 
 

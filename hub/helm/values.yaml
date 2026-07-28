@@ -229,6 +229,14 @@ aapMock:
     repository: quay.io/rh-ai-quickstart/noc-aap-mock
     tag: "0.1.0"
 
+gitea:
+  enabled: true
+  gitea:
+    external: false
+    adminUser: "noc"
+    adminPassword: ""
+    adminEmail: "noc@local"
+
 servicenowMock:
   enabled: true
   image:
@@ -385,6 +393,9 @@ mcpSecrets:
   aap:
     create: true
     token: ""
+  gitea:
+    create: false
+    token: ""
   servicenow:
     create: true
     username: ""
@@ -488,10 +499,17 @@ mcp-servers:
         AAP_API_PREFIX: "/api/controller/v2"
         AAP_VERIFY_SSL: "false"
         AAP_CA_BUNDLE: ""
+        GITEA_URL: "http://gitea:3000"
+        GITEA_OWNER: "noc"
+        GITEA_REPO: "generated-playbooks"
       envSecrets:
         AAP_TOKEN:
           name: noc-aap-secret
           key: AAP_TOKEN
+      secretMounts:
+        mountPath: /secrets
+        secrets:
+          - noc-gitea-secret
 
     noc-servicenow:
       enabled: true

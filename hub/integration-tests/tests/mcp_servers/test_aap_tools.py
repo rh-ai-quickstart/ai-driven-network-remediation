@@ -8,6 +8,7 @@ EXPECTED_TOOLS = {
     "upsert_job_template",
     "get_job_status",
     "get_job_output",
+    "commit_playbook",
 }
 
 

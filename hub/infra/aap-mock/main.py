@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AAP Mock", version="0.1.0")
 router = APIRouter(prefix="/api/controller/v2")
+gitea_router = APIRouter(prefix="/api/v1/repos/noc/generated-playbooks")
 
 # ---------------------------------------------------------------------------
 # In-memory databases
@@ -22,10 +23,12 @@ router = APIRouter(prefix="/api/controller/v2")
 job_templates_db: dict[int, dict[str, Any]] = {}
 jobs_db: dict[int, dict[str, Any]] = {}
 job_events_db: dict[int, list[dict[str, Any]]] = {}
+gitea_files_db: dict[str, dict[str, Any]] = {}
 
 _next_template_id = 1
 _next_job_id = 1
 _next_event_id = 1
+_next_file_id = 1
 
 
 def _now() -> str:
@@ -220,7 +223,21 @@ def get_job_stdout(job_id: int, format: str = Query("json")):
     }
 
 
+@gitea_router.post("/contents/{filepath:path}")
+def create_gitea_file(filepath: str, body: dict[str, Any]):
+    global _next_file_id
+    file_id = _next_file_id
+    _next_file_id += 1
+
+    entry = {"sha": f"mock-sha-{file_id}", "path": filepath, "content": body.get("content", "")}
+    gitea_files_db[filepath] = entry
+
+    logger.info("Created Gitea file %s (sha=%s)", filepath, entry["sha"])
+    return {"content": {"sha": entry["sha"], "path": filepath}}
+
+
 app.include_router(router)
+app.include_router(gitea_router)
 
 # ---------------------------------------------------------------------------
 # Entrypoint

@@ -9,6 +9,7 @@ MCP server wrapping the Ansible Automation Platform REST API for the AI-driven n
 | `list_job_templates` | List available Ansible job templates |
 | `launch_job` | Trigger a job template execution by name |
 | `upsert_job_template` | Create or update a template for a playbook path |
+| `commit_playbook` | Commit a generated playbook file to the Gitea repository |
 | `get_job_status` | Poll job completion status |
 | `get_job_output` | Get stdout from a completed or failed job |
 
@@ -20,6 +21,10 @@ MCP server wrapping the Ansible Automation Platform REST API for the AI-driven n
 | `AAP_URL` | No | `https://aap.aap.svc` |
 | `AAP_API_PREFIX` | No | `/api/controller/v2` |
 | `AAP_VERIFY_SSL` | No | `true` |
+| `GITEA_URL` | No | `http://gitea.hub.svc:3000` |
+| `GITEA_OWNER` | No | `noc` |
+| `GITEA_REPO` | No | `generated-playbooks` |
+| `GITEA_TOKEN` | Yes (for `commit_playbook`) | — |
 | `MCP_TRANSPORT` | No | `sse` |
 | `MCP_PORT` | No | `8000` |
 
