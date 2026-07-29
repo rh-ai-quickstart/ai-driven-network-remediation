@@ -1,5 +1,6 @@
-from agent_service.evidence import build_evidence_prompt
 from helpers import make_state
+
+from agent_service.evidence import build_evidence_prompt
 
 
 class TestBuildEvidencePrompt:

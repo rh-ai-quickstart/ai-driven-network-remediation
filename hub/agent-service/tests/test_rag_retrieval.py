@@ -154,7 +154,12 @@ class TestStoreGeneratedPlaybook:
 
         file_arg = mock_client.files.create.call_args.kwargs["file"]
         content = file_arg[1]
-        expected = "Failure: OOMKilled\n" "Summary: Container killed by OOM\n" "Playbook (OOMKilled):\n" "- hosts: all\n  tasks: []"
+        expected = (
+            "Failure: OOMKilled\n"
+            "Summary: Container killed by OOM\n"
+            "Playbook (OOMKilled):\n"
+            "- hosts: all\n  tasks: []"
+        )
         assert content == expected.encode()
 
     @pytest.mark.asyncio

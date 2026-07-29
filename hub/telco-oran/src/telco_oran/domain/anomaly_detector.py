@@ -36,9 +36,7 @@ class AnomalyDetector:
 
         utilization_pct = (record.ues_usage / max_capacity) * 100
         if utilization_pct > HighPrbUtilization.threshold:
-            anomalies.append(
-                HighPrbUtilization(record=record, utilization_pct=utilization_pct)
-            )
+            anomalies.append(HighPrbUtilization(record=record, utilization_pct=utilization_pct))
 
     def _check_low_rsrp(self, record, anomalies):
         if record.rsrp < LowRsrp.threshold:

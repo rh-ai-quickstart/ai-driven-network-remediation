@@ -6,7 +6,6 @@ import os
 from datetime import datetime, timezone
 
 import httpx
-
 from langchain_openai import ChatOpenAI
 
 from agent_service.kafka.alerts import ALERT_TOPICS
@@ -58,6 +57,7 @@ def get_llm() -> ChatOpenAI:
             api_key="unused",
         )
     return _llm
+
 
 # Lightspeed (Ansible Lightspeed playbook generation)
 LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")

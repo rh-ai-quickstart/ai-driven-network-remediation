@@ -122,9 +122,7 @@ async def drain_background_tasks(timeout_seconds: float = 10.0) -> None:
     if not _background_tasks:
         return
     logger.info(f"Draining {len(_background_tasks)} background task(s)")
-    done, pending = await asyncio.wait(
-        _background_tasks, timeout=timeout_seconds
-    )
+    done, pending = await asyncio.wait(_background_tasks, timeout=timeout_seconds)
     for task in pending:
         task.cancel()
     if pending:

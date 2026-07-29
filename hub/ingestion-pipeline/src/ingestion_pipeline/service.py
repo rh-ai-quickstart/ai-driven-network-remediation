@@ -10,7 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ingestion_pipeline.clients.llamastack import LlamaStackVectorStoreClient, VectorStoreFileSummary
+from ingestion_pipeline.clients.llamastack import (
+    LlamaStackVectorStoreClient,
+    VectorStoreFileSummary,
+)
 from ingestion_pipeline.clients.minio import MinioDocumentClient
 from ingestion_pipeline.config import settings
 
