@@ -4,7 +4,10 @@ dependencies:
   version: 0.5.5
 - name: llama-stack
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  version: 0.8.7
+  version: 0.8.8
+- name: llm-service
+  repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+  version: 0.5.11
 - name: mcp-servers
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   version: 0.5.17
@@ -17,5 +20,8 @@ dependencies:
 - name: lokistack
   repository: file://charts/lokistack
   version: 0.1.0
-digest: sha256:8fe8f12a44c6774630ca217fa02d6528e7b02abf70ae4dd530fe834794aeea45
-generated: "2026-07-03T06:16:58.021636+02:00"
+- name: playground
+  repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+  version: 0.0.1
+digest: sha256:81e1132104ea65165318f652ec2b03493b2d9393bcdcc956e51dda8d05374b8a
+generated: "2026-07-23T09:32:34.641829-04:00"

@@ -11,8 +11,12 @@ dependencies:
     version: 0.5.5
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   - name: llama-stack
-    version: 0.8.7
+    version: 0.8.8
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+  - name: llm-service
+    version: 0.5.11
+    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+    condition: llm-service.enabled
   - name: mcp-servers
     version: 0.5.17
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
@@ -30,3 +34,7 @@ dependencies:
     version: 0.1.0
     repository: "file://charts/lokistack"
     condition: lokistack.enabled
+  - name: playground
+    version: 0.0.1
+    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+    condition: playground.enabled

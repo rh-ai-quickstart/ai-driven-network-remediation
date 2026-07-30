@@ -29,6 +29,7 @@ llama-stack:
   port: "8321"
   replicaCount: 1
   managedByOperator: true
+  extraLabels: {}
   network:
     exposeRoute: false
   volumes:
@@ -218,6 +219,44 @@ lokistack:
       repository: curlimages/curl
       tag: latest
     interval: 5
+
+# ── LLM Service (subchart: llm-service) ──────────────────────────
+# Deploys vLLM models on-cluster via KServe InferenceService + ServingRuntime.
+# Disabled by default; enable when the cluster has GPU/CPU capacity for local
+# model serving
+#   make helm-install ENABLE_LLM_SERVICE=true
+llm-service:
+  enabled: false
+  device: gpu
+  secret:
+    enabled: true
+  models:
+    granite-4-0-8b:
+      id: ibm-granite/granite-4.0-8b
+      enabled: true
+      labels:
+        opendatahub.io/genai-asset: "true"
+      resources:
+        limits:
+          cpu: "4"
+          memory: 64Gi
+        requests:
+          cpu: "2"
+          memory: 32Gi
+      args:
+        - --served-model-name
+        - granite-4.0-8b
+        - --enable-auto-tool-choice
+        - --chat-template
+        - /chat-templates/tool_chat_template_llama3.2_json.jinja
+        - --tool-call-parser
+        - llama3_json
+        - --max-model-len
+        - "8192"
+        - --max-num-seqs
+        - "16"
+        - --dtype
+        - "bfloat16"
 
 # ══════════════════════════════════════════════════════════════════════
 # Mock services (deployed as Helm templates in hub/helm/templates/)
@@ -523,3 +562,92 @@ mcp-servers:
     openshift-mcp:
       enabled: false
 
+# ── Playground (subchart: playground) ─────────────────────────────
+# Registers ADNR's MCP servers with the Gen AI Studio Playground UI
+# via ConfigMaps in redhat-ods-applications.
+# URLs use tpl-expanded templates so they resolve to the release namespace.
+playground:
+  enabled: true
+  dashboardConfig:
+    enabled: false
+  genAiStudio: true
+  aiAssetCustomEndpoints: true
+  externalProviders: true
+  externalVectorStores: true
+  customEndpoints:
+    enabled: true
+    endpoints:
+      - modelId: nomic-embed-text-v1-5
+        displayName: nomic-embed-text-v1-5
+        url: https://maas-rhdp.apps.maas.redhatworkshops.io/v1
+        apiKey: ""
+        modelType: embedding
+        embeddingDimension: 768
+  # Vector store is auto-created and populated by the post-install job (noc_runbooks)
+  vectorStores:
+    enabled: false
+  mcpServers:
+    servers:
+      - name: MCP-OpenShift
+        url: "http://mcp-noc-openshift.{{ .Release.Namespace }}.svc:8000/mcp/"
+        description: OpenShift cluster operations
+      - name: MCP-LokiStack
+        url: "http://mcp-noc-lokistack.{{ .Release.Namespace }}.svc:8000/mcp/"
+        description: LokiStack log queries
+      - name: MCP-Kafka
+        url: "http://mcp-noc-kafka.{{ .Release.Namespace }}.svc:8000/mcp/"
+        description: Kafka messaging operations
+      - name: MCP-AAP
+        url: "http://mcp-noc-aap.{{ .Release.Namespace }}.svc:8000/mcp/"
+        description: Ansible Automation Platform
+      - name: MCP-ServiceNow
+        url: "http://mcp-noc-servicenow.{{ .Release.Namespace }}.svc:8000/mcp/"
+        description: ServiceNow incident management
+  postInstall:
+    enabled: true
+    # TODO: switch to quay.io/rh-ai-quickstart/noc-ingestion-pipeline once rebuilt with llama-stack-client>=0.7.1
+    image: "quay.io/rh-ee-alalin/noc-ingestion-pipeline:0.0.1-SNAPSHOT"
+    waitForLlamaStack:
+      enabled: true
+      url: "http://lsd-genai-playground-service:8321"
+    command:
+      - sh
+      - -c
+      - |
+        ingestion-pipeline &
+        sleep 5
+        until wget -qO- http://localhost:8000/health > /dev/null 2>&1; do sleep 2; done
+        echo "Syncing..." && wget -qO- --post-data= http://localhost:8000/runbooks/sync
+        echo "Ingesting..." && wget -qO- --post-data= http://localhost:8000/runbooks/ingest
+        echo "Done."
+    env:
+      - name: LLAMASTACK_HOST
+        value: "lsd-genai-playground-service"
+      - name: LLAMASTACK_PORT
+        value: "8321"
+      - name: VECTOR_STORE_NAME
+        value: "noc_runbooks"
+      - name: EMBEDDING_MODEL
+        value: "sentence-transformers/nomic-ai/nomic-embed-text-v1.5"
+      - name: CHUNK_SIZE_TOKENS
+        value: "800"
+      - name: CHUNK_OVERLAP_TOKENS
+        value: "80"
+      - name: MINIO_ENDPOINT
+        value: "minio:9000"
+      - name: MINIO_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio
+            key: user
+      - name: MINIO_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: minio
+            key: password
+      - name: MINIO_BUCKET
+        value: "runbooks"
+      - name: MINIO_SECURE
+        value: "false"
+      - name: MINIO_RUNBOOK_PREFIX
+        value: "runbooks/"
