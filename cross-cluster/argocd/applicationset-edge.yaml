@@ -35,6 +35,9 @@ spec:
   template:
     metadata:
       name: "adnr-edge-{{.name}}"
+      # Cascade-prune spoke resources when the Application is deleted (acm-teardown).
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
       labels:
         app.kubernetes.io/part-of: adnr
         adnr.io/component: argocd-edge

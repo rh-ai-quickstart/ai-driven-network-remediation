@@ -43,7 +43,10 @@ VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "noc_runbooks")
 # Chunking params for vector store file ingestion (must match ingestion-pipeline defaults)
 VECTOR_STORE_CHUNK_SIZE_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_SIZE_TOKENS", "800"))
 VECTOR_STORE_CHUNK_OVERLAP_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_OVERLAP_TOKENS", "80"))
-GRANITE_MODEL = os.environ.get("GRANITE_MODEL_NAME", "granite-4.0-8b")
+# LlamaStack registers as adnr-llm/<ADNR_LLM_ID>; bare ids return model-not-found.
+GRANITE_MODEL = os.environ.get(
+    "GRANITE_MODEL_NAME", "adnr-llm/granite-3-2-8b-instruct"
+)
 
 _llm: ChatOpenAI | None = None
 

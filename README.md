@@ -268,18 +268,27 @@ For hub-spoke mode, admin access is also required on each edge cluster.
 
 ### Delete
 
-1. Uninstall the Helm release:
+Single-cluster (`CLUSTER_COUNT=1`):
 
-   ```bash
-   make helm-uninstall
-   ```
+```bash
+make helm-uninstall
+# or: make acm-teardown
+```
 
-2. Verify removal:
+Hub + spokes (`CLUSTER_COUNT>=2`): tear down ArgoCD edge apps, ACM policy, spoke
+`dark-noc-edge` namespaces, then the hub chart:
 
-   ```bash
-   oc get pods -n $NAMESPACE
-   # Should return "No resources found"
-   ```
+```bash
+CLUSTER_COUNT=2 make acm-teardown
+```
+
+Verify removal:
+
+```bash
+oc get pods -n $NAMESPACE
+# Should return "No resources found" (or namespace gone)
+# On each spoke: oc get ns dark-noc-edge  (should be NotFound)
+```
 
 ## References
 

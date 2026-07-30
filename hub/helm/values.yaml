@@ -395,7 +395,9 @@ frontend:
 agentService:
   replicaCount: 1
   granite:
-    modelName: "granite-4.0-8b"
+    # Must match LlamaStack registered id: adnr-llm/<ADNR_LLM_ID>.
+    # make helm-install overrides this from ADNR_LLM_ID when set.
+    modelName: "adnr-llm/granite-3-2-8b-instruct"
   lightspeed:
     url: ""
     token: ""
