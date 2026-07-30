@@ -1,8 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
+from helpers import make_state
+
 from agent_service.models import GraphConfig
 from agent_service.nodes.investigate import make_investigate_node
-from helpers import make_state
 
 
 def _llm_no_tool_call():
@@ -136,6 +137,7 @@ class TestInvestigateNode:
 
         async def _slow_llm(*args, **kwargs):
             import asyncio
+
             await asyncio.sleep(60)
             return _llm_with_tool_call()
 
@@ -191,6 +193,7 @@ class TestInvestigateNode:
 
         async def _slow_invoke(tool_name, tool_args):
             import asyncio
+
             call_times.append(time.monotonic())
             await asyncio.sleep(0.3)
             return _STUB_EVENTS if tool_name == "get_events" else {"patterns": []}
@@ -280,9 +283,7 @@ class TestInvestigateNode:
         iter2_search_fallback.content = ""
 
         mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(
-            side_effect=[iter1_logs_fail, iter2_search_fallback, _llm_no_tool_call()]
-        )
+        mock_llm.ainvoke = AsyncMock(side_effect=[iter1_logs_fail, iter2_search_fallback, _llm_no_tool_call()])
         with (
             patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
             patch("agent_service.nodes.investigate.invoke_tool", _invoke_with_failure),

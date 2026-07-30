@@ -5,8 +5,6 @@ from urllib.parse import quote
 
 import httpx
 
-MAX_SHORT_DESCRIPTION_LEN = 160
-
 from .config import (
     SLACK_BASE_URL,
     SLACK_BOT_TOKEN,
@@ -17,6 +15,8 @@ from .config import (
     SNOW_USERNAME,
     mcp,
 )
+
+MAX_SHORT_DESCRIPTION_LEN = 160
 
 
 def _snow_client() -> httpx.Client:

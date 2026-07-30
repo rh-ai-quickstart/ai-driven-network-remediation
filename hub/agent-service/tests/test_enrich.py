@@ -1,9 +1,8 @@
 from unittest.mock import AsyncMock, patch
 
-import pytest
+from helpers import make_state
 
 from agent_service.nodes.enrich import enrich_node
-from helpers import make_state
 
 
 class TestEnrichNode:

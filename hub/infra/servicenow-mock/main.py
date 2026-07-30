@@ -165,9 +165,14 @@ async def get_user(
     sysparm_fields: str = "",
     _: str = Depends(_verify_basic_auth),
 ):
-    return {"result": _apply_query_params(
-        list(users.values()), sysparm_query, sysparm_limit, sysparm_fields,
-    )}
+    return {
+        "result": _apply_query_params(
+            list(users.values()),
+            sysparm_query,
+            sysparm_limit,
+            sysparm_fields,
+        )
+    }
 
 
 @app.post("/api/now/table/sys_user", status_code=201)

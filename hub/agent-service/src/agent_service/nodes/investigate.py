@@ -70,7 +70,11 @@ _TOOLS = [
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
                     "pod": {"type": "string", "description": "Pod name filter"},
                     "container": {"type": "string", "description": "Container name filter"},
-                    "labels": {"type": "object", "description": "Label selector", "additionalProperties": {"type": "string"}},
+                    "labels": {
+                        "type": "object",
+                        "description": "Label selector",
+                        "additionalProperties": {"type": "string"},
+                    },
                     "text": {"type": "string", "description": "Text to search for"},
                     "tenant": {"type": "string", "description": "Tenant identifier"},
                     "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
@@ -172,8 +176,7 @@ def make_investigate_node(config: GraphConfig):
                     messages.append(response)
                     tool_calls = response.tool_calls
                     results = await asyncio.gather(
-                        *[_call_tool(tc["name"], _pin_tool_args(tc["args"], state.log_event))
-                          for tc in tool_calls]
+                        *[_call_tool(tc["name"], _pin_tool_args(tc["args"], state.log_event)) for tc in tool_calls]
                     )
 
                     for tool_call, tool_result in zip(tool_calls, results):

@@ -88,7 +88,4 @@ class CellOutage(Anomaly):
     rsrq: float
 
     def __str__(self) -> str:
-        return (
-            f"Cell Outage: UEs=0, Tput=0, "
-            f"SINR={self.sinr}, RSRP={self.rsrp}, RSRQ={self.rsrq}"
-        )
+        return f"Cell Outage: UEs=0, Tput=0, " f"SINR={self.sinr}, RSRP={self.rsrp}, RSRQ={self.rsrq}"

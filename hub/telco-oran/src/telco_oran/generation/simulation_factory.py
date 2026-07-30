@@ -8,8 +8,16 @@ from telco_oran.domain.ran_kpi_record_factory import RanKpiRecordFactory
 AVAILABLE_BANDS = ["Band 29", "Band 26", "Band 71", "Band 66"]
 AREA_TYPES = ["industrial", "commercial", "rural", "residential"]
 CITIES = [
-    "Frisco", "Plano", "McKinney", "Denton", "Allen",
-    "Carrollton", "Irving", "Coppell", "Celina", "Prosper",
+    "Frisco",
+    "Plano",
+    "McKinney",
+    "Denton",
+    "Allen",
+    "Carrollton",
+    "Irving",
+    "Coppell",
+    "Celina",
+    "Prosper",
 ]
 
 
@@ -32,15 +40,11 @@ class SimulationFactory:
         for cell in cells:
             for band in cell.bands:
                 records = self._generate_band_records(cell, band, records_per_band)
-                all_metrics.append(
-                    CellBandMetrics(cell=cell, band=band, records=records)
-                )
+                all_metrics.append(CellBandMetrics(cell=cell, band=band, records=records))
 
         return all_metrics
 
-    def _generate_band_records(
-        self, cell: Cell, band: str, count: int
-    ) -> list[RanKpiRecord]:
+    def _generate_band_records(self, cell: Cell, band: str, count: int) -> list[RanKpiRecord]:
         records = []
         for _ in range(count):
             kpi_records = self._kpi_factory.create_for_cell(cell)

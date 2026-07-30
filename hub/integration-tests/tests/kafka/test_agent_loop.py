@@ -112,8 +112,8 @@ def test_kafka_agent_loop(chatbot_client):
     movie_entry = _poll_incident_movie(chatbot_client, incident_id)
 
     assert movie_entry["incident_id"] == incident_id
-    assert movie_entry["stage"] in _COMPLETED_WORKFLOW_STAGES, (
-        f"Workflow did not complete; stage={movie_entry.get('stage')!r}"
-    )
+    assert (
+        movie_entry["stage"] in _COMPLETED_WORKFLOW_STAGES
+    ), f"Workflow did not complete; stage={movie_entry.get('stage')!r}"
     assert _DEMO_SITE in movie_entry.get("title", "")
     assert movie_entry.get("summary")
