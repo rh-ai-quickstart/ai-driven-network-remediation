@@ -1,10 +1,42 @@
 # Rest Commands
 
-## MaaS
+## MaaS / RHOAI model serving
 
 ```bash
 curl -vk -H "Authorization: Bearer $ADNR_LLM_TOKEN" \
   "$ADNR_LLM_URL/models"
+```
+
+```bash
+curl -sk -H "Authorization: Bearer $ADNR_LLM_TOKEN" \
+  -H "Content-Type: application/json" \
+  "$ADNR_LLM_URL/chat/completions" \
+  -d '{
+    "model": "granite-32-8b-vllm",
+    "messages": [
+      {"role": "user", "content": "What is the weather in Boston?"}
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get the current weather for a location",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string",
+                "description": "City name"
+              }
+            },
+            "required": ["location"]
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto"
+  }'
 ```
 
 ## Ingestion Pipeline
