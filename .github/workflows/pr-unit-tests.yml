@@ -21,3 +21,23 @@ jobs:
 
       - name: Run unit tests
         run: make unit-tests
+
+  multi-cluster-template-tests:
+    name: Multi-cluster template tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Run multi-cluster template tests
+        run: make multi-cluster-template-tests
+        env:
+          SKIP_OC_CHECK: "1"

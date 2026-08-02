@@ -1,6 +1,11 @@
 # ADNR edge Placement: selects ManagedClusters labeled adnr.io/role=edge.
 # Label is applied by scripts/acm/label-spokes.sh (C7). Apply on the hub after
 # helm-install so namespace "hub" exists (see make acm-deploy).
+#
+# ACM 2.17 / MCE 2.17 reject ManagedClusterSet selectorType=LabelSelector
+# ("Do not allow to create/update this kind of clusterset"). Use exclusive
+# membership via cluster.open-cluster-management.io/clusterset=adnr-edge
+# (also set by label-spokes.sh once this set exists).
 ---
 apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSet
@@ -11,10 +16,7 @@ metadata:
     adnr.io/component: acm-placement
 spec:
   clusterSelector:
-    selectorType: LabelSelector
-    labelSelector:
-      matchLabels:
-        adnr.io/role: edge
+    selectorType: ExclusiveClusterSetLabel
 ---
 apiVersion: cluster.open-cluster-management.io/v1beta2
 kind: ManagedClusterSetBinding

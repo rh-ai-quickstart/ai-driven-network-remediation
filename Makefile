@@ -70,6 +70,9 @@ LIGHTSPEED_VERIFY_SSL  ?= false
 AUTO_INGEST_ON_STARTUP ?= true
 AAP_NAMESPACE          ?= aap
 ENABLE_SLACK           ?= false
+# Telco/O-RAN path. Off by default: quay.io/rh-ai-quickstart/noc-ran-anomaly-detector
+# is not always published for VERSION, and ImagePullBackOff blocks helm --wait.
+ENABLE_RAN_ANOMALY     ?= false
 ENABLE_MULTICLUSTER    ?= false
 ENABLE_GITEA           ?= $(if $(filter false,$(ENABLE_AAP_MOCK)),true,false)
 GITEA_EXTERNAL         ?= false
@@ -272,6 +275,7 @@ helm_all_args = \
 	--set image.ranAnomalyDetector=noc-ran-anomaly-detector \
 	--set image.frontend=noc-frontend \
 	--set image.tag=$(VERSION) \
+	--set ranAnomalyDetector.enabled=$(ENABLE_RAN_ANOMALY) \
 	--set global.routes.enabled=$(ROUTES_ENABLED) \
 	--set edgeRbac.enabled=$(EDGE_RBAC_ENABLED) \
 	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
@@ -358,9 +362,12 @@ acm-distribute-kafka-certs: validate-topology
 	bash scripts/acm/distribute-kafka-certs.sh $(ACM_DISTRIBUTE_ARGS)
 
 .PHONY: acm-apply-placement
-acm-apply-placement:
-	@# Apply Placement + Policy only (never the Hive ClusterDeployment template).
+acm-apply-placement: validate-topology
+	@# Apply Placement + GitOpsCluster + Policy only (never the Hive ClusterDeployment template).
 	oc apply -f cross-cluster/acm/placement.yaml
+	@# ExclusiveClusterSetLabel membership (ACM 2.17+); role labels alone are not enough.
+	$(MAKE) acm-label-spokes
+	oc apply -f cross-cluster/acm/gitopscluster.yaml
 	oc apply -f cross-cluster/acm/namespace-policy.yaml
 
 # ArgoCD edge fan-out (CLUSTER_COUNT>=2). Dry-run: ARGOCD_APPLY_ARGS=--dry-run
@@ -712,6 +719,24 @@ unit-tests:
 	cd hub/infra/servicenow-mock && uv sync --group dev && uv run pytest
 	cd hub/telco-oran && uv sync --group dev && uv run pytest
 	cd hub/ran-anomaly-detector && uv sync --group dev && uv run pytest
+
+# Offline multi-cluster template / dry-run tests (no live ACM). C8.
+.PHONY: multi-cluster-template-tests
+multi-cluster-template-tests:
+	$(MAKE) validate-topology CLUSTER_COUNT=1 SKIP_OC_CHECK=1
+	$(MAKE) validate-topology CLUSTER_COUNT=2 SKIP_OC_CHECK=1
+	helm lint edge/helm
+	@helm template edge-site-01 edge/helm \
+		--set siteId=edge-01 \
+		--set namespace=dark-noc-edge \
+		--set kafka.externalHost=kafka.apps.hub.example.com \
+		> /tmp/adnr-edge-chart.yaml
+	@if kubectl cluster-info >/dev/null 2>&1; then \
+		kubectl apply --dry-run=client -f /tmp/adnr-edge-chart.yaml; \
+	else \
+		echo "SKIP: kubectl dry-run (no API server); edge chart covered by pytest"; \
+	fi
+	cd hub/integration-tests && uv sync && uv run pytest tests/multi_cluster/ -v
 
 .PHONY: integration-tests
 integration-tests:
