@@ -92,6 +92,11 @@ def test_hub_spoke_renders_multi_cluster_creds_job():
     assert "edge-site-01-admin-kubeconfig" in rendered
     assert "edge-site-02-admin-kubeconfig" in rendered
     assert "resourceNames:" in rendered
+    assert "kind: ClusterPermission" in rendered
+    assert "rbac.open-cluster-management.io" in rendered
+    assert rendered.count("kind: ClusterPermission") >= 2
+    assert "pre-install,pre-upgrade" in rendered
+    assert "cluster:hub:system:serviceaccount:hub:mcp-noc-openshift" in rendered
     # Name-scoped Hive secret gets only (no unrestricted secrets list rule).
     secrets_blocks = [
         block

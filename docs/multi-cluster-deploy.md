@@ -360,7 +360,19 @@ make acm-distribute-kafka-certs CLUSTER_COUNT=2
 Use `site=edge-01`. `edge-site-01` is the ManagedCluster name only.
 
 **MCP cannot talk to a spoke**  
-Check `noc-openshift-kubeconfig-edge-site-NN` secrets in `hub` and that the multi-cluster creds job succeeded after hub install. The install smoke check uses the Job ServiceAccount; runtime calls use the `mcp-noc-openshift` ServiceAccount with the same ManagedCluster get/list ClusterRole. After first lab install, confirm from the MCP pod (or with its token) that `oc get ns` via the spoke kubeconfig succeeds.
+Check `noc-openshift-kubeconfig-edge-site-NN` secrets in `hub` and that the multi-cluster creds job succeeded after hub install. Hub-spoke installs a per-spoke `ClusterPermission` that grants the hub MCP identity spoke API access through cluster-proxy. The binding subject must be the proxy User `cluster:hub:system:serviceaccount:hub:mcp-noc-openshift` (not a spoke ServiceAccount subject). Without it, proxy calls reach the spoke but return Forbidden. Confirm:
+
+```bash
+oc get clusterpermission -n edge-site-01
+oc get secret noc-openshift-kubeconfig-edge-site-01 -n hub \
+  -o jsonpath='{.data.kubeconfig}' | base64 -d | grep -E 'server:|tokenFile:'
+
+MCP_POD=$(oc get pod -n hub -l app.kubernetes.io/name=noc-openshift \
+  -o jsonpath='{.items[0].metadata.name}')
+oc exec -n hub "$MCP_POD" -- \
+  env KUBECONFIG=/kubeconfigs/edge-site-01/kubeconfig \
+  oc --request-timeout=15s get ns dark-noc-edge
+```
 
 **Cluster-proxy TLS skip**  
 Per-spoke proxy kubeconfigs default to `insecure-skip-tls-verify: true` (`multiClusterCreds.insecureSkipTlsVerify`). That is a lab convenience. For non-lab hubs, set it to `false` and pin the cluster-proxy CA.

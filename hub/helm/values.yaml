@@ -286,7 +286,8 @@ edgeRbac:
 # kubeconfig secret per spoke (noc-openshift-kubeconfig-<spoke-name>)
 # via ACM cluster-proxy (Hive admin-kubeconfig fallback).
 # Proxy kubeconfigs use tokenFile (MCP pod SA); C7 must wait for ManagedClusters
-# before helm-install. TLS skip defaults on for lab; pin CA via insecureSkipTlsVerify.
+# before helm-install. Per-spoke ClusterPermission grants hub MCP SA spoke API
+# access through the proxy. TLS skip defaults on for lab; pin CA via insecureSkipTlsVerify.
 
 multiClusterCreds:
   image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"

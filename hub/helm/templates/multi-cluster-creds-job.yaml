@@ -1,6 +1,7 @@
 {{- /* Hub-spoke only: per-spoke kubeconfigs for mcp-noc-openshift via ACM cluster-proxy. */ -}}
 {{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 0) }}
 {{- $mcpSA := .Values.multiClusterCreds.serviceAccountName | default "mcp-noc-openshift" }}
+{{- $credsSA := printf "%s-multi-cluster-creds" (include "hub.fullname" .) }}
 {{/*
   Permanent SA used by the mcp-noc-openshift Deployment.
   Proxy kubeconfigs reference tokenFile under this SA (auto-rotated); do not embed Job tokens.
@@ -40,13 +41,51 @@ subjects:
     namespace: {{ .Release.Namespace }}
 ---
 {{/*
-  Pre-install Job (C7 must wait for ManagedClusters before helm-install).
-  Secret writes are namespaced; Hive secret reads stay cluster-scoped get/list only.
+  Per-spoke ClusterPermission: grants the hub MCP identity spoke API access through
+  ACM cluster-proxy. Proxy auth arrives as User cluster:hub:system:serviceaccount:...
+  (bind that User, not a spoke ServiceAccount subject). Applied with the release
+  after the pre-install creds Job, which still stores proxy kubeconfigs so runtime
+  uses tokenFile + MCP SA.
+*/}}
+{{- range .Values.topology.spokes }}
+---
+apiVersion: rbac.open-cluster-management.io/v1alpha1
+kind: ClusterPermission
+metadata:
+  name: {{ include "hub.fullname" $ }}-mcp-openshift
+  namespace: {{ .name }}
+  labels:
+    {{- include "hub.labels" $ | nindent 4 }}
+spec:
+  clusterRole:
+    rules:
+      - apiGroups: [""]
+        resources: ["namespaces"]
+        verbs: ["get", "list"]
+      - apiGroups: [""]
+        resources: ["pods", "pods/log", "events"]
+        verbs: ["get", "list", "watch"]
+      - apiGroups: ["apps"]
+        resources: ["deployments", "replicasets"]
+        verbs: ["get", "list", "watch", "patch", "update"]
+  clusterRoleBinding:
+    # cluster-proxy authenticates hub SAs as User
+    # cluster:hub:system:serviceaccount:<ns>:<sa> (not a spoke ServiceAccount subject).
+    subject:
+      apiGroup: rbac.authorization.k8s.io
+      kind: User
+      name: cluster:hub:system:serviceaccount:{{ $.Release.Namespace }}:{{ $mcpSA }}
+{{- end }}
+---
+{{/*
+  Pre-install Job creates kubeconfig secrets before MCP Deployment mounts them
+  (required for helm --wait). Secret writes are namespaced; Hive secret reads
+  stay name-scoped get only.
 */}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  name: {{ $credsSA }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "hub.labels" . | nindent 4 }}
@@ -58,7 +97,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  name: {{ $credsSA }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "hub.labels" . | nindent 4 }}
@@ -74,7 +113,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  name: {{ $credsSA }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "hub.labels" . | nindent 4 }}
@@ -85,16 +124,16 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds
+  name: {{ $credsSA }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "hub.fullname" . }}-multi-cluster-creds
+    name: {{ $credsSA }}
     namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds-{{ .Release.Namespace }}
+  name: {{ $credsSA }}-{{ .Release.Namespace }}
   labels:
     {{- include "hub.labels" . | nindent 4 }}
   annotations:
@@ -121,7 +160,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds-{{ .Release.Namespace }}
+  name: {{ $credsSA }}-{{ .Release.Namespace }}
   labels:
     {{- include "hub.labels" . | nindent 4 }}
   annotations:
@@ -131,10 +170,10 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "hub.fullname" . }}-multi-cluster-creds-{{ .Release.Namespace }}
+  name: {{ $credsSA }}-{{ .Release.Namespace }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "hub.fullname" . }}-multi-cluster-creds
+    name: {{ $credsSA }}
     namespace: {{ .Release.Namespace }}
 ---
 apiVersion: batch/v1
@@ -155,7 +194,7 @@ spec:
         app: multi-cluster-creds-setup
     spec:
       restartPolicy: OnFailure
-      serviceAccountName: {{ include "hub.fullname" . }}-multi-cluster-creds
+      serviceAccountName: {{ $credsSA }}
       containers:
         - name: setup
           image: {{ .Values.multiClusterCreds.image | default .Values.edgeRbac.image | default "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest" }}
@@ -254,17 +293,16 @@ spec:
                 built=0
                 if [ -n "$PROXY_BASE" ]; then
                   build_proxy_kubeconfig "$spoke" "$KC" "$PROXY_BASE"
-                  # Smoke-check uses this Job's projected SA token via tokenFile.
-                  # Runtime callers use the mcp-noc-openshift SA (same ClusterRole on managedclusters).
-                  # Confirm MCP reachability after install: oc exec into mcp-noc-openshift with the secret.
+                  # Pre-install smoke uses the Job SA before ClusterPermission exists, so it
+                  # often Forbidden. Still store the proxy kubeconfig: runtime MCP SA uses
+                  # tokenFile + ClusterPermission applied with the release.
                   if KUBECONFIG="$KC" oc --request-timeout=15s get ns >/dev/null 2>&1; then
                     echo "Cluster-proxy kubeconfig verified for ${spoke}"
-                    built=1
                   else
-                    echo "WARN: cluster-proxy smoke check failed for ${spoke}; trying Hive secret"
-                    rm -f "$KC"
-                    KC="$(mktemp)"
+                    echo "WARN: cluster-proxy smoke failed for ${spoke} (expected before ClusterPermission)"
+                    echo "Storing proxy kubeconfig for MCP SA tokenFile path"
                   fi
+                  built=1
                 fi
 
                 if [ "$built" -eq 0 ]; then
