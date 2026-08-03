@@ -63,7 +63,15 @@ llama-stack:
       name: cache
   initContainers:
     enabled: true
-  resources: {}
+  # Operator default is 1 CPU / 1Gi when omitted. That often fails to schedule on
+  # ACM hubs where workers are already near full on requests. Keep this modest
+  # so helm --wait can succeed; raise if you have spare capacity.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
   pgvector:
     enabled: true
   mcp-servers:
@@ -443,7 +451,9 @@ agentService:
 # ══════════════════════════════════════════════════════════════════════
 
 ranAnomalyDetector:
-  enabled: true
+  # Off by default until the image is published for the selected VERSION.
+  # Enable via ENABLE_RAN_ANOMALY=true (make) or --set ranAnomalyDetector.enabled=true.
+  enabled: false
   replicaCount: 1
   env:
     kafkaBootstrap: "kafka:9092"
