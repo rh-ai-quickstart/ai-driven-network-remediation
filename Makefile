@@ -442,11 +442,6 @@ endif
 acm-teardown: validate-topology
 ifeq ($(CLUSTER_COUNT),1)
 	@echo "=== acm-teardown: single-cluster ==="
-ifneq ($(filter true TRUE yes YES 1,$(SKIP_OC_CHECK)),)
-	@echo "SKIP: helm-uninstall (SKIP_OC_CHECK set)"
-else
-	$(MAKE) helm-uninstall
-endif
 else
 	@echo "=== acm-teardown: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
 	CLUSTER_COUNT=$(CLUSTER_COUNT) \
@@ -457,6 +452,11 @@ else
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/acm-teardown.sh $(ACM_TEARDOWN_ARGS)
+endif
+# --dry-run must skip helm-uninstall; otherwise ACM dry-run still wipes the hub chart.
+ifneq ($(filter --dry-run,$(ACM_TEARDOWN_ARGS)),)
+	@echo "SKIP: helm-uninstall (ACM_TEARDOWN_ARGS includes --dry-run)"
+else
 ifneq ($(filter true TRUE yes YES 1,$(SKIP_OC_CHECK)),)
 	@echo "SKIP: helm-uninstall (SKIP_OC_CHECK set)"
 else

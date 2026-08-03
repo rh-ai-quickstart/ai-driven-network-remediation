@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Tear down ACM hub-spoke ADNR resources (reverse of acm-deploy hub-spoke path).
 #
-# Order: ACM policy (stop recreating edge ns) → ArgoCD apps (prune spokes) →
-#        spoke edge namespaces → ManifestWorks → optional Hive ClusterDeployments.
-# Caller (make acm-teardown) then runs hub helm-uninstall.
+# Order: ACM policy (stop recreating edge ns) → GitOpsCluster → Placement /
+#        ManagedClusterSet → ArgoCD apps (prune spokes) → spoke edge namespaces →
+#        ManifestWorks → optional Hive ClusterDeployments.
+# Caller (make acm-teardown) then runs hub helm-uninstall (skipped on --dry-run).
 #
 # CLUSTER_COUNT=1  → skip ACM pieces (caller should still run helm-uninstall)
-# --dry-run        → print actions only
+# --dry-run        → print actions only; make also skips helm-uninstall
 #
 # Env:
 #   SPOKES_GENERATED, NAMESPACE, EDGE_NAMESPACE, CLUSTER_CREATE, ARGOCD_NAMESPACE
@@ -29,6 +30,10 @@ SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 MANIFESTWORK_NAME="adnr-kafka-client-certs"
 APP_TIMEOUT_SECONDS="${ACM_TEARDOWN_APP_TIMEOUT_SECONDS:-300}"
 ARGOCD_APP_FINALIZER="resources-finalizer.argocd.argoproj.io"
+# Prefer argoproj.io: bare "application" can resolve to app.k8s.io on ACM hubs.
+ARGOCD_APP_RESOURCE="applications.argoproj.io"
+ARGOCD_APPSET_RESOURCE="applicationsets.argoproj.io"
+ARGOCD_APPPROJECT_RESOURCE="appprojects.argoproj.io"
 
 DRY_RUN=0
 for arg in "$@"; do
@@ -141,23 +146,23 @@ extract_spoke_kubeconfig() {
 ensure_app_prune_finalizer() {
   local app="$1" ns="$2" current
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log "dry-run: would patch Application/${app} finalizer ${ARGOCD_APP_FINALIZER}"
+    log "dry-run: would patch ${ARGOCD_APP_RESOURCE}/${app} finalizer ${ARGOCD_APP_FINALIZER}"
     return 0
   fi
-  if ! "${oc_bin}" get application "${app}" -n "${ns}" >/dev/null 2>&1; then
+  if ! "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" >/dev/null 2>&1; then
     return 0
   fi
-  current="$("${oc_bin}" get application "${app}" -n "${ns}" \
+  current="$("${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" \
     -o jsonpath='{.metadata.finalizers}' 2>/dev/null || true)"
   if printf '%s' "${current}" | grep -Fq "${ARGOCD_APP_FINALIZER}"; then
     return 0
   fi
   if [[ -z "${current}" || "${current}" == "[]" ]]; then
-    "${oc_bin}" patch application "${app}" -n "${ns}" --type=merge \
+    "${oc_bin}" patch "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" --type=merge \
       -p "{\"metadata\":{\"finalizers\":[\"${ARGOCD_APP_FINALIZER}\"]}}" \
       >/dev/null 2>&1 || true
   else
-    "${oc_bin}" patch application "${app}" -n "${ns}" --type=json \
+    "${oc_bin}" patch "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" --type=json \
       -p "[{\"op\":\"add\",\"path\":\"/metadata/finalizers/-\",\"value\":\"${ARGOCD_APP_FINALIZER}\"}]" \
       >/dev/null 2>&1 || true
   fi
@@ -179,7 +184,7 @@ wait_for_applications_gone() {
     remaining=0
     for name in "${ADNR_SPOKE_NAMES[@]}"; do
       app="adnr-edge-${name}"
-      if "${oc_bin}" get application "${app}" -n "${ns}" >/dev/null 2>&1; then
+      if "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" >/dev/null 2>&1; then
         remaining=$((remaining + 1))
       fi
     done
@@ -208,10 +213,12 @@ delete_spoke_edge_namespace() {
   fi
 }
 
-# ── 1. ACM policy first (musthave Namespace would recreate dark-noc-edge) ──
-log "Deleting ACM Placement / ManagedClusterSet / Policy..."
+# ── 1. ACM namespaced objects (reverse of acm-apply-placement) ──
+# Policy first: musthave Namespace would recreate dark-noc-edge.
+# GitOpsCluster before Placement (placementRef dependency).
 # Do not apply/delete clusterdeployment.yaml (Hive template with placeholders).
-for f in placement.yaml namespace-policy.yaml; do
+log "Deleting ACM Policy / GitOpsCluster / Placement / ManagedClusterSet..."
+for f in namespace-policy.yaml gitopscluster.yaml placement.yaml; do
   if [[ -f "${ACM_DIR}/${f}" ]]; then
     run "${oc_bin}" delete -f "${ACM_DIR}/${f}" --ignore-not-found
   fi
@@ -227,14 +234,14 @@ if [[ -n "${argocd_ns}" ]]; then
     done
   fi
   # Delete ApplicationSet first so it cannot recreate Applications.
-  run "${oc_bin}" delete applicationset adnr-edge -n "${argocd_ns}" --ignore-not-found
+  run "${oc_bin}" delete "${ARGOCD_APPSET_RESOURCE}" adnr-edge -n "${argocd_ns}" --ignore-not-found
   if [[ "${#ADNR_SPOKE_NAMES[@]}" -gt 0 ]]; then
     for name in "${ADNR_SPOKE_NAMES[@]}"; do
-      run "${oc_bin}" delete application "adnr-edge-${name}" -n "${argocd_ns}" --ignore-not-found --wait=false
+      run "${oc_bin}" delete "${ARGOCD_APP_RESOURCE}" "adnr-edge-${name}" -n "${argocd_ns}" --ignore-not-found --wait=false
     done
   fi
   wait_for_applications_gone "${argocd_ns}"
-  run "${oc_bin}" delete appproject adnr-edge -n "${argocd_ns}" --ignore-not-found
+  run "${oc_bin}" delete "${ARGOCD_APPPROJECT_RESOURCE}" adnr-edge -n "${argocd_ns}" --ignore-not-found
 else
   log "WARN: ArgoCD namespace not found; skipping ApplicationSet/AppProject delete"
 fi
@@ -283,5 +290,9 @@ case "${create_raw}" in
     ;;
 esac
 
-log "OK: acm-teardown ACM/ArgoCD + spoke edge cleanup done (run make helm-uninstall for hub chart)"
+if [[ "${DRY_RUN}" -eq 1 ]]; then
+  log "OK: acm-teardown dry-run complete (make acm-teardown also skips helm-uninstall)"
+else
+  log "OK: acm-teardown ACM/ArgoCD + spoke edge cleanup done (run make helm-uninstall for hub chart)"
+fi
 exit 0
