@@ -244,6 +244,8 @@ For hub-spoke mode, admin access is also required on each edge cluster.
    make helm-install
    ```
 
+   Single-cluster and ACM hub-spoke orchestration use `make acm-deploy` (`CLUSTER_COUNT=1` or `>=2`). See the [Multi-cluster deployment guide](docs/multi-cluster-deploy.md).
+
    With Langfuse observability (optional):
 
    ```bash
@@ -282,6 +284,8 @@ Hub + spokes (`CLUSTER_COUNT>=2`): tear down ArgoCD edge apps, ACM policy, spoke
 CLUSTER_COUNT=2 make acm-teardown
 ```
 
+Full topology, naming, verify, and teardown notes: [Multi-cluster deployment guide](docs/multi-cluster-deploy.md).
+
 Verify removal:
 
 ```bash
@@ -296,6 +300,7 @@ oc get pods -n $NAMESPACE
 - [Red Hat OpenShift AI](https://www.redhat.com/en/technologies/cloud-computing/openshift/openshift-ai)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [Architecture Guide](docs/architecture.md)
+- [Multi-cluster deployment guide](docs/multi-cluster-deploy.md)
 
 ## Tags
 
