@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from io import BytesIO
+from pathlib import Path
 
 from docx import Document
 from pypdf import PdfReader
@@ -63,27 +64,23 @@ def docx_to_markdown(data: bytes) -> str:
     return "\n\n".join(lines)
 
 
-_SUPPORTED_EXTENSIONS = frozenset({".pdf", ".docx", ".md"})
+_CONVERTERS: dict[str, callable] = {
+    ".pdf": pdf_to_markdown,
+    ".docx": docx_to_markdown,
+    ".md": lambda data: data.decode("utf-8"),
+}
 
 
 def supported_extensions() -> frozenset[str]:
-    return _SUPPORTED_EXTENSIONS
-
-
-def _extension_of(filename: str) -> str:
-    return f".{filename.rsplit('.', 1)[-1].lower()}" if "." in filename else ""
+    return frozenset(_CONVERTERS)
 
 
 def convert_to_markdown(filename: str, data: bytes) -> str:
     """Dispatch to the right converter based on the filename extension."""
-    extension = _extension_of(filename)
-    if extension == ".pdf":
-        return pdf_to_markdown(data)
-    if extension == ".docx":
-        return docx_to_markdown(data)
-    if extension == ".md":
-        return data.decode("utf-8")
-    raise ValueError(f"Unsupported vendor document type for '{filename}'")
+    converter = _CONVERTERS.get(Path(filename).suffix.lower())
+    if converter is None:
+        raise ValueError(f"Unsupported vendor document type for '{filename}'")
+    return converter(data)
 
 
 def markdown_object_name(filename: str) -> str:

@@ -37,8 +37,8 @@ REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" EDGE_NAMESP
 echo "Creating edge workload in namespace ${EDGE_NAMESPACE}"
 EDGE_NAMESPACE="${EDGE_NAMESPACE}" make deploy-edge-workload
 
-echo "Running integration tests"
-NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make integration-tests
-
 echo "Running unit tests"
 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make unit-tests
+
+echo "Running integration tests"
+NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make integration-tests

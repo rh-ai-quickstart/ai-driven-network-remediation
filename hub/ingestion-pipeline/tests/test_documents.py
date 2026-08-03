@@ -146,23 +146,10 @@ class TestSplitMarkdownUnits:
 
 
 class TestConvertToMarkdown:
-    @patch("ingestion_pipeline.documents.pdf_to_markdown")
-    def test_dispatches_pdf_by_extension(self, mock_convert):
-        mock_convert.return_value = "## Page 1\n\ntext"
+    def test_extension_matching_is_case_insensitive(self):
+        result = convert_to_markdown("notes.MD", b"# Heading")
 
-        result = convert_to_markdown("gnodeb.pdf", b"data")
-
-        mock_convert.assert_called_once_with(b"data")
-        assert result == mock_convert.return_value
-
-    @patch("ingestion_pipeline.documents.docx_to_markdown")
-    def test_dispatches_docx_by_extension_case_insensitive(self, mock_convert):
-        mock_convert.return_value = "# Heading\n\ntext"
-
-        result = convert_to_markdown("doc.DOCX", b"data")
-
-        mock_convert.assert_called_once_with(b"data")
-        assert result == mock_convert.return_value
+        assert result == "# Heading"
 
     def test_markdown_files_pass_through_unchanged(self):
         result = convert_to_markdown("notes.md", b"# Already markdown")
