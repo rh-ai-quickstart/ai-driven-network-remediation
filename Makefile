@@ -730,8 +730,10 @@ unit-tests:
 	cd hub/ran-anomaly-detector && uv sync --group dev && uv run pytest
 
 # Offline multi-cluster template / dry-run tests (no live ACM). C8.
+# helm-depend is required: hub template tests need Chart.yaml deps (pgvector,
+# llama-stack, mcp-servers), which are gitignored .tgz archives.
 .PHONY: multi-cluster-template-tests
-multi-cluster-template-tests:
+multi-cluster-template-tests: helm-depend
 	$(MAKE) validate-topology CLUSTER_COUNT=1 SKIP_OC_CHECK=1
 	$(MAKE) validate-topology CLUSTER_COUNT=2 SKIP_OC_CHECK=1
 	helm lint edge/helm
