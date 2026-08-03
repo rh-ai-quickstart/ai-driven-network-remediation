@@ -153,13 +153,13 @@ oc get secret my-aap-secret -n aap -o json | \
 
 **Cluster credentials for Lightspeed playbooks:**
 
-The `lightspeed-runner` template requires Kubernetes credentials so generated playbooks can patch resources on target clusters. In both modes, credentials are attached to the template at deploy time -- the agent service's `launch_job` call only passes `job_template_name` and `extra_vars` (including `edge_site_id`). Templates created by `upsert_job_template` (copied from `lightspeed-runner`) inherit credentials automatically.
+The `lightspeed-runner` template requires Kubernetes credentials so generated playbooks can patch resources on target clusters. In both modes, credentials are attached to the template at deploy time. The agent service's `launch_job` call only passes `job_template_name` and `extra_vars` (including `edge_site_id`). Templates created by `upsert_job_template` (copied from `lightspeed-runner`) inherit credentials automatically.
 
 **Single-cluster mode (default, development only)**
 
 When `aapCredential.enabled=true` (set automatically when `ENABLE_AAP_MOCK=false`), the Helm chart creates a ServiceAccount with broad RBAC permissions (get/list/patch across core, apps, batch, and networking API groups), registers it as an AAP credential (`hub-remediation`), and attaches it to the `lightspeed-runner` template. This is intended for development where AAP and the target workloads share the same cluster.
 
-**RHACM multicluster (ACM hub proxy)**
+#### RHACM multicluster (ACM hub proxy)
 
 For environments with Red Hat Advanced Cluster Management (RHACM 2.9+), a single credential routes playbooks to any managed cluster through the ACM cluster proxy. The Helm chart creates a custom AAP credential type that injects `hub_url` and `token_acm` as extra vars, and attaches the credential to the `lightspeed-runner` template. Generated playbooks use `ansible.builtin.uri` for Kubernetes API calls and construct the K8s API URL as `hub_url/edge_site_id`, routing all calls through the ACM cluster proxy.
 

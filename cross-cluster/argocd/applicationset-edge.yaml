@@ -57,7 +57,7 @@ spec:
             - name: namespace
               value: "{{.namespace}}"
             - name: kafka.externalHost
-              value: "ADNR_KAFKA_EXTERNAL_HOST"
+              value: "__KAFKA_EXTERNAL_HOST__"
       destination:
         # ManagedCluster name = ArgoCD cluster secret name (ACM GitOps registers these).
         name: "{{.name}}"

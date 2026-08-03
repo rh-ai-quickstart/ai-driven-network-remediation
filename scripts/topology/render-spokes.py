@@ -57,10 +57,17 @@ def main(argv: list[str] | None = None) -> int:
 
     prefix = os.environ.get("SPOKE_NAME_PREFIX", "edge-site")
     namespace = os.environ.get("EDGE_NAMESPACE", "dark-noc-edge")
+    mcp_sa = os.environ.get(
+        "MCP_OPENSHIFT_SA",
+        os.environ.get("MULTI_CLUSTER_CREDS_SA", "mcp-noc-openshift"),
+    )
 
     try:
         yaml_text = render_values_yaml(
-            cluster_count, prefix=prefix, namespace=namespace
+            cluster_count,
+            prefix=prefix,
+            namespace=namespace,
+            mcp_service_account=mcp_sa,
         )
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

@@ -23,6 +23,11 @@ from mcp_openshift.tools import get_pods
         ("", "edge-site", ""),
         ("unknown", "edge-site", ""),
         ("  edge-03  ", "edge-site", "edge-site-03"),
+        # Reject free-form / traversal values (never echo into kubeconfig paths).
+        ("../../etc/passwd", "edge-site", ""),
+        ("edge-site-01/../edge-site-02", "edge-site", ""),
+        ("other-cluster", "edge-site", ""),
+        ("edge-01", "../evil", ""),
     ],
 )
 def test_site_id_to_spoke_name(site_id, prefix, expected):

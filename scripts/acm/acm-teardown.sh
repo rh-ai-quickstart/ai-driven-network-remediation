@@ -11,6 +11,7 @@
 #
 # Env:
 #   SPOKES_GENERATED, NAMESPACE, EDGE_NAMESPACE, CLUSTER_CREATE, ARGOCD_NAMESPACE
+#   RELEASE          helm release name (default hub) for topology discovery
 #   SKIP_OC_CHECK=1  offline skip
 #   ACM_TEARDOWN_APP_TIMEOUT_SECONDS  wait for ArgoCD app prune (default 300)
 set -euo pipefail
@@ -25,7 +26,6 @@ NAMESPACE="${NAMESPACE:-hub}"
 EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
 CLUSTER_CREATE="${CLUSTER_CREATE:-false}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-}"
-ACM_DIR="${ACM_DIR:-cross-cluster/acm}"
 SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 MANIFESTWORK_NAME="adnr-kafka-client-certs"
 APP_TIMEOUT_SECONDS="${ACM_TEARDOWN_APP_TIMEOUT_SECONDS:-300}"
@@ -65,10 +65,7 @@ if ! [[ "${CLUSTER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${CLUSTER_COUNT}" -lt 1 ]]; the
   fail "CLUSTER_COUNT must be an integer >= 1 (got: ${CLUSTER_COUNT})"
 fi
 
-if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
-  log "SKIP: acm-teardown ACM/ArgoCD steps (single-cluster mode); use make helm-uninstall"
-  exit 0
-fi
+RELEASE="${RELEASE:-hub}"
 
 skip_raw="$(printf '%s' "${SKIP_OC_CHECK}" | tr '[:upper:]' '[:lower:]')"
 case "${skip_raw}" in
@@ -76,6 +73,10 @@ case "${skip_raw}" in
     if [[ "${DRY_RUN}" -eq 1 ]]; then
       log "WARN: SKIP_OC_CHECK set; continuing dry-run plan only (no oc login)"
     else
+      if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
+        log "SKIP: acm-teardown ACM/ArgoCD steps (single-cluster mode + SKIP_OC_CHECK)"
+        exit 0
+      fi
       log "WARN: SKIP_OC_CHECK set; acm-teardown live deletes skipped"
       log "OK: acm-teardown skipped live oc (CLUSTER_COUNT=${CLUSTER_COUNT})"
       exit 0
@@ -83,26 +84,45 @@ case "${skip_raw}" in
     ;;
 esac
 
-oc_bin="$(adnr_resolve_oc)"
-if [[ "${DRY_RUN}" -eq 0 ]]; then
-  adnr_require_hub_login "${oc_bin}"
-else
-  log "dry-run: skipping oc login check"
+oc_bin=""
+if [[ "${DRY_RUN}" -eq 0 ]] || [[ "${skip_raw}" != "1" && "${skip_raw}" != "true" && "${skip_raw}" != "yes" ]]; then
+  if command -v oc >/dev/null 2>&1 || command -v kubectl >/dev/null 2>&1; then
+    oc_bin="$(adnr_resolve_oc)"
+  fi
 fi
 
-ADNR_SPOKE_NAMES=()
-if [[ -f "${SPOKES_GENERATED}" ]]; then
-  adnr_load_spoke_names
-else
-  log "WARN: ${SPOKES_GENERATED} missing; Hive/ManifestWork cleanup may be incomplete"
-fi
+hub_spoke_artifacts_present() {
+  local bin="${1:-}"
+  [[ -n "${bin}" ]] || return 1
+  if "${bin}" get managedclusterset adnr-edge >/dev/null 2>&1; then
+    return 0
+  fi
+  local argo_ns
+  argo_ns="$(detect_argocd_namespace 2>/dev/null || true)"
+  if [[ -n "${argo_ns}" ]] && "${bin}" get "${ARGOCD_APPSET_RESOURCE}" adnr-edge -n "${argo_ns}" >/dev/null 2>&1; then
+    return 0
+  fi
+  if "${bin}" get placement adnr-edge-spokes -n "${NAMESPACE}" >/dev/null 2>&1; then
+    return 0
+  fi
+  # Helm release still carries hub-spoke topology from a prior acm-deploy.
+  if command -v helm >/dev/null 2>&1; then
+    local mode
+    mode="$(helm get values "${RELEASE}" -n "${NAMESPACE}" -o json 2>/dev/null \
+      | sed -n 's/.*"deploymentMode"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 || true)"
+    if [[ "${mode}" == "hub-spoke" ]]; then
+      return 0
+    fi
+  fi
+  return 1
+}
 
 detect_argocd_namespace() {
   if [[ -n "${ARGOCD_NAMESPACE}" ]]; then
     printf '%s' "${ARGOCD_NAMESPACE}"
     return 0
   fi
-  if [[ "${DRY_RUN}" -eq 1 ]]; then
+  if [[ "${DRY_RUN}" -eq 1 ]] || [[ -z "${oc_bin}" ]]; then
     # Offline dry-run: prefer the OpenShift GitOps default without calling oc.
     printf '%s' "openshift-gitops"
     return 0
@@ -117,6 +137,45 @@ detect_argocd_namespace() {
   fi
   printf '%s' ""
 }
+
+if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
+  if [[ -n "${oc_bin}" ]] && [[ "${DRY_RUN}" -eq 0 ]]; then
+    adnr_require_hub_login "${oc_bin}"
+    if hub_spoke_artifacts_present "${oc_bin}"; then
+      fail "CLUSTER_COUNT=1 but hub-spoke ADNR resources remain (ManagedClusterSet/Placement/ApplicationSet or helm topology=hub-spoke). Re-run with the same CLUSTER_COUNT used for acm-deploy (for example CLUSTER_COUNT=2 make acm-teardown)."
+    fi
+  elif [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "dry-run: single-cluster path (would refuse teardown if hub-spoke artifacts exist on a live cluster)"
+  fi
+  log "SKIP: acm-teardown ACM/ArgoCD steps (single-cluster mode); use make helm-uninstall"
+  exit 0
+fi
+
+if [[ "${DRY_RUN}" -eq 0 ]]; then
+  [[ -n "${oc_bin}" ]] || oc_bin="$(adnr_resolve_oc)"
+  adnr_require_hub_login "${oc_bin}"
+else
+  log "dry-run: skipping oc login check"
+  [[ -n "${oc_bin}" ]] || true
+fi
+
+ADNR_SPOKE_NAMES=()
+if [[ -f "${SPOKES_GENERATED}" ]]; then
+  adnr_load_spoke_names
+else
+  log "WARN: ${SPOKES_GENERATED} missing; Hive/ManifestWork cleanup may be incomplete"
+fi
+
+# Prefer live spoke list from ManagedClusters when the generated file is stale/missing.
+if [[ "${#ADNR_SPOKE_NAMES[@]}" -eq 0 ]] && [[ -n "${oc_bin}" ]] && [[ "${DRY_RUN}" -eq 0 ]]; then
+  while IFS= read -r _spoke; do
+    [[ -n "${_spoke}" ]] && ADNR_SPOKE_NAMES+=("${_spoke}")
+  done < <("${oc_bin}" get managedcluster -l adnr.io/role=edge \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+  if [[ "${#ADNR_SPOKE_NAMES[@]}" -gt 0 ]]; then
+    log "Loaded ${#ADNR_SPOKE_NAMES[@]} spoke(s) from ManagedCluster labels (spokes.generated.yaml empty/missing)"
+  fi
+fi
 
 extract_spoke_kubeconfig() {
   local spoke="$1" out="$2" secret
@@ -214,15 +273,16 @@ delete_spoke_edge_namespace() {
 }
 
 # ── 1. ACM namespaced objects (reverse of acm-apply-placement) ──
-# Policy first: musthave Namespace would recreate dark-noc-edge.
+# Policy first: musthave Namespace would recreate EDGE_NAMESPACE.
 # GitOpsCluster before Placement (placementRef dependency).
-# Do not apply/delete clusterdeployment.yaml (Hive template with placeholders).
+# Delete by resource name (templates use placeholders; do not oc delete -f raw YAML).
 log "Deleting ACM Policy / GitOpsCluster / Placement / ManagedClusterSet..."
-for f in namespace-policy.yaml gitopscluster.yaml placement.yaml; do
-  if [[ -f "${ACM_DIR}/${f}" ]]; then
-    run "${oc_bin}" delete -f "${ACM_DIR}/${f}" --ignore-not-found
-  fi
-done
+run "${oc_bin}" delete policy.policy.open-cluster-management.io adnr-edge-namespace -n "${NAMESPACE}" --ignore-not-found
+run "${oc_bin}" delete placementbinding.policy.open-cluster-management.io adnr-edge-namespace -n "${NAMESPACE}" --ignore-not-found
+run "${oc_bin}" delete gitopscluster.apps.open-cluster-management.io adnr-edge -n "${NAMESPACE}" --ignore-not-found
+run "${oc_bin}" delete placement.cluster.open-cluster-management.io adnr-edge-spokes -n "${NAMESPACE}" --ignore-not-found
+run "${oc_bin}" delete managedclustersetbinding.cluster.open-cluster-management.io adnr-edge -n "${NAMESPACE}" --ignore-not-found
+run "${oc_bin}" delete managedclusterset.cluster.open-cluster-management.io adnr-edge --ignore-not-found
 
 # ── 2. ArgoCD: patch prune finalizer, delete ApplicationSet + apps, wait ──
 argocd_ns="$(detect_argocd_namespace)"

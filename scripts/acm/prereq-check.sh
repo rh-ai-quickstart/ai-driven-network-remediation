@@ -56,14 +56,7 @@ if [[ "${skip_oc}" -eq 1 ]]; then
   exit 0
 fi
 
-oc_bin=""
-if command -v oc >/dev/null 2>&1; then
-  oc_bin=oc
-elif command -v kubectl >/dev/null 2>&1; then
-  oc_bin=kubectl
-else
-  fail "oc or kubectl not found on PATH"
-fi
+oc_bin="$(adnr_resolve_oc)"
 
 if ! "${oc_bin}" whoami >/dev/null 2>&1; then
   fail "not logged into hub cluster (${oc_bin} whoami failed)"

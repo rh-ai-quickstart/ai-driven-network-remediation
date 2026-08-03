@@ -4,7 +4,7 @@
 #
 # Sample values below are valid for kubectl --dry-run=client. Apply script
 # substitutes the sample repo URL, openshift-gitops namespace, dark-noc-edge
-# destination, and ADNR_KAFKA_EXTERNAL_HOST from env.
+# destination, and __KAFKA_EXTERNAL_HOST__ from env (KAFKA_EXTERNAL_HOST).
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject

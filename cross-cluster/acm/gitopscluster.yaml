@@ -1,21 +1,22 @@
 # Registers Placement-selected spokes as Argo CD cluster secrets via ACM.
 # Required before ApplicationSet destinations (destination.name = ManagedCluster
-# name) validate. Apply after placement.yaml (same make acm-apply-placement).
+# name) validate. Apply via scripts/acm/apply-placement.sh after placement.yaml.
+# Substitutes __NAMESPACE__, __ACM_HUB_CLUSTER__, __ARGOCD_NAMESPACE__.
 ---
 apiVersion: apps.open-cluster-management.io/v1beta1
 kind: GitOpsCluster
 metadata:
   name: adnr-edge
-  namespace: hub
+  namespace: __NAMESPACE__
   labels:
     app.kubernetes.io/part-of: adnr
     adnr.io/component: acm-gitops
 spec:
   argoServer:
-    cluster: local-cluster
-    argoNamespace: openshift-gitops
+    cluster: __ACM_HUB_CLUSTER__
+    argoNamespace: __ARGOCD_NAMESPACE__
   placementRef:
     apiVersion: cluster.open-cluster-management.io/v1beta1
     kind: Placement
     name: adnr-edge-spokes
-    namespace: hub
+    namespace: __NAMESPACE__

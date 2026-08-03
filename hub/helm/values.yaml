@@ -286,11 +286,13 @@ edgeRbac:
 # kubeconfig secret per spoke (noc-openshift-kubeconfig-<spoke-name>)
 # via ACM cluster-proxy (Hive admin-kubeconfig fallback).
 # Proxy kubeconfigs use tokenFile (MCP pod SA); C7 must wait for ManagedClusters
-# before helm-install. TLS skip is lab-only (C9).
+# before helm-install. TLS skip defaults on for lab; pin CA via insecureSkipTlsVerify.
 
 multiClusterCreds:
   image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
   serviceAccountName: mcp-noc-openshift
+  # Lab default: skip TLS verify against cluster-proxy. Set false and pin CA for non-lab.
+  insecureSkipTlsVerify: true
 
 # ══════════════════════════════════════════════════════════════════════
 # AAP Credential hook (post-install Job)
@@ -403,9 +405,8 @@ frontend:
 agentService:
   replicaCount: 1
   granite:
-    # Must match LlamaStack registered id: adnr-llm/<ADNR_LLM_ID>.
-    # make helm-install overrides this from ADNR_LLM_ID when set.
-    modelName: "adnr-llm/granite-3-2-8b-instruct"
+    # make helm-install overrides this to adnr-llm/<ADNR_LLM_ID> when LLM env is set.
+    modelName: "granite-4.0-8b"
   lightspeed:
     url: ""
     token: ""

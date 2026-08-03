@@ -48,7 +48,7 @@ def test_applicationset_list_generator_and_site_id_params():
     assert "name: siteId" in text
     assert 'value: "{{.siteId}}"' in text
     assert "name: kafka.externalHost" in text
-    assert "ADNR_KAFKA_EXTERNAL_HOST" in text
+    assert "__KAFKA_EXTERNAL_HOST__" in text
     assert 'name: "{{.name}}"' in text
     assert "resources-finalizer.argocd.argoproj.io" in text
     assert "project: adnr-edge" in text

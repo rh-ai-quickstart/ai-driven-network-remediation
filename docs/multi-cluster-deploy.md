@@ -2,7 +2,7 @@
 
 Deploy AI-Driven Network Remediation (ADNR) on a single OpenShift cluster, or as an ACM hub with edge spokes. The entry point is `make acm-deploy`. Topology is controlled by `CLUSTER_COUNT`.
 
-For single-cluster-only installs without ACM orchestration, see [manual-deploy.md](manual-deploy.md). For AAP playbook routing through the ACM cluster proxy, see the [RHACM multicluster section in the README](../README.md#rhacm-multicluster-acm-hub-proxy). That flag is separate from topology (details below).
+For single-cluster-only installs without ACM orchestration, see [manual-deploy.md](manual-deploy.md). For AAP playbook routing through the ACM cluster proxy, see [RHACM multicluster (ACM hub proxy)](../README.md#rhacm-multicluster-acm-hub-proxy) in the README. That flag is separate from topology (details below).
 
 ## Overview
 
@@ -151,15 +151,18 @@ make acm-prereq-check CLUSTER_COUNT=2
 | `NAMESPACE` | `hub` | Hub install namespace |
 | `EDGE_NAMESPACE` | `dark-noc-edge` | Edge namespace (sim or each spoke) |
 | `SPOKE_NAME_PREFIX` | `edge-site` | ManagedCluster names: `edge-site-01`, … |
-| `ACM_HUB_CLUSTER` | `local-cluster` | Hub ManagedCluster name |
+| `ACM_HUB_CLUSTER` | `local-cluster` | Hub ManagedCluster name (wired into GitOpsCluster) |
 | `CLUSTER_CREATE` | `false` | Provision spokes with Hive when `true` |
 | `GITOPS_REPO_URL` | upstream repo | ArgoCD source for `edge/helm` |
 | `GITOPS_REVISION` | `main` | Branch/tag/commit for ArgoCD (use your feature branch before merge) |
 | `KAFKA_EXTERNAL_HOST` | auto from route | Hub Kafka route host for spoke CLF; `acm-deploy` detects `kafka-external` if unset |
 | `REGISTRY` / `VERSION` | Quay published images | Override for custom builds |
 | `ENABLE_MULTICLUSTER` | `false` | AAP ACM proxy credential (not topology) |
+| `multiClusterCreds.insecureSkipTlsVerify` | `true` (Helm) | Lab default for cluster-proxy kubeconfigs; set `false` to pin CA |
 
 `DEPLOYMENT_MODE` and `SPOKE_COUNT` are derived by the Makefile. Do not set them by hand.
+
+`NAMESPACE` and `EDGE_NAMESPACE` are substituted into ACM Placement / Policy / GitOpsCluster manifests at apply time. Keep the same values for teardown.
 
 Offline / CI dry-runs: set `SKIP_OC_CHECK=1` so topology and ACM scripts skip live `oc` calls.
 
@@ -217,11 +220,12 @@ Orchestration order when `CLUSTER_COUNT>=2`:
 
 1. `acm-prereq-check` (ACM + ArgoCD CRDs, N Available ManagedClusters)
 2. `acm-create-clusters` (no-op when `CLUSTER_CREATE=false`)
-3. `acm-label-spokes` (`adnr.io/role=edge` on each ManagedCluster)
-4. Hub `helm-install` (`deploymentMode=hub-spoke`, `edgeRbac.enabled=false`)
-5. `acm-distribute-kafka-certs` (`kafka-client-certs` in `dark-noc-edge` on each spoke)
-6. ACM placement / namespace policy
-7. `argocd-apply` + `argocd-wait-spokes` (edge chart Synced/Healthy)
+3. `acm-wait-for-clusters` (only when `CLUSTER_CREATE=true`)
+4. `acm-label-spokes` (`adnr.io/role=edge` on each ManagedCluster)
+5. Hub `helm-install` (`deploymentMode=hub-spoke`, `edgeRbac.enabled=false`)
+6. `acm-distribute-kafka-certs` (`kafka-client-certs` in `dark-noc-edge` on each spoke)
+7. ACM placement / namespace policy (`apply-placement.sh` substitutes `NAMESPACE` / `EDGE_NAMESPACE`)
+8. `argocd-apply` + `argocd-wait-spokes` (edge chart Synced/Healthy)
 
 ### Verify spokes and GitOps
 
@@ -275,6 +279,8 @@ Pass criteria:
 
 ## Scenario C: Teardown
 
+Use the **same** `CLUSTER_COUNT` (and preferably the same `NAMESPACE` / `EDGE_NAMESPACE`) you used for deploy. A bare `make acm-teardown` defaults to `CLUSTER_COUNT=1` and will refuse to proceed if hub-spoke resources are still present.
+
 ```bash
 CLUSTER_COUNT=2 make acm-teardown
 ```
@@ -292,6 +298,7 @@ Notes:
 - When `CLUSTER_CREATE=false`, ManagedClusters themselves are **not** deleted. Only ADNR resources on them are torn down.
 - When `CLUSTER_CREATE=true`, teardown also targets Hive ClusterDeployments for the rendered spokes.
 - Single-cluster teardown skips ACM/ArgoCD steps and uninstalls the hub chart only.
+- If you accidentally run teardown with `CLUSTER_COUNT=1` after a hub-spoke deploy, the script fails with a clear error instead of orphaning ArgoCD/ACM objects.
 
 Confirm:
 
@@ -353,10 +360,19 @@ make acm-distribute-kafka-certs CLUSTER_COUNT=2
 Use `site=edge-01`. `edge-site-01` is the ManagedCluster name only.
 
 **MCP cannot talk to a spoke**  
-Check `noc-openshift-kubeconfig-edge-site-NN` secrets in `hub` and that the multi-cluster creds job succeeded after hub install.
+Check `noc-openshift-kubeconfig-edge-site-NN` secrets in `hub` and that the multi-cluster creds job succeeded after hub install. The install smoke check uses the Job ServiceAccount; runtime calls use the `mcp-noc-openshift` ServiceAccount with the same ManagedCluster get/list ClusterRole. After first lab install, confirm from the MCP pod (or with its token) that `oc get ns` via the spoke kubeconfig succeeds.
+
+**Cluster-proxy TLS skip**  
+Per-spoke proxy kubeconfigs default to `insecure-skip-tls-verify: true` (`multiClusterCreds.insecureSkipTlsVerify`). That is a lab convenience. For non-lab hubs, set it to `false` and pin the cluster-proxy CA.
+
+**Kafka cert ManifestWork**  
+`acm-distribute-kafka-certs` can embed client cert material in a hub `ManifestWork` so ACM delivers the secret to spokes. Treat hub RBAC on `manifestworks` as carefully as Secrets; prefer etcd encryption at rest in shared labs.
 
 **`ENABLE_MULTICLUSTER=true` errors at helm-install**  
 That path needs `CLUSTER_PROXY_URL` and `RHACM_HUB_TOKEN`. It is unrelated to fixing missing spokes. Leave it `false` unless you are wiring real AAP through the ACM proxy.
+
+**Hub helm --wait / LlamaStack Pending**  
+The chart lowers LlamaStack CPU/memory requests so ACM hub workers can schedule during `helm --wait`. Raise `llama-stack.resources` if you have spare capacity. `ranAnomalyDetector` defaults off until its image is published for your `VERSION`; enable with `ENABLE_RAN_ANOMALY=true`.
 
 ## Offline checks (no live ACM)
 

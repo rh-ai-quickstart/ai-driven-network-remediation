@@ -90,6 +90,7 @@ def test_argocd_apply_dry_run_renders_appproject_and_appset():
     assert "siteId: edge-01" in out
     assert "kafka.apps.hub.example.com" in out
     assert "ADNR_KAFKA_EXTERNAL_HOST" not in out
+    assert "__KAFKA_EXTERNAL_HOST__" not in out
     assert "OK: argocd-apply dry-run" in out
 
 
@@ -106,3 +107,34 @@ def test_prereq_check_skips_single_cluster():
     out = result.stdout + result.stderr
     assert result.returncode == 0, out
     assert "SKIP:" in out or "single-cluster" in out.lower()
+
+
+def test_apply_placement_dry_run_substitutes_namespace_and_hub():
+    _render_spokes(2)
+    result = _run_script(
+        "apply-placement.sh",
+        "--dry-run",
+        cluster_count=2,
+        NAMESPACE="adnr-hub",
+        EDGE_NAMESPACE="edge-workloads",
+        ACM_HUB_CLUSTER="my-hub",
+        ARGOCD_NAMESPACE="openshift-gitops",
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "namespace: adnr-hub" in out
+    assert "name: edge-workloads" in out
+    assert "cluster: my-hub" in out
+    assert "argoNamespace: openshift-gitops" in out
+    assert "__NAMESPACE__" not in out
+    assert "__EDGE_NAMESPACE__" not in out
+    assert "__ACM_HUB_CLUSTER__" not in out
+    assert "OK: apply-placement dry-run" in out
+
+
+def test_apply_placement_skips_single_cluster():
+    result = _run_script("apply-placement.sh", "--dry-run", cluster_count=1)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "SKIP:" in out
+    assert "single-cluster" in out

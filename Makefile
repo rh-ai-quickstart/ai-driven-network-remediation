@@ -363,17 +363,28 @@ acm-distribute-kafka-certs: validate-topology
 
 .PHONY: acm-apply-placement
 acm-apply-placement: validate-topology
-	@# Apply Placement + GitOpsCluster + Policy only (never the Hive ClusterDeployment template).
-	oc apply -f cross-cluster/acm/placement.yaml
-	@# ExclusiveClusterSetLabel membership (ACM 2.17+); role labels alone are not enough.
+	@# Placement first (ManagedClusterSet), then labels, then GitOpsCluster + Policy.
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	NAMESPACE='$(NAMESPACE)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	ACM_HUB_CLUSTER='$(ACM_HUB_CLUSTER)' \
+	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	bash scripts/acm/apply-placement.sh --step=placement $(ACM_APPLY_ARGS)
 	$(MAKE) acm-label-spokes
-	oc apply -f cross-cluster/acm/gitopscluster.yaml
-	oc apply -f cross-cluster/acm/namespace-policy.yaml
+	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	NAMESPACE='$(NAMESPACE)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	ACM_HUB_CLUSTER='$(ACM_HUB_CLUSTER)' \
+	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	bash scripts/acm/apply-placement.sh --step=remaining $(ACM_APPLY_ARGS)
 
 # ArgoCD edge fan-out (CLUSTER_COUNT>=2). Dry-run: ARGOCD_APPLY_ARGS=--dry-run
 KAFKA_EXTERNAL_HOST ?=
 ARGOCD_NAMESPACE    ?=
 ARGOCD_APPLY_ARGS   ?=
+ACM_APPLY_ARGS      ?=
 ACM_CREATE_ARGS     ?=
 ACM_DISTRIBUTE_ARGS ?=
 ACM_TEARDOWN_ARGS   ?=
@@ -440,19 +451,17 @@ endif
 
 .PHONY: acm-teardown
 acm-teardown: validate-topology
-ifeq ($(CLUSTER_COUNT),1)
-	@echo "=== acm-teardown: single-cluster ==="
-else
-	@echo "=== acm-teardown: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
+	@# Always invoke the script: it refuses CLUSTER_COUNT=1 when hub-spoke leftovers exist.
+	@echo "=== acm-teardown (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
 	CLUSTER_COUNT=$(CLUSTER_COUNT) \
 	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
 	SPOKES_GENERATED=$(SPOKES_GENERATED) \
 	NAMESPACE='$(NAMESPACE)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	RELEASE='$(RELEASE)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/acm-teardown.sh $(ACM_TEARDOWN_ARGS)
-endif
 # --dry-run must skip helm-uninstall; otherwise ACM dry-run still wipes the hub chart.
 ifneq ($(filter --dry-run,$(ACM_TEARDOWN_ARGS)),)
 	@echo "SKIP: helm-uninstall (ACM_TEARDOWN_ARGS includes --dry-run)"

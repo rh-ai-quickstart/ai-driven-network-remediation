@@ -46,18 +46,24 @@ def build_spokes(
     ]
 
 
-def render_mcp_openshift_volumes(spokes: list[dict[str, str]], *, prefix: str) -> list[str]:
+def render_mcp_openshift_volumes(
+    spokes: list[dict[str, str]],
+    *,
+    prefix: str,
+    service_account_name: str = "mcp-noc-openshift",
+) -> list[str]:
     """Helm values overlay: mount per-spoke kubeconfig secrets for mcp-noc-openshift.
 
     Arrays replace (not merge) in Helm, so hub-spoke drops the single-cluster
     noc-openshift-edge-kubeconfig mount and mounts one secret per spoke instead.
     serviceAccountName must match multiClusterCreds.serviceAccountName (tokenFile auth).
     """
+    sa = _require_safe_scalar("MCP_OPENSHIFT_SA", service_account_name)
     lines = [
         "mcp-servers:",
         "  mcp-servers:",
         "    noc-openshift:",
-        "      serviceAccountName: mcp-noc-openshift",
+        f"      serviceAccountName: {sa}",
         "      env:",
         '        DEPLOYMENT_MODE: "hub-spoke"',
         '        KUBECONFIG_DIR: "/kubeconfigs"',
@@ -83,6 +89,7 @@ def render_values_yaml(
     *,
     prefix: str = "edge-site",
     namespace: str = "dark-noc-edge",
+    mcp_service_account: str = "mcp-noc-openshift",
 ) -> str:
     # Hand-built YAML (stdlib only). Values are validated as safe scalars above.
     mode = deployment_mode_for(cluster_count)
@@ -105,6 +112,15 @@ def render_values_yaml(
             lines.append(f"      siteId: {spoke['siteId']}")
             lines.append(f"      namespace: {spoke['namespace']}")
         lines.append("")
-        lines.extend(render_mcp_openshift_volumes(spokes, prefix=prefix))
+        lines.append("multiClusterCreds:")
+        lines.append(f"  serviceAccountName: {mcp_service_account}")
+        lines.append("")
+        lines.extend(
+            render_mcp_openshift_volumes(
+                spokes,
+                prefix=prefix,
+                service_account_name=mcp_service_account,
+            )
+        )
     lines.append("")
     return "\n".join(lines)

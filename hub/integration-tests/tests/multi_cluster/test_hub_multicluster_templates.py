@@ -88,6 +88,21 @@ def test_hub_spoke_renders_multi_cluster_creds_job():
     assert "noc-openshift-kubeconfig-edge-site-01" in rendered
     assert "noc-openshift-kubeconfig-edge-site-02" in rendered
     assert "managedclusters" in rendered
+    assert "insecure-skip-tls-verify:" in rendered
+    assert "edge-site-01-admin-kubeconfig" in rendered
+    assert "edge-site-02-admin-kubeconfig" in rendered
+    assert "resourceNames:" in rendered
+    # Name-scoped Hive secret gets only (no unrestricted secrets list rule).
+    secrets_blocks = [
+        block
+        for block in rendered.split("- apiGroups:")
+        if 'resources: ["secrets"]' in block or "resources: [\"secrets\"]" in block
+    ]
+    assert secrets_blocks, "expected secrets RBAC rules in rendered manifests"
+    for block in secrets_blocks:
+        if "resourceNames:" in block:
+            assert 'verbs: ["get"]' in block or "verbs: [\"get\"]" in block
+            assert 'verbs: ["get", "list"]' not in block
     # Hub-spoke must not emit the same-cluster edge RBAC hook.
     assert "templates/edge-rbac-job.yaml" not in rendered
     assert "templates/edge-rbac-sa.yaml" not in rendered

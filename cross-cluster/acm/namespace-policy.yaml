@@ -1,11 +1,13 @@
-# Enforce dark-noc-edge Namespace on every spoke selected by Placement
+# Enforce EDGE_NAMESPACE on every spoke selected by Placement
 # adnr-edge-spokes. Complements the edge Helm chart Namespace template.
+# Apply via scripts/acm/apply-placement.sh (substitutes __NAMESPACE__ /
+# __EDGE_NAMESPACE__).
 ---
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
 metadata:
   name: adnr-edge-namespace
-  namespace: hub
+  namespace: __NAMESPACE__
   labels:
     app.kubernetes.io/part-of: adnr
     adnr.io/component: acm-placement
@@ -21,7 +23,7 @@ spec:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
         metadata:
-          name: adnr-edge-namespace-dark-noc-edge
+          name: adnr-edge-namespace-__EDGE_NAMESPACE__
         spec:
           remediationAction: enforce
           severity: low
@@ -31,7 +33,7 @@ spec:
                 apiVersion: v1
                 kind: Namespace
                 metadata:
-                  name: dark-noc-edge
+                  name: __EDGE_NAMESPACE__
                   labels:
                     adnr.io/role: edge
 ---
@@ -39,7 +41,7 @@ apiVersion: policy.open-cluster-management.io/v1
 kind: PlacementBinding
 metadata:
   name: adnr-edge-namespace
-  namespace: hub
+  namespace: __NAMESPACE__
   labels:
     app.kubernetes.io/part-of: adnr
     adnr.io/component: acm-placement

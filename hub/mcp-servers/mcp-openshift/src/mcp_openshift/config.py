@@ -22,7 +22,8 @@ DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "single-cluster")
 DEFAULT_NAMESPACE = os.getenv("DEFAULT_NAMESPACE", "dark-noc-edge")
 
 _EDGE_SITE_LABEL = re.compile(r"^edge-(\d+)$")
-_SPOKE_NAME = re.compile(r"^(.+)-(\d+)$")
+# Spoke directory names must be path-safe (no / or ..); matches topology scalars.
+_SAFE_SPOKE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def site_id_to_spoke_name(
@@ -35,20 +36,27 @@ def site_id_to_spoke_name(
     edge-01 → edge-site-01 (default prefix; zero-padded)
     edge-1 → edge-site-01 (normalized)
     edge-site-01 → edge-site-01 (already a spoke name)
+
+    Unknown or unsafe values return "" (never echo caller input into paths).
     """
     use_prefix = SPOKE_NAME_PREFIX if prefix is None else prefix
+    if not _SAFE_SPOKE_NAME.fullmatch(use_prefix):
+        return ""
     sid = (site_id or "").strip()
     if not sid or sid == "unknown":
         return ""
+    spoke = ""
     if sid.startswith(f"{use_prefix}-"):
-        match = _SPOKE_NAME.fullmatch(sid)
-        if match and match.group(1) == use_prefix:
-            return f"{use_prefix}-{int(match.group(2)):02d}"
-        return sid
-    match = _EDGE_SITE_LABEL.fullmatch(sid)
-    if match:
-        return f"{use_prefix}-{int(match.group(1)):02d}"
-    return sid
+        suffix = sid[len(use_prefix) + 1 :]
+        if suffix.isdigit():
+            spoke = f"{use_prefix}-{int(suffix):02d}"
+    else:
+        match = _EDGE_SITE_LABEL.fullmatch(sid)
+        if match:
+            spoke = f"{use_prefix}-{int(match.group(1)):02d}"
+    if spoke and _SAFE_SPOKE_NAME.fullmatch(spoke):
+        return spoke
+    return ""
 
 
 def resolve_kubeconfig(edge_site_id: str | None = None) -> str:
@@ -58,6 +66,8 @@ def resolve_kubeconfig(edge_site_id: str | None = None) -> str:
     Single-cluster: per-spoke mount when present, else EDGE_KUBECONFIG.
     """
     spoke = site_id_to_spoke_name(edge_site_id or "")
+    # Basename only: never allow path separators from a buggy mapper.
+    spoke = os.path.basename(spoke) if spoke else ""
     if DEPLOYMENT_MODE == "hub-spoke":
         if not spoke:
             return os.path.join(KUBECONFIG_DIR, "unspecified-edge-site", "kubeconfig")

@@ -105,9 +105,15 @@ rules:
   - apiGroups: [""]
     resources: ["services", "namespaces"]
     verbs: ["get", "list"]
+  # Hive/import kubeconfigs live in spoke namespaces; name-scope get only (no cluster-wide list).
   - apiGroups: [""]
     resources: ["secrets"]
-    verbs: ["get", "list"]
+    resourceNames:
+    {{- range .Values.topology.spokes }}
+      - {{ printf "%s-admin-kubeconfig" .name | quote }}
+      - {{ printf "%s-kubeconfig" .name | quote }}
+    {{- end }}
+    verbs: ["get"]
   - apiGroups: ["cluster.open-cluster-management.io"]
     resources: ["managedclusters"]
     verbs: ["get", "list"]
@@ -162,6 +168,7 @@ spec:
               HUB_NAMESPACE="{{ .Release.Namespace }}"
               EDGE_NAMESPACE="{{ .Values.topology.edgeNamespace | default "dark-noc-edge" }}"
               TOKEN_FILE="/var/run/secrets/kubernetes.io/serviceaccount/token"
+              INSECURE_SKIP_TLS="{{ if hasKey .Values.multiClusterCreds "insecureSkipTlsVerify" }}{{ .Values.multiClusterCreds.insecureSkipTlsVerify }}{{ else }}true{{ end }}"
               SPOKES=(
               {{- range .Values.topology.spokes }}
                 {{ .name | quote }}
@@ -182,16 +189,20 @@ spec:
               }
 
               # Durable auth: tokenFile is re-read by clients; MCP pod SA token rotates.
-              # insecure-skip-tls-verify is lab-only (document CA pinning in C9).
+              # insecure-skip-tls-verify defaults on for lab; set multiClusterCreds.insecureSkipTlsVerify=false to pin CA.
               build_proxy_kubeconfig() {
                 local spoke="$1" out="$2" proxy_base="$3"
+                local skip_tls="true"
+                case "$(printf '%s' "${INSECURE_SKIP_TLS}" | tr '[:upper:]' '[:lower:]')" in
+                  0|false|no) skip_tls="false" ;;
+                esac
                 cat > "$out" <<EOF
               apiVersion: v1
               kind: Config
               clusters:
               - cluster:
                   server: ${proxy_base}/${spoke}
-                  insecure-skip-tls-verify: true
+                  insecure-skip-tls-verify: ${skip_tls}
                 name: ${spoke}
               contexts:
               - context:
@@ -244,7 +255,9 @@ spec:
                 if [ -n "$PROXY_BASE" ]; then
                   build_proxy_kubeconfig "$spoke" "$KC" "$PROXY_BASE"
                   # Smoke-check uses this Job's projected SA token via tokenFile.
-                  if KUBECONFIG="$KC" oc get ns >/dev/null 2>&1; then
+                  # Runtime callers use the mcp-noc-openshift SA (same ClusterRole on managedclusters).
+                  # Confirm MCP reachability after install: oc exec into mcp-noc-openshift with the secret.
+                  if KUBECONFIG="$KC" oc --request-timeout=15s get ns >/dev/null 2>&1; then
                     echo "Cluster-proxy kubeconfig verified for ${spoke}"
                     built=1
                   else

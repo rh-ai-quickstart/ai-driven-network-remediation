@@ -113,11 +113,11 @@ detect_argocd_namespace() {
     printf '%s' "${ARGOCD_NAMESPACE}"
     return 0
   fi
-  if "${oc_bin}" get namespace openshift-gitops >/dev/null 2>&1; then
+  if [[ -n "${oc_bin}" ]] && "${oc_bin}" get namespace openshift-gitops >/dev/null 2>&1; then
     printf '%s' "openshift-gitops"
     return 0
   fi
-  if "${oc_bin}" get namespace argocd >/dev/null 2>&1; then
+  if [[ -n "${oc_bin}" ]] && "${oc_bin}" get namespace argocd >/dev/null 2>&1; then
     printf '%s' "argocd"
     return 0
   fi
@@ -132,14 +132,14 @@ elif command -v kubectl >/dev/null 2>&1; then
   oc_bin=kubectl
 fi
 
-argocd_ns="$(detect_argocd_namespace "${oc_bin:-true}")"
+argocd_ns="$(detect_argocd_namespace "${oc_bin:-}")"
 
 # Sample tokens baked into committed manifests (valid for client dry-run).
 SAMPLE_ARGOCD_NS="openshift-gitops"
 SAMPLE_EDGE_NS="dark-noc-edge"
 SAMPLE_REPO_URL="https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git"
 SAMPLE_REVISION="main"
-SAMPLE_KAFKA_HOST="ADNR_KAFKA_EXTERNAL_HOST"
+SAMPLE_KAFKA_HOST="__KAFKA_EXTERNAL_HOST__"
 
 repo_esc="$(sed_escape "${GITOPS_REPO_URL}")"
 rev_esc="$(sed_escape "${GITOPS_REVISION}")"

@@ -27,13 +27,15 @@ def test_placement_selects_edge_role_label():
     assert "Placement" in kinds
     assert "name: adnr-edge" in text
     assert "name: adnr-edge-spokes" in text
-    assert "namespace: hub" in text
+    assert "namespace: __NAMESPACE__" in text
     assert "adnr.io/role: edge" in text
     assert "clusterSets:" in text
     assert "- adnr-edge" in text
     # ACM 2.17 rejects LabelSelector ManagedClusterSets; exclusive label membership.
     assert "selectorType: ExclusiveClusterSetLabel" in text
     assert "selectorType: LabelSelector" not in text
+    # Must be substituted by apply-placement.sh (never bake hub).
+    assert "namespace: hub" not in text
 
 
 def test_gitopscluster_registers_placement_spokes():
@@ -41,23 +43,29 @@ def test_gitopscluster_registers_placement_spokes():
     kinds = _kinds(text)
     assert "GitOpsCluster" in kinds
     assert "name: adnr-edge" in text
-    assert "namespace: hub" in text
-    assert "argoNamespace: openshift-gitops" in text
+    assert "namespace: __NAMESPACE__" in text
+    assert "argoNamespace: __ARGOCD_NAMESPACE__" in text
+    assert "cluster: __ACM_HUB_CLUSTER__" in text
     assert "name: adnr-edge-spokes" in text
     assert "kind: Placement" in text
+    assert "local-cluster" not in text
+    assert "openshift-gitops" not in text
 
 
-def test_namespace_policy_enforces_dark_noc_edge():
+def test_namespace_policy_enforces_edge_namespace_placeholder():
     text = _read("namespace-policy.yaml")
     kinds = _kinds(text)
     assert "Policy" in kinds
     assert "PlacementBinding" in kinds
     assert "name: adnr-edge-namespace" in text
-    assert "name: dark-noc-edge" in text
+    assert "name: __EDGE_NAMESPACE__" in text
+    assert "namespace: __NAMESPACE__" in text
     assert "adnr.io/role: edge" in text
     assert "kind: Placement" in text
     assert "name: adnr-edge-spokes" in text
     assert "remediationAction: enforce" in text
+    assert "name: dark-noc-edge" not in text
+    assert "namespace: hub" not in text
 
 
 def test_clusterdeployment_template_placeholders():
