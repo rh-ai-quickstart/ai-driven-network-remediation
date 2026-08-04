@@ -55,35 +55,14 @@ def _auto_ingest() -> None:
         return
 
     if settings.vector_store_name:
-        sync_result = service.sync()
-        logger.info(
-            "Runbook sync complete: uploaded=%d skipped=%d",
-            sync_result["uploaded_count"],
-            sync_result["skipped_count"],
-        )
-
-        ingest_result = service.ingest()
-        logger.info(
-            "Auto-ingest complete: %d runbooks ingested into '%s'",
-            ingest_result["ingested_count"],
-            settings.vector_store_name,
-        )
+        service.sync()
+        service.ingest()
     else:
         logger.warning("VECTOR_STORE_NAME not set — skipping runbook auto-ingest")
 
     if settings.telco_vector_store_name:
-        sync_result = service.sync_telco_docs()
-        logger.info(
-            "Telco vendor doc conversion complete: %d document(s) converted to markdown",
-            sync_result["converted_count"],
-        )
-
-        ingest_result = service.ingest_telco_docs()
-        logger.info(
-            "Telco vendor doc auto-ingest complete: %d units ingested into '%s'",
-            ingest_result["ingested_count"],
-            settings.telco_vector_store_name,
-        )
+        service.sync_telco_docs()
+        service.ingest_telco_docs()
     else:
         logger.warning("TELCO_VECTOR_STORE_NAME not set — skipping telco doc auto-ingest")
 

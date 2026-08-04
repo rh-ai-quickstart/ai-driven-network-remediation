@@ -72,6 +72,13 @@ class LlamaStackVectorStoreClient:
             file_counts=vector_store.file_counts.model_dump(),
         )
 
+    def delete_vector_store(self) -> bool:
+        existing = self._find_vector_store_by_name(self._vector_store_name)
+        if existing is None:
+            return False
+        self._client.vector_stores.delete(existing.id)
+        return True
+
     def ensure_vector_store(self) -> VectorStoreSummary:
         existing = self.get_vector_store()
         if existing is not None:
