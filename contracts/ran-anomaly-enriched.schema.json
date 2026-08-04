@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ran-anomaly-enriched.schema.json",
+  "title": "Enriched RAN Anomaly (ran-anomalies-enriched topic)",
+  "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis.",
+  "type": "object",
+  "required": ["cell_id", "band", "anomaly_type", "anomaly", "root_cause", "recommended_fix"],
+  "properties": {
+    "cell_id": {
+      "type": "integer",
+      "description": "Numeric identifier of the RAN cell that produced the anomaly"
+    },
+    "band": {
+      "type": "string",
+      "description": "Frequency band of the cell (e.g. Band 29)"
+    },
+    "anomaly_type": {
+      "type": "string",
+      "description": "Classification of the anomaly (e.g. LowRsrp, SinrDegradation)"
+    },
+    "anomaly": {
+      "type": "string",
+      "description": "Human-readable description of the detected anomaly"
+    },
+    "root_cause": {
+      "type": "string",
+      "description": "LLM-determined root cause of the anomaly"
+    },
+    "recommended_fix": {
+      "type": "string",
+      "description": "LLM-recommended remediation action"
+    }
+  }
+}
