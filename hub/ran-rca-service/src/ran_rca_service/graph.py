@@ -5,14 +5,8 @@ from __future__ import annotations
 from langgraph.graph import END, START, StateGraph
 
 from ran_rca_service.models import RCAState
+from ran_rca_service.nodes.analyze import analyze_node
 from ran_rca_service.nodes.rag_retrieval import rag_retrieval_node
-
-
-def analyze_node(state: RCAState) -> dict:
-    return {
-        "root_cause": "Stub root cause — LLM analysis not yet implemented.",
-        "recommended_fix": "Stub fix — LLM analysis not yet implemented.",
-    }
 
 
 def build_graph():

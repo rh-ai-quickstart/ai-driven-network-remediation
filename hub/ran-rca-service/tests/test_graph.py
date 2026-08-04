@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jsonschema
 import pytest
 
-from helpers import SAMPLE_ANOMALY, make_anomaly, make_state
-from ran_rca_service.graph import analyze_node, build_graph
+from helpers import CONTRACTS_DIR, SAMPLE_ANOMALY, make_anomaly, make_llm_response
 
-CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
+from ran_rca_service.graph import build_graph
 
 
 def _mock_rag_client():
@@ -23,21 +21,17 @@ def _mock_rag_client():
     return patch_client, patch_store_id
 
 
-class TestAnalyzeNode:
-    def test_sets_stub_root_cause(self):
-        result = analyze_node(make_state())
-        assert "Stub" in result["root_cause"]
-
-    def test_sets_stub_recommended_fix(self):
-        result = analyze_node(make_state())
-        assert "Stub" in result["recommended_fix"]
+def _mock_llm():
+    mock = AsyncMock()
+    mock.ainvoke = AsyncMock(return_value=make_llm_response())
+    return patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock)
 
 
 class TestFullGraph:
     @pytest.mark.asyncio
     async def test_invoke_returns_enriched_state(self):
         patch_client, patch_store_id = _mock_rag_client()
-        with patch_client, patch_store_id:
+        with patch_client, patch_store_id, _mock_llm():
             graph = build_graph()
             result = await graph.ainvoke(SAMPLE_ANOMALY)
 
@@ -52,12 +46,11 @@ class TestFullGraph:
 
     @pytest.mark.asyncio
     async def test_output_matches_enriched_schema(self):
-        schema_path = CONTRACTS_DIR / "ran-anomaly-enriched.schema.json"
-        schema = json.loads(schema_path.read_text())
+        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
         validator = jsonschema.Draft202012Validator(schema)
 
         patch_client, patch_store_id = _mock_rag_client()
-        with patch_client, patch_store_id:
+        with patch_client, patch_store_id, _mock_llm():
             graph = build_graph()
             result = await graph.ainvoke(SAMPLE_ANOMALY)
 
@@ -74,10 +67,50 @@ class TestFullGraph:
     @pytest.mark.asyncio
     async def test_different_anomaly_types_all_enrich(self):
         patch_client, patch_store_id = _mock_rag_client()
-        with patch_client, patch_store_id:
+        with patch_client, patch_store_id, _mock_llm():
             graph = build_graph()
             for anomaly_type in ["SinrDegradation", "ThroughputDrop", "CellOutage"]:
                 anomaly = make_anomaly(anomaly_type=anomaly_type, anomaly=f"{anomaly_type} detected")
                 result = await graph.ainvoke(anomaly)
                 assert result["anomaly_type"] == anomaly_type
                 assert result["root_cause"] != ""
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_anomaly_flows_through(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM down"))
+
+        patch_client, patch_store_id = _mock_rag_client()
+        with (
+            patch_client,
+            patch_store_id,
+            patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke(SAMPLE_ANOMALY)
+
+        assert result["cell_id"] == 42
+        assert result["anomaly"] == SAMPLE_ANOMALY["anomaly"]
+        assert result["root_cause"] == ""
+        assert result["recommended_fix"] == ""
+
+    @pytest.mark.asyncio
+    async def test_both_rag_and_llm_unavailable(self):
+        mock_rag_client = MagicMock()
+        mock_rag_client.vector_stores.list = AsyncMock(side_effect=ConnectionError("vector store down"))
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM down"))
+
+        with (
+            patch("ran_rca_service.nodes.rag_retrieval._client", mock_rag_client),
+            patch("ran_rca_service.nodes.rag_retrieval._vector_store_id", None),
+            patch("ran_rca_service.nodes.rag_retrieval._negative_cache_until", 0.0),
+            patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke(SAMPLE_ANOMALY)
+
+        assert result["cell_id"] == 42
+        assert result["anomaly"] == SAMPLE_ANOMALY["anomaly"]
+        assert result["root_cause"] == ""
+        assert result["recommended_fix"] == ""

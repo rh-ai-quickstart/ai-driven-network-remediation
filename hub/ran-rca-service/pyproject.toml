@@ -10,6 +10,7 @@ dependencies = [
     "click>=8.1.0",
     "fastapi>=0.115",
     "kafka-python-ng>=2.2",
+    "langchain-openai>=0.3",
     "langgraph>=0.2",
     "llama-stack-client>=0.2",
     "loguru>=0.7.0",
