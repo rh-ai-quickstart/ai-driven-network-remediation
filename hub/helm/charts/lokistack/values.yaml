@@ -6,24 +6,18 @@
 #
 # Usage: helm install lokistack ./chart -n <namespace>
 #
-# By default, LokiStack reuses the hub MinIO instance (deployed by the main hub chart).
-# Override minio.endpoint and minio.credentials for external S3.
+# LokiStack uses the shared minio secret (created by the minio subchart) for S3 credentials.
 #
 # Environment overrides (use --set):
-#   External S3: --set minio.endpoint=https://s3.us-east-1.amazonaws.com
-#                --set minio.bucketName=production-loki-logs
-#                --set lokistack.size=1x.medium
-#                --set grafana.replicas=2
+#   --set lokistack.size=1x.medium
+#   --set grafana.replicas=2
 
 # Cluster apps domain (auto-discovered on OpenShift, set manually for helm template or non-OpenShift)
 clusterDomain: ""
 
-# MinIO / S3 storage configuration
-# Default: reuse the hub MinIO deployed by the main chart
 minio:
   endpoint: "http://minio:9000"
   bucketName: loki
-  region: us-east-1
   existingSecret:
     name: minio
     userKey: user
@@ -64,7 +58,7 @@ lokistack:
 
   storage:
     secret:
-      name: logging-loki-s3
+      name: minio
       type: s3
 
     schemas:

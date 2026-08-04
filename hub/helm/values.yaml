@@ -100,7 +100,6 @@ lokistack:
   minio:
     endpoint: "http://minio:9000"
     bucketName: loki
-    region: us-east-1
     existingSecret:
       name: minio
       userKey: user
@@ -129,7 +128,7 @@ lokistack:
         replicas: 1
     storage:
       secret:
-        name: logging-loki-s3
+        name: minio
         type: s3
       schemas:
         - version: v13

@@ -73,6 +73,8 @@ secret:
   password: minio_password
   host: minio
   port: "9000"
+  lokistackBucket: loki
+  lokistackRegion: us-east-1
 
 route:
   enabled: true
