@@ -168,8 +168,9 @@ def make_investigate_node(config: GraphConfig):
 
         try:
             async with asyncio.timeout(config.investigate_timeout):
-                for _ in range(config.investigate_max_iterations):
-                    response = await get_llm().ainvoke(messages, tools=_TOOLS)
+                for iteration in range(config.investigate_max_iterations):
+                    tool_choice = "required" if iteration == 0 else "auto"
+                    response = await get_llm().ainvoke(messages, tools=_TOOLS, tool_choice=tool_choice)
                     if not response.tool_calls:
                         break
 
