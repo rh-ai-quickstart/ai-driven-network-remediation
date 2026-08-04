@@ -1,17 +1,11 @@
-"""LangGraph RCA pipeline: START -> rag_retrieval -> analyze -> END (stub nodes)."""
+"""LangGraph RCA pipeline: START -> rag_retrieval -> analyze -> END."""
 
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
 
 from ran_rca_service.models import RCAState
-
-
-def rag_retrieval_node(state: RCAState) -> dict:
-    return {
-        "context_snippets": [],
-        "rag_query_used": state.anomaly,
-    }
+from ran_rca_service.nodes.rag_retrieval import rag_retrieval_node
 
 
 def analyze_node(state: RCAState) -> dict:

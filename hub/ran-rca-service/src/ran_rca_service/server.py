@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from collections import deque
@@ -40,7 +41,7 @@ def _handle_anomaly_message(
         logger.warning("Skipping malformed RAN anomaly message")
         return
 
-    result = graph.invoke(anomaly)
+    result = asyncio.run(graph.ainvoke(anomaly))
 
     enriched = {
         "cell_id": result["cell_id"],

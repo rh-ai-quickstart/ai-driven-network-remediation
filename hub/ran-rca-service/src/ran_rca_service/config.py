@@ -14,7 +14,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 # LlamaStack
 LLAMASTACK_URL = os.getenv("LLAMASTACK_URL", "http://llamastack:8321")
-VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "ran-docs")
+VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "telco_oran_docs")
 
 # Kafka
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -83,20 +83,20 @@ class TestHandleAnomalyMessage:
         from collections import deque
 
         graph = MagicMock()
-        graph.invoke.return_value = {
+        graph.ainvoke = AsyncMock(return_value={
             **SAMPLE_ANOMALY,
             "context_snippets": [],
             "rag_query_used": SAMPLE_ANOMALY["anomaly"],
             "root_cause": "stub root cause",
             "recommended_fix": "stub fix",
-        }
+        })
         producer = MagicMock()
         buffer: deque = deque(maxlen=100)
 
         raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")
         _handle_anomaly_message(raw, graph, producer, "ran-anomalies-enriched", buffer)
 
-        graph.invoke.assert_called_once_with(SAMPLE_ANOMALY)
+        graph.ainvoke.assert_awaited_once_with(SAMPLE_ANOMALY)
         assert len(buffer) == 1
         assert buffer[0]["root_cause"] == "stub root cause"
 
@@ -104,13 +104,13 @@ class TestHandleAnomalyMessage:
         from collections import deque
 
         graph = MagicMock()
-        graph.invoke.return_value = {
+        graph.ainvoke = AsyncMock(return_value={
             **SAMPLE_ANOMALY,
             "context_snippets": [],
             "rag_query_used": "",
             "root_cause": "cause",
             "recommended_fix": "fix",
-        }
+        })
         producer = MagicMock()
         buffer: deque = deque(maxlen=100)
 
@@ -133,7 +133,7 @@ class TestHandleAnomalyMessage:
 
         _handle_anomaly_message(b"not json", graph, producer, "topic", buffer)
 
-        graph.invoke.assert_not_called()
+        graph.ainvoke.assert_not_called()
         producer.send.assert_not_called()
         assert len(buffer) == 0
 
@@ -141,13 +141,13 @@ class TestHandleAnomalyMessage:
         from collections import deque
 
         graph = MagicMock()
-        graph.invoke.return_value = {
+        graph.ainvoke = AsyncMock(return_value={
             **SAMPLE_ANOMALY,
             "context_snippets": [],
             "rag_query_used": "",
             "root_cause": "cause",
             "recommended_fix": "fix",
-        }
+        })
         buffer: deque = deque(maxlen=100)
 
         raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")
@@ -202,7 +202,14 @@ class TestKafkaLifespan:
 
         AnomalyConsumer.side_effect = _capture
 
-        with TestClient(app) as client:
+        mock_client = MagicMock()
+        mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
+
+        with (
+            patch("ran_rca_service.nodes.rag_retrieval._client", mock_client),
+            patch("ran_rca_service.nodes.rag_retrieval._vector_store_id", "vs-test"),
+            TestClient(app) as client,
+        ):
             raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")
             captured_handler["handler"](raw)
 

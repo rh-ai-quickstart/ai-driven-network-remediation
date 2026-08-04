@@ -4,27 +4,23 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jsonschema
+import pytest
 
 from helpers import SAMPLE_ANOMALY, make_anomaly, make_state
-from ran_rca_service.graph import analyze_node, build_graph, rag_retrieval_node
+from ran_rca_service.graph import analyze_node, build_graph
 
 CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
 
-class TestRagRetrievalNode:
-    def test_sets_empty_context_snippets(self):
-        result = rag_retrieval_node(make_state(anomaly="Low RSRP"))
-        assert result["context_snippets"] == []
-
-    def test_sets_rag_query_to_anomaly_string(self):
-        result = rag_retrieval_node(make_state(anomaly="Low RSRP: -125 dBm"))
-        assert result["rag_query_used"] == "Low RSRP: -125 dBm"
-
-    def test_handles_empty_anomaly(self):
-        result = rag_retrieval_node(make_state(anomaly=""))
-        assert result["rag_query_used"] == ""
+def _mock_rag_client():
+    mock_client = MagicMock()
+    mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
+    patch_client = patch("ran_rca_service.nodes.rag_retrieval._client", mock_client)
+    patch_store_id = patch("ran_rca_service.nodes.rag_retrieval._vector_store_id", "vs-test")
+    return patch_client, patch_store_id
 
 
 class TestAnalyzeNode:
@@ -38,26 +34,32 @@ class TestAnalyzeNode:
 
 
 class TestFullGraph:
-    def test_invoke_returns_enriched_state(self):
-        graph = build_graph()
-        result = graph.invoke(SAMPLE_ANOMALY)
+    @pytest.mark.asyncio
+    async def test_invoke_returns_enriched_state(self):
+        patch_client, patch_store_id = _mock_rag_client()
+        with patch_client, patch_store_id:
+            graph = build_graph()
+            result = await graph.ainvoke(SAMPLE_ANOMALY)
 
         assert result["cell_id"] == 42
         assert result["band"] == "Band 29"
         assert result["anomaly_type"] == "LowRsrp"
         assert result["anomaly"] == SAMPLE_ANOMALY["anomaly"]
         assert result["context_snippets"] == []
-        assert result["rag_query_used"] == SAMPLE_ANOMALY["anomaly"]
+        assert SAMPLE_ANOMALY["anomaly"] in result["rag_query_used"]
         assert result["root_cause"] != ""
         assert result["recommended_fix"] != ""
 
-    def test_output_matches_enriched_schema(self):
+    @pytest.mark.asyncio
+    async def test_output_matches_enriched_schema(self):
         schema_path = CONTRACTS_DIR / "ran-anomaly-enriched.schema.json"
         schema = json.loads(schema_path.read_text())
         validator = jsonschema.Draft202012Validator(schema)
 
-        graph = build_graph()
-        result = graph.invoke(SAMPLE_ANOMALY)
+        patch_client, patch_store_id = _mock_rag_client()
+        with patch_client, patch_store_id:
+            graph = build_graph()
+            result = await graph.ainvoke(SAMPLE_ANOMALY)
 
         enriched = {
             "cell_id": result["cell_id"],
@@ -69,10 +71,13 @@ class TestFullGraph:
         }
         validator.validate(enriched)
 
-    def test_different_anomaly_types_all_enrich(self):
-        graph = build_graph()
-        for anomaly_type in ["SinrDegradation", "ThroughputDrop", "CellOutage"]:
-            anomaly = make_anomaly(anomaly_type=anomaly_type, anomaly=f"{anomaly_type} detected")
-            result = graph.invoke(anomaly)
-            assert result["anomaly_type"] == anomaly_type
-            assert result["root_cause"] != ""
+    @pytest.mark.asyncio
+    async def test_different_anomaly_types_all_enrich(self):
+        patch_client, patch_store_id = _mock_rag_client()
+        with patch_client, patch_store_id:
+            graph = build_graph()
+            for anomaly_type in ["SinrDegradation", "ThroughputDrop", "CellOutage"]:
+                anomaly = make_anomaly(anomaly_type=anomaly_type, anomaly=f"{anomaly_type} detected")
+                result = await graph.ainvoke(anomaly)
+                assert result["anomaly_type"] == anomaly_type
+                assert result["root_cause"] != ""
