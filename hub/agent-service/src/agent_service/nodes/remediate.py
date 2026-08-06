@@ -9,7 +9,8 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.models import GraphConfig, RemediationResult
-from agent_service.utils import build_launch_extra_vars, invoke_tool as _invoke_tool
+from agent_service.utils import build_launch_extra_vars
+from agent_service.utils import invoke_tool as _invoke_tool
 
 # TODO: remove hardcoded templates before release; use Lightspeed flow only.
 # Demo-only: these templates must be pre-created in AAP manually.

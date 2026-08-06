@@ -2,7 +2,6 @@ import threading
 import time
 
 import pytest
-
 import ran_anomaly_detector.kafka.consumer as consumer_module
 from ran_anomaly_detector.kafka.consumer import MetricsConsumer
 

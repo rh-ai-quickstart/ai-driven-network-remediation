@@ -1,10 +1,9 @@
+from datetime import datetime, timezone
+
 import pytest
+from ran_anomaly_detector.metrics_store import MetricsStore
 from telco_oran.domain.cell import Cell
 from telco_oran.domain.ran_kpi_record import RanKpiRecord
-
-from ran_anomaly_detector.metrics_store import MetricsStore
-
-from datetime import datetime, timezone
 
 
 def _cell(cell_id=1, max_capacity=100) -> Cell:

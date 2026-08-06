@@ -1,5 +1,4 @@
 from click.testing import CliRunner
-
 from ran_anomaly_detector import main
 
 

@@ -10,7 +10,6 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
-
 from ran_anomaly_detector.config import (
     HISTORY_WINDOW_SIZE,
     KAFKA_BOOTSTRAP,

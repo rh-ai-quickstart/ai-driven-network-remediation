@@ -2,7 +2,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from ran_anomaly_detector.server import app
 
 
@@ -70,7 +69,9 @@ class TestAnomaliesEndpoint:
 
     def test_anomalies_respects_limit(self, client):
         for i in range(5):
-            client.app.state.recent_anomalies.append({"cell_id": i, "band": "Band 29", "anomaly_type": "X", "anomaly": "x"})
+            client.app.state.recent_anomalies.append(
+                {"cell_id": i, "band": "Band 29", "anomaly_type": "X", "anomaly": "x"}
+            )
 
         response = client.get("/anomalies", params={"limit": 2})
 
