@@ -227,12 +227,11 @@ class TestKafkaLifespan:
 
         TopicConsumer.side_effect = _capture
 
-        mock_client = MagicMock()
-        mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
+        mock_rag = MagicMock()
+        mock_rag.search = AsyncMock(return_value=[])
 
         with (
-            patch("ran_rca_service.nodes.rag_retrieval._client", mock_client),
-            patch("ran_rca_service.nodes.rag_retrieval._vector_store_id", "vs-test"),
+            patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag),
             TestClient(app) as client,
         ):
             raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")

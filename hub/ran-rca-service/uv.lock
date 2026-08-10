@@ -540,7 +540,7 @@ wheels = [
 
 [[package]]
 name = "llama-stack-client"
-version = "0.7.5"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -559,9 +559,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dc/89/141b8b50fc9ec5e99d1cc0fcac096f48f7235d94088694b14298f0b8621f/llama_stack_client-0.7.5.tar.gz", hash = "sha256:80d419bbcb8b1cec2e190536e576576ed2fbbf47882465d72fc6061ef9dcadb2", size = 372960, upload-time = "2026-07-27T14:30:55.176Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/01/47b32f2fb003b7f3fc24a401cd7b091892025f626dd07661647f64e3df68/llama_stack_client-0.6.1.tar.gz", hash = "sha256:13dabd74c29d5159cdcfca5a9e6f99c99f08aa688fa8403d6c5f6042b61519d2", size = 368690, upload-time = "2026-03-30T13:11:39.597Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/e1/01a1887689422da1f4e586c5362d2959317d1faee9cfee6e46d9b9ee772a/llama_stack_client-0.7.5-py3-none-any.whl", hash = "sha256:fd3fefff6c8edf18d3e6e3a951dae350b0f28a2b9ec6c9faa368d03f72a16db4", size = 375337, upload-time = "2026-07-27T14:30:53.62Z" },
+    { url = "https://files.pythonhosted.org/packages/57/bd/da2f43993b9b753f0465548b17efbbee492a6980fdd5e14fadf8566cdb1f/llama_stack_client-0.6.1-py3-none-any.whl", hash = "sha256:47aa4f47b591ffbd35b7be946552c4198006daaf57505898372d7bc7c1df510f", size = 391998, upload-time = "2026-03-30T13:11:38.067Z" },
 ]
 
 [[package]]
@@ -1235,18 +1235,21 @@ version = "0.1.0"
 source = { directory = "../shared" }
 dependencies = [
     { name = "kafka-python-ng" },
+    { name = "llama-stack-client" },
     { name = "loguru" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "kafka-python-ng", specifier = ">=2.2" },
+    { name = "llama-stack-client", specifier = ">=0.6.1,<0.7" },
     { name = "loguru", specifier = ">=0.7.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
     { name = "pytest-cov", specifier = ">=6.0" },
 ]
 

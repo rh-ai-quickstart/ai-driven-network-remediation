@@ -23,8 +23,10 @@ spec:
           image: "{{ .Values.image.registry }}/{{ .Values.image.ranRcaService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: LLAMASTACK_URL
-              value: {{ .Values.ranRcaService.env.llamastackUrl | quote }}
+            - name: LLAMASTACK_HOST
+              value: {{ .Values.ranRcaService.env.llamastackHost | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ .Values.ranRcaService.env.llamastackPort | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ranRcaService.env.vectorStoreName | quote }}
             - name: GRANITE_MODEL_NAME

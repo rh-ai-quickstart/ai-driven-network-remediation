@@ -14,11 +14,9 @@ from ran_rca_service.graph import build_graph
 
 
 def _mock_rag_client():
-    mock_client = MagicMock()
-    mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
-    patch_client = patch("ran_rca_service.nodes.rag_retrieval._client", mock_client)
-    patch_store_id = patch("ran_rca_service.nodes.rag_retrieval._vector_store_id", "vs-test")
-    return patch_client, patch_store_id
+    mock = MagicMock()
+    mock.search = AsyncMock(return_value=[])
+    return patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock)
 
 
 def _mock_llm():
@@ -30,8 +28,7 @@ def _mock_llm():
 class TestFullGraph:
     @pytest.mark.asyncio
     async def test_invoke_returns_enriched_state(self):
-        patch_client, patch_store_id = _mock_rag_client()
-        with patch_client, patch_store_id, _mock_llm():
+        with _mock_rag_client(), _mock_llm():
             graph = build_graph()
             result = await graph.ainvoke(SAMPLE_ANOMALY)
 
@@ -49,8 +46,7 @@ class TestFullGraph:
         schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
         validator = jsonschema.Draft202012Validator(schema)
 
-        patch_client, patch_store_id = _mock_rag_client()
-        with patch_client, patch_store_id, _mock_llm():
+        with _mock_rag_client(), _mock_llm():
             graph = build_graph()
             result = await graph.ainvoke(SAMPLE_ANOMALY)
 
@@ -66,8 +62,7 @@ class TestFullGraph:
 
     @pytest.mark.asyncio
     async def test_different_anomaly_types_all_enrich(self):
-        patch_client, patch_store_id = _mock_rag_client()
-        with patch_client, patch_store_id, _mock_llm():
+        with _mock_rag_client(), _mock_llm():
             graph = build_graph()
             for anomaly_type in ["SinrDegradation", "ThroughputDrop", "CellOutage"]:
                 anomaly = make_anomaly(anomaly_type=anomaly_type, anomaly=f"{anomaly_type} detected")
@@ -80,10 +75,8 @@ class TestFullGraph:
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM down"))
 
-        patch_client, patch_store_id = _mock_rag_client()
         with (
-            patch_client,
-            patch_store_id,
+            _mock_rag_client(),
             patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
         ):
             graph = build_graph()
@@ -96,15 +89,13 @@ class TestFullGraph:
 
     @pytest.mark.asyncio
     async def test_both_rag_and_llm_unavailable(self):
-        mock_rag_client = MagicMock()
-        mock_rag_client.vector_stores.list = AsyncMock(side_effect=ConnectionError("vector store down"))
+        mock_rag = MagicMock()
+        mock_rag.search = AsyncMock(side_effect=ConnectionError("vector store down"))
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM down"))
 
         with (
-            patch("ran_rca_service.nodes.rag_retrieval._client", mock_rag_client),
-            patch("ran_rca_service.nodes.rag_retrieval._vector_store_id", None),
-            patch("ran_rca_service.nodes.rag_retrieval._negative_cache_until", 0.0),
+            patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag),
             patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
         ):
             graph = build_graph()

@@ -452,7 +452,8 @@ ranRcaService:
   enabled: true
   replicaCount: 1
   env:
-    llamastackUrl: "http://llamastack-service:8321"
+    llamastackHost: "llamastack-service"
+    llamastackPort: "8321"
     vectorStoreName: "telco_oran_docs"
     graniteModelName: "ibm-granite/granite-3.3-8b-instruct"
     kafkaBootstrap: "kafka:9092"

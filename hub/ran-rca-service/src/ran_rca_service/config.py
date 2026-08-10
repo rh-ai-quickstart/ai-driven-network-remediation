@@ -15,7 +15,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # LlamaStack
-LLAMASTACK_URL = os.getenv("LLAMASTACK_URL", "http://llamastack:8321")
+LLAMASTACK_HOST = os.getenv("LLAMASTACK_HOST", "llamastack-service")
+LLAMASTACK_PORT = int(os.getenv("LLAMASTACK_PORT", "8321"))
 VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "telco_oran_docs")
 GRANITE_MODEL = os.getenv("GRANITE_MODEL_NAME", "ibm-granite/granite-3.3-8b-instruct")
 
@@ -26,7 +27,7 @@ def get_llm() -> ChatOpenAI:
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(
-            base_url=f"{LLAMASTACK_URL}/v1",
+            base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}/v1",
             model=GRANITE_MODEL,
             api_key="unused",
         )
