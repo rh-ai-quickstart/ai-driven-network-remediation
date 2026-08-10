@@ -40,7 +40,10 @@ def _handle_metrics_message(
         logger.info("RAN anomaly detected: {}", anomaly)
         recent_anomalies.append(anomaly)
         if producer is not None:
-            producer.send(anomalies_topic, json.dumps(anomaly).encode("utf-8"))
+            try:
+                producer.send(anomalies_topic, json.dumps(anomaly).encode("utf-8"))
+            except Exception:
+                logger.exception("Failed to publish anomaly to Kafka")
 
 
 @asynccontextmanager

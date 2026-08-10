@@ -77,6 +77,16 @@ class TestAnomaliesEndpoint:
         assert body["count"] == 2
         assert [a["cell_id"] for a in body["anomalies"]] == [3, 4]
 
+    def test_anomalies_limit_zero_returns_empty(self, client):
+        client.app.state.recent_enriched.append(
+            {**SAMPLE_ANOMALY, "root_cause": "r", "recommended_fix": "f"}
+        )
+
+        response = client.get("/anomalies", params={"limit": 0})
+        body = response.json()
+        assert body["count"] == 0
+        assert body["anomalies"] == []
+
 
 class TestHandleAnomalyMessage:
     def test_invokes_graph_and_appends_to_buffer(self):
@@ -154,6 +164,21 @@ class TestHandleAnomalyMessage:
         _handle_anomaly_message(raw, graph, None, "topic", buffer)
 
         assert len(buffer) == 1
+
+    def test_graph_error_forwards_anomaly_unenriched(self):
+        from collections import deque
+
+        graph = MagicMock()
+        graph.ainvoke = AsyncMock(side_effect=RuntimeError("graph failure"))
+        buffer: deque = deque(maxlen=100)
+
+        raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")
+        _handle_anomaly_message(raw, graph, None, "topic", buffer)
+
+        assert len(buffer) == 1
+        assert buffer[0]["cell_id"] == 42
+        assert buffer[0]["root_cause"] == ""
+        assert buffer[0]["recommended_fix"] == ""
 
 
 class TestKafkaLifespan:

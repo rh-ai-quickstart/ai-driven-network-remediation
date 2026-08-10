@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import click
@@ -27,6 +28,6 @@ def main(anomaly_json: str | None) -> None:
     anomaly = json.loads(anomaly_json) if anomaly_json is not None else _SAMPLE_ANOMALY
 
     graph = build_graph()
-    result = graph.invoke(anomaly)
+    result = asyncio.run(graph.ainvoke(anomaly))
 
     click.echo(json.dumps(dict(result), indent=2))

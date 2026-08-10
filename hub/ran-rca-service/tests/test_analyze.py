@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 import jsonschema
 import pytest
 
-from helpers import CONTRACTS_DIR, VALID_LLM_JSON, make_llm_response, make_state, project_enriched
+from helpers import CONTRACTS_DIR, make_llm_response, make_state, project_enriched
 
 
 @pytest.fixture()

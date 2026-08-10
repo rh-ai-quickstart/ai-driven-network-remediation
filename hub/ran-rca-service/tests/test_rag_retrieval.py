@@ -24,7 +24,7 @@ def patch_rag_client(mock_client, *, vector_store_id="vs-123", resolved=True):
 
 class TestRagQueryConstruction:
     @pytest.mark.asyncio
-    async def test_query_is_state_str_representation(self):
+    async def test_query_built_from_relevant_fields(self):
         mock_client = MagicMock()
         mock_client.vector_stores.list = AsyncMock(return_value=MagicMock(data=[]))
         mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
@@ -33,13 +33,13 @@ class TestRagQueryConstruction:
             state = make_state()
             result = await rag_retrieval_node(state)
 
-        assert result["rag_query_used"] == str(state)
-        assert "cell_id=42" in result["rag_query_used"]
         assert "Band 29" in result["rag_query_used"]
         assert "LowRsrp" in result["rag_query_used"]
+        assert "Low RSRP" in result["rag_query_used"]
+        assert "root_cause" not in result["rag_query_used"]
 
     @pytest.mark.asyncio
-    async def test_passes_state_str_to_search(self):
+    async def test_passes_query_to_search(self):
         mock_client = MagicMock()
         mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
 
@@ -49,7 +49,9 @@ class TestRagQueryConstruction:
 
         mock_client.vector_stores.search.assert_awaited_once()
         call_kwargs = mock_client.vector_stores.search.call_args
-        assert call_kwargs.kwargs["query"] == str(state)
+        query = call_kwargs.kwargs["query"]
+        assert "High interference on cell 7" in query
+        assert "LowRsrp" in query
 
 
 class TestRagSuccessfulSearch:

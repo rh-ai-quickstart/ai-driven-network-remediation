@@ -9,7 +9,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
@@ -28,6 +28,16 @@ from ran_rca_service.kafka.consumer import AnomalyConsumer
 EnrichedBuffer = deque[dict[str, Any]]
 
 
+_consumer_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _get_consumer_loop() -> asyncio.AbstractEventLoop:
+    global _consumer_loop
+    if _consumer_loop is None or _consumer_loop.is_closed():
+        _consumer_loop = asyncio.new_event_loop()
+    return _consumer_loop
+
+
 def _handle_anomaly_message(
     raw_value: bytes,
     graph,
@@ -41,7 +51,12 @@ def _handle_anomaly_message(
         logger.warning("Skipping malformed RAN anomaly message")
         return
 
-    result = asyncio.run(graph.ainvoke(anomaly))
+    try:
+        loop = _get_consumer_loop()
+        result = loop.run_until_complete(graph.ainvoke(anomaly))
+    except Exception:
+        logger.exception("Graph invocation failed, forwarding anomaly unenriched")
+        result = {**anomaly, "root_cause": "", "recommended_fix": ""}
 
     enriched = {
         "cell_id": result["cell_id"],
@@ -122,9 +137,9 @@ def ready(req: Request):
 
 
 @app.get("/anomalies")
-def anomalies(req: Request, limit: int = 50):
+def anomalies(req: Request, limit: int = Query(default=50, ge=0)):
     recent: EnrichedBuffer = req.app.state.recent_enriched
-    items = list(recent)[-limit:]
+    items = list(recent)[-limit:] if limit else []
     return {"count": len(items), "anomalies": items}
 
 

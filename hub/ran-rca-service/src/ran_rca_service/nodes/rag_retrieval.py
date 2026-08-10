@@ -40,7 +40,7 @@ def _result(query: str, snippets: list[str] | None = None) -> dict:
 
 
 async def rag_retrieval_node(state: RCAState) -> dict:
-    query = str(state)
+    query = f"{state.anomaly_type} {state.anomaly} {state.band}"
 
     try:
         vs_id = await _resolve_vector_store_id()
