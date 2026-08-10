@@ -8,7 +8,7 @@ from ran_anomaly_detector.server import app
 
 @pytest.fixture
 def client():
-    with patch("ran_anomaly_detector.server.MetricsConsumer"), patch("ran_anomaly_detector.server.KafkaProducer"):
+    with patch("ran_anomaly_detector.server.TopicConsumer"), patch("ran_anomaly_detector.server.KafkaProducer"):
         with TestClient(app) as test_client:
             yield test_client
 
@@ -83,7 +83,7 @@ class TestAnomaliesEndpoint:
 
 class TestKafkaLifespan:
     @patch("ran_anomaly_detector.server.KafkaProducer")
-    @patch("ran_anomaly_detector.server.MetricsConsumer")
+    @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch.multiple(
         "ran_anomaly_detector.server",
         KAFKA_CONSUMER_ENABLED=True,
@@ -91,15 +91,15 @@ class TestKafkaLifespan:
         KAFKA_METRICS_TOPIC="ran-combined-metrics",
         KAFKA_GROUP_ID="test-group",
     )
-    def test_lifespan_starts_consumer_when_enabled(self, MetricsConsumer, KafkaProducer):
+    def test_lifespan_starts_consumer_when_enabled(self, TopicConsumer, KafkaProducer):
         mock_consumer = MagicMock()
-        MetricsConsumer.return_value = mock_consumer
+        TopicConsumer.return_value = mock_consumer
 
         with TestClient(app):
             pass
 
-        MetricsConsumer.assert_called_once()
-        _, kwargs = MetricsConsumer.call_args
+        TopicConsumer.assert_called_once()
+        _, kwargs = TopicConsumer.call_args
         assert kwargs["bootstrap_servers"] == "kafka.test:9092"
         assert kwargs["topic"] == "ran-combined-metrics"
         assert kwargs["group_id"] == "test-group"
@@ -107,25 +107,25 @@ class TestKafkaLifespan:
         mock_consumer.stop.assert_called_once()
 
     @patch("ran_anomaly_detector.server.KafkaProducer")
-    @patch("ran_anomaly_detector.server.MetricsConsumer")
+    @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", False)
-    def test_lifespan_skips_consumer_when_disabled(self, MetricsConsumer, KafkaProducer):
+    def test_lifespan_skips_consumer_when_disabled(self, TopicConsumer, KafkaProducer):
         with TestClient(app):
             pass
 
-        MetricsConsumer.assert_not_called()
+        TopicConsumer.assert_not_called()
 
     @patch("ran_anomaly_detector.server.KafkaProducer")
-    @patch("ran_anomaly_detector.server.MetricsConsumer")
+    @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", True)
-    def test_lifespan_wires_handler_into_recent_anomalies(self, MetricsConsumer, KafkaProducer):
+    def test_lifespan_wires_handler_into_recent_anomalies(self, TopicConsumer, KafkaProducer):
         captured_handler = {}
 
         def _capture(handler, **kwargs):
             captured_handler["handler"] = handler
             return MagicMock()
 
-        MetricsConsumer.side_effect = _capture
+        TopicConsumer.side_effect = _capture
 
         with TestClient(app) as client:
             csv_blob = (
@@ -141,14 +141,14 @@ class TestKafkaLifespan:
             assert response.json()["count"] == 1
 
     @patch("ran_anomaly_detector.server.KafkaProducer")
-    @patch("ran_anomaly_detector.server.MetricsConsumer")
+    @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch.multiple(
         "ran_anomaly_detector.server",
         KAFKA_CONSUMER_ENABLED=True,
         KAFKA_PRODUCER_ENABLED=True,
         KAFKA_ANOMALIES_TOPIC="ran-anomalies",
     )
-    def test_handler_publishes_anomalies_to_kafka(self, MetricsConsumer, KafkaProducer):
+    def test_handler_publishes_anomalies_to_kafka(self, TopicConsumer, KafkaProducer):
         mock_producer = MagicMock()
         KafkaProducer.return_value = mock_producer
 
@@ -158,7 +158,7 @@ class TestKafkaLifespan:
             captured_handler["handler"] = handler
             return MagicMock()
 
-        MetricsConsumer.side_effect = _capture
+        TopicConsumer.side_effect = _capture
 
         with TestClient(app):
             csv_blob = (

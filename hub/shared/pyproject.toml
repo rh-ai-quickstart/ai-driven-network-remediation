@@ -1,0 +1,35 @@
+[project]
+name = "shared"
+version = "0.1.0"
+description = "Shared infrastructure utilities for hub services"
+readme = "README.md"
+authors = [
+    { name = "rh-ai-quickstart" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "kafka-python-ng>=2.2",
+    "loguru>=0.7.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=6.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.3,<0.11.0"]
+build-backend = "uv_build"
+
+[tool.coverage.run]
+source = ["shared"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_empty = true

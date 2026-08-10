@@ -347,9 +347,9 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "fastapi" },
-    { name = "kafka-python-ng" },
     { name = "loguru" },
     { name = "pydantic" },
+    { name = "shared" },
     { name = "telco-oran" },
     { name = "uvicorn" },
 ]
@@ -366,9 +366,9 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "kafka-python-ng", specifier = ">=2.2" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "shared", directory = "../shared" },
     { name = "telco-oran", directory = "../telco-oran" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
@@ -378,6 +378,27 @@ dev = [
     { name = "httpx2", specifier = ">=0.1" },
     { name = "pytest", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pytest-cov", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+source = { directory = "../shared" }
+dependencies = [
+    { name = "kafka-python-ng" },
+    { name = "loguru" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "kafka-python-ng", specifier = ">=2.2" },
+    { name = "loguru", specifier = ">=0.7.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=7.4.0" },
     { name = "pytest-cov", specifier = ">=6.0" },
 ]
 

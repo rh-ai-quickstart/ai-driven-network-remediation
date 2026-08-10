@@ -23,7 +23,7 @@ from ran_anomaly_detector.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_anomaly_detector.detection import AnomalyDetectionService
-from ran_anomaly_detector.kafka.consumer import MetricsConsumer
+from shared.kafka import TopicConsumer
 
 AnomalyBuffer = deque[dict[str, Any]]
 
@@ -61,12 +61,13 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("Could not connect Kafka producer, anomalies will not be published")
 
-    consumer: MetricsConsumer | None = None
+    consumer: TopicConsumer | None = None
     if KAFKA_CONSUMER_ENABLED:
-        consumer = MetricsConsumer(
+        consumer = TopicConsumer(
             lambda raw_value: _handle_metrics_message(
                 raw_value, detection_service, recent_anomalies, producer, KAFKA_ANOMALIES_TOPIC
             ),
+            name="ran-metrics",
             bootstrap_servers=KAFKA_BOOTSTRAP,
             topic=KAFKA_METRICS_TOPIC,
             group_id=KAFKA_GROUP_ID,
@@ -100,7 +101,7 @@ def ready(req: Request):
     not_ready = []
 
     if KAFKA_CONSUMER_ENABLED:
-        consumer: MetricsConsumer | None = getattr(req.app.state, "kafka_consumer", None)
+        consumer: TopicConsumer | None = getattr(req.app.state, "kafka_consumer", None)
         if consumer is None or not consumer.is_connected:
             not_ready.append("kafka")
 

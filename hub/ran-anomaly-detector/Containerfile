@@ -10,8 +10,9 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# telco-oran is copied one level up so the "../telco-oran" path source in
-# ran-anomaly-detector/pyproject.toml resolves correctly from /app.
+# Sibling packages are copied one level up so the "../<pkg>" path sources in
+# ran-anomaly-detector/pyproject.toml resolve correctly from /app.
+COPY shared/ /shared/
 COPY telco-oran/ /telco-oran/
 
 COPY ran-anomaly-detector/pyproject.toml ran-anomaly-detector/uv.lock ./

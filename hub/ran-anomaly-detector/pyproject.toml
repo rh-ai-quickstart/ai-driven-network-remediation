@@ -8,16 +8,17 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "shared",
     "telco-oran",
     "click>=8.1.0",
     "fastapi>=0.115",
-    "kafka-python-ng>=2.2",
     "loguru>=0.7.0",
     "pydantic>=2.0.0",
     "uvicorn>=0.34",
 ]
 
 [tool.uv.sources]
+shared = { path = "../shared" }
 telco-oran = { path = "../telco-oran" }
 
 [project.scripts]

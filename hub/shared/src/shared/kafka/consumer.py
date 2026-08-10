@@ -1,4 +1,4 @@
-"""Background Kafka consumer for the RAN combined-metrics topic."""
+"""Reusable background Kafka topic consumer."""
 
 from __future__ import annotations
 
@@ -9,24 +9,26 @@ from typing import Any
 from kafka import KafkaConsumer
 from loguru import logger
 
-MetricsHandler = Callable[[bytes], None]
+MessageHandler = Callable[[bytes], None]
 
 
-class MetricsConsumer:
-    """Subscribe to the RAN metrics topic and dispatch raw message values to a handler."""
+class TopicConsumer:
+    """Subscribe to a Kafka topic and dispatch raw message values to a handler."""
 
     def __init__(
         self,
-        handler: MetricsHandler,
+        handler: MessageHandler,
         *,
+        name: str,
         bootstrap_servers: str,
         topic: str,
         group_id: str,
         poll_timeout_ms: int = 1000,
     ) -> None:
         if not topic:
-            raise ValueError("A Kafka metrics topic is required")
+            raise ValueError("A Kafka topic is required")
         self._handler = handler
+        self._name = name
         self._bootstrap_servers = bootstrap_servers
         self._topic = topic
         self._group_id = group_id
@@ -40,10 +42,13 @@ class MetricsConsumer:
         if self._running:
             return
         self._running = True
-        self._thread = threading.Thread(target=self._run, name="ran-metrics-consumer", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name=f"{self._name}-consumer", daemon=True
+        )
         self._thread.start()
         logger.info(
-            "Kafka RAN metrics consumer started topic={} group_id={}",
+            "Kafka {} consumer started topic={} group_id={}",
+            self._name,
             self._topic,
             self._group_id,
         )
@@ -58,9 +63,9 @@ class MetricsConsumer:
         if self._thread is not None:
             self._thread.join(timeout=self._poll_timeout_ms / 1000 + 5)
             if self._thread.is_alive():
-                logger.warning("Kafka RAN metrics consumer thread still running after join timeout")
+                logger.warning("Kafka {} consumer thread still running after join timeout", self._name)
             self._thread = None
-        logger.info("Kafka RAN metrics consumer stopped")
+        logger.info("Kafka {} consumer stopped", self._name)
 
     def close(self) -> None:
         if self._consumer is not None:
@@ -68,13 +73,6 @@ class MetricsConsumer:
             self._consumer = None
 
     def _run(self) -> None:
-        """Connect, poll, and transparently reconnect if the poll loop ever fails.
-
-        A dead broker connection, expired auth, or a deleted topic can make
-        `poll()` raise *after* a successful connect. Without catching that here,
-        the thread would exit for good and the service would silently stop
-        processing messages (while still reporting healthy) until restarted.
-        """
         while self._running:
             if not self._connect():
                 return
@@ -82,7 +80,8 @@ class MetricsConsumer:
                 self._poll_loop()
             except Exception:
                 logger.exception(
-                    "Kafka RAN metrics poll loop failed, reconnecting to {} in 5s",
+                    "Kafka {} poll loop failed, reconnecting to {} in 5s",
+                    self._name,
                     self._bootstrap_servers,
                 )
                 self._stop_event.wait(5)
@@ -90,7 +89,6 @@ class MetricsConsumer:
                 self.close()
 
     def _connect(self) -> bool:
-        """Retry connecting to Kafka every 5s until successful or stop() is called."""
         while self._running:
             try:
                 self._consumer = KafkaConsumer(
@@ -103,12 +101,13 @@ class MetricsConsumer:
                 )
                 return True
             except Exception:
-                logger.warning("Kafka not reachable at {}, retrying in 5s", self._bootstrap_servers)
+                logger.warning(
+                    "Kafka not reachable at {}, retrying in 5s", self._bootstrap_servers
+                )
                 self._stop_event.wait(5)
         return False
 
     def _poll_loop(self) -> None:
-        """Continuously poll for new records and dispatch each batch until stop() is called."""
         while self._running:
             records = self._consumer.poll(timeout_ms=self._poll_timeout_ms)
             if not records:
@@ -116,7 +115,6 @@ class MetricsConsumer:
             self._dispatch(records)
 
     def _dispatch(self, records: Any) -> None:
-        """Hand each message in a polled batch to the handler, isolating per-message failures."""
         for messages in records.values():
             for msg in messages:
                 if not self._running:
@@ -125,14 +123,16 @@ class MetricsConsumer:
                     self._handle_message(msg)
                 except Exception:
                     logger.exception(
-                        "Failed to handle RAN metrics message topic={} offset={}",
+                        "Failed to handle {} message topic={} offset={}",
+                        self._name,
                         msg.topic,
                         msg.offset,
                     )
 
     def _handle_message(self, msg: Any) -> None:
         logger.info(
-            "RAN metrics message received topic={} partition={} offset={}",
+            "{} message received topic={} partition={} offset={}",
+            self._name,
             msg.topic,
             msg.partition,
             msg.offset,
