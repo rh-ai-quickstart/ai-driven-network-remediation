@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "shared",
     "click>=8.1.0",
     "fastapi>=0.115",
     "kafka-python-ng>=2.2",
@@ -20,6 +21,9 @@ dependencies = [
     "slack-sdk>=3.33",
     "uvicorn>=0.34",
 ]
+
+[tool.uv.sources]
+shared = { path = "../shared" }
 
 [project.scripts]
 agent-service = "agent_service:main"

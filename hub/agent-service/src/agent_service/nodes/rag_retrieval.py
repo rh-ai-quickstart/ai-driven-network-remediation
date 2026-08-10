@@ -1,7 +1,9 @@
-import time
+"""RAG retrieval node — queries the noc_runbooks vector store via shared RagClient."""
 
-from llama_stack_client import AsyncLlamaStackClient
+from __future__ import annotations
+
 from loguru import logger
+from shared.rag import RagClient
 
 from agent_service.config import (
     LLAMASTACK_HOST,
@@ -11,29 +13,18 @@ from agent_service.config import (
     VECTOR_STORE_NAME,
 )
 
-_client = AsyncLlamaStackClient(base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}")
-_vector_store_id: str | None = None
-_negative_cache_until: float = 0.0
-
-_NEGATIVE_CACHE_TTL_SECONDS = 300.0
+_rag_client: RagClient | None = None
 
 
-async def _resolve_vector_store_id() -> str | None:
-    global _vector_store_id, _negative_cache_until
-    if _vector_store_id is not None:
-        return _vector_store_id
-
-    if time.monotonic() < _negative_cache_until:
-        return None
-
-    result = await _client.vector_stores.list(limit=100)
-    for vs in result.data:
-        if vs.name == VECTOR_STORE_NAME:
-            _vector_store_id = vs.id
-            return _vector_store_id
-    logger.warning(f"Vector store '{VECTOR_STORE_NAME}' not found, retrying in {_NEGATIVE_CACHE_TTL_SECONDS}s")
-    _negative_cache_until = time.monotonic() + _NEGATIVE_CACHE_TTL_SECONDS
-    return None
+def _get_rag_client() -> RagClient:
+    global _rag_client
+    if _rag_client is None:
+        _rag_client = RagClient(
+            host=LLAMASTACK_HOST,
+            port=int(LLAMASTACK_PORT),
+            vector_store_name=VECTOR_STORE_NAME,
+        )
+    return _rag_client
 
 
 async def rag_retrieval_node(state: dict) -> dict:
@@ -42,17 +33,7 @@ async def rag_retrieval_node(state: dict) -> dict:
     query = f"{log_event.message} namespace={log_event.namespace} pod={log_event.pod_name}"
 
     try:
-        vs_id = await _resolve_vector_store_id()
-        if vs_id is None:
-            return {"context_snippets": [], "rag_query_used": query}
-
-        response = await _client.vector_stores.search(
-            vs_id,
-            query=query,
-            max_num_results=5,
-            ranking_options={"score_threshold": 0.3},
-        )
-        snippets = [content.text for item in response.data for content in item.content]
+        snippets = await _get_rag_client().search(query)
         return {"context_snippets": snippets, "rag_query_used": query}
     except Exception:
         logger.exception("LlamaStack search failed")
@@ -73,15 +54,16 @@ async def store_generated_playbook(
     filename = f"{playbook_name}.md"
 
     try:
-        vs_id = await _resolve_vector_store_id()
+        client = _get_rag_client()
+        vs_id = await client._resolve_vector_store_id()
         if vs_id is None:
             return
 
-        created_file = await _client.files.create(
+        created_file = await client._client.files.create(
             file=(filename, content.encode("utf-8"), "text/markdown"),
             purpose="assistants",
         )
-        await _client.vector_stores.files.create(
+        await client._client.vector_stores.files.create(
             vs_id,
             file_id=created_file.id,
             chunking_strategy={

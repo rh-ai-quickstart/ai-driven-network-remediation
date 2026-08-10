@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -24,6 +24,7 @@ dependencies = [
     { name = "loguru" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "shared" },
     { name = "slack-sdk" },
     { name = "uvicorn" },
 ]
@@ -48,6 +49,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "shared", directory = "../shared" },
     { name = "slack-sdk", specifier = ">=3.33" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]
@@ -1251,6 +1253,30 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/71/14edf065f04630b1a8472f7653cad03f6c478bcf95ea0e6aed55451e33ea/rpds_py-2026.6.3-cp315-cp315t-musllinux_1_2_x86_64.whl", hash = "sha256:23a439f31ccbeff1574e24889128821d1f7917470e830cf6544dced1c662262a", size = 576533, upload-time = "2026-06-30T07:17:28.546Z" },
     { url = "https://files.pythonhosted.org/packages/ba/76/65002b08596c389105720a8c0d22298b8dc25a4baf89b2ce431343c8b1de/rpds_py-2026.6.3-cp315-cp315t-win32.whl", hash = "sha256:913ca42ccad3f8cc6e292b587ae8ae49c8c823e5dce51a736252fc7c7cdfa577", size = 201204, upload-time = "2026-06-30T07:17:30.193Z" },
     { url = "https://files.pythonhosted.org/packages/8c/97/d855d6b3c322d1f27e26f5241c42016b56cf01377ea8ed348285f54652f0/rpds_py-2026.6.3-cp315-cp315t-win_amd64.whl", hash = "sha256:ae3d4fe8c0b9213624fdce7279d70e3b148b682ca20719ebd193a23ebfa47324", size = 220719, upload-time = "2026-06-30T07:17:31.788Z" },
+]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
+source = { directory = "../shared" }
+dependencies = [
+    { name = "kafka-python-ng" },
+    { name = "llama-stack-client" },
+    { name = "loguru" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "kafka-python-ng", specifier = ">=2.2" },
+    { name = "llama-stack-client", specifier = ">=0.6.1,<0.7" },
+    { name = "loguru", specifier = ">=0.7.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=7.4.0" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pytest-cov", specifier = ">=6.0" },
 ]
 
 [[package]]

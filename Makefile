@@ -33,6 +33,11 @@ RAN_ANOMALY_CONTEXT         := hub
 RAN_RCA_CONTAINERFILE       := hub/ran-rca-service/Containerfile
 RAN_RCA_CONTEXT             := hub
 
+# agent-service depends on the sibling shared package via a local
+# uv path source, so its build context must be `hub/`, not its own directory.
+AGENT_CONTAINERFILE         := hub/agent-service/Containerfile
+AGENT_CONTEXT               := hub
+
 # ── Feature flags ─────────────────────────────────────────────────
 ENABLE_HUB             ?= true
 ENABLE_KAFKA           ?= true
@@ -371,7 +376,7 @@ build-chatbot-image:
 
 .PHONY: build-agent-image
 build-agent-image:
-	$(CONTAINER_TOOL) build -t $(AGENT_IMG) --platform=$(ARCH) -f hub/agent-service/Containerfile hub/agent-service
+	$(CONTAINER_TOOL) build -t $(AGENT_IMG) --platform=$(ARCH) -f $(AGENT_CONTAINERFILE) $(AGENT_CONTEXT)
 
 .PHONY: build-ran-anomaly-image
 build-ran-anomaly-image:

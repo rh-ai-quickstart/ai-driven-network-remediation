@@ -1,3 +1,5 @@
+# Build context for this image must be `hub/` (not this directory), since the
+# project depends on the sibling `shared` package via a local uv path source.
 FROM python:3.13-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -7,12 +9,14 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+COPY shared/ /shared/
+
+COPY agent-service/pyproject.toml agent-service/uv.lock ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-editable --no-dev
 
-COPY . /app
+COPY agent-service/ /app/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --no-dev
