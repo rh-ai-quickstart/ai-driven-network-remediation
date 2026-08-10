@@ -23,7 +23,7 @@ from ran_rca_service.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_rca_service.graph import build_graph
-from ran_rca_service.kafka.consumer import AnomalyConsumer
+from shared.kafka import TopicConsumer
 
 EnrichedBuffer = deque[dict[str, Any]]
 
@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
     app.state.recent_enriched = recent_enriched
 
     producer: KafkaProducer | None = None
-    consumer: AnomalyConsumer | None = None
+    consumer: TopicConsumer | None = None
 
     if KAFKA_CONSUMER_ENABLED:
         try:
@@ -90,10 +90,11 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("Could not connect Kafka producer, enriched messages will not be published")
 
-        consumer = AnomalyConsumer(
+        consumer = TopicConsumer(
             lambda raw_value: _handle_anomaly_message(
                 raw_value, graph, producer, KAFKA_ENRICHED_TOPIC, recent_enriched
             ),
+            name="ran-anomaly",
             bootstrap_servers=KAFKA_BOOTSTRAP,
             topic=KAFKA_ANOMALIES_TOPIC,
             group_id=KAFKA_GROUP_ID,
@@ -127,7 +128,7 @@ def ready(req: Request):
     not_ready = []
 
     if KAFKA_CONSUMER_ENABLED:
-        consumer: AnomalyConsumer | None = getattr(req.app.state, "kafka_consumer", None)
+        consumer: TopicConsumer | None = getattr(req.app.state, "kafka_consumer", None)
         if consumer is None or not consumer.is_connected:
             not_ready.append("kafka")
 

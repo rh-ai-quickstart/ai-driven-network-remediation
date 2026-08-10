@@ -14,7 +14,7 @@ from ran_rca_service.server import _handle_anomaly_message, app
 
 @pytest.fixture
 def client():
-    with patch("ran_rca_service.server.AnomalyConsumer"), patch("ran_rca_service.server.KafkaProducer"):
+    with patch("ran_rca_service.server.TopicConsumer"), patch("ran_rca_service.server.KafkaProducer"):
         with TestClient(app) as test_client:
             yield test_client
 
@@ -183,7 +183,7 @@ class TestHandleAnomalyMessage:
 
 class TestKafkaLifespan:
     @patch("ran_rca_service.server.KafkaProducer")
-    @patch("ran_rca_service.server.AnomalyConsumer")
+    @patch("ran_rca_service.server.TopicConsumer")
     @patch.multiple(
         "ran_rca_service.server",
         KAFKA_CONSUMER_ENABLED=True,
@@ -191,15 +191,15 @@ class TestKafkaLifespan:
         KAFKA_ANOMALIES_TOPIC="ran-anomalies",
         KAFKA_GROUP_ID="test-group",
     )
-    def test_lifespan_starts_consumer_when_enabled(self, AnomalyConsumer, KafkaProducer):
+    def test_lifespan_starts_consumer_when_enabled(self, TopicConsumer, KafkaProducer):
         mock_consumer = MagicMock()
-        AnomalyConsumer.return_value = mock_consumer
+        TopicConsumer.return_value = mock_consumer
 
         with TestClient(app):
             pass
 
-        AnomalyConsumer.assert_called_once()
-        _, kwargs = AnomalyConsumer.call_args
+        TopicConsumer.assert_called_once()
+        _, kwargs = TopicConsumer.call_args
         assert kwargs["bootstrap_servers"] == "kafka.test:9092"
         assert kwargs["topic"] == "ran-anomalies"
         assert kwargs["group_id"] == "test-group"
@@ -207,25 +207,25 @@ class TestKafkaLifespan:
         mock_consumer.stop.assert_called_once()
 
     @patch("ran_rca_service.server.KafkaProducer")
-    @patch("ran_rca_service.server.AnomalyConsumer")
+    @patch("ran_rca_service.server.TopicConsumer")
     @patch("ran_rca_service.server.KAFKA_CONSUMER_ENABLED", False)
-    def test_lifespan_skips_consumer_when_disabled(self, AnomalyConsumer, KafkaProducer):
+    def test_lifespan_skips_consumer_when_disabled(self, TopicConsumer, KafkaProducer):
         with TestClient(app):
             pass
 
-        AnomalyConsumer.assert_not_called()
+        TopicConsumer.assert_not_called()
 
     @patch("ran_rca_service.server.KafkaProducer")
-    @patch("ran_rca_service.server.AnomalyConsumer")
+    @patch("ran_rca_service.server.TopicConsumer")
     @patch("ran_rca_service.server.KAFKA_CONSUMER_ENABLED", True)
-    def test_lifespan_wires_handler_into_enriched_buffer(self, AnomalyConsumer, KafkaProducer):
+    def test_lifespan_wires_handler_into_enriched_buffer(self, TopicConsumer, KafkaProducer):
         captured_handler = {}
 
         def _capture(handler, **kwargs):
             captured_handler["handler"] = handler
             return MagicMock()
 
-        AnomalyConsumer.side_effect = _capture
+        TopicConsumer.side_effect = _capture
 
         mock_client = MagicMock()
         mock_client.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
