@@ -92,7 +92,12 @@ while [[ "${#pending[@]}" -gt 0 ]]; do
       still_pending+=("${name}")
     fi
   done
-  pending=("${still_pending[@]}")
+  # Empty still_pending is a successful drain; avoid unbound array under set -u.
+  if [[ "${#still_pending[@]}" -eq 0 ]]; then
+    pending=()
+  else
+    pending=("${still_pending[@]}")
+  fi
   if [[ "${#pending[@]}" -gt 0 ]]; then
     sleep "${INTERVAL_SECONDS}"
   fi

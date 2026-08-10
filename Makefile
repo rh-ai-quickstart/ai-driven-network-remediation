@@ -287,7 +287,6 @@ helm_all_args = \
 	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
-	$(helm_topology_args) \
 	$(helm_infra_args) \
 	$(helm_lokistack_args) \
 	$(helm_mcp_image_args) \
@@ -306,35 +305,35 @@ helm_all_args = \
 
 .PHONY: render-spokes
 render-spokes:
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
-	EDGE_NAMESPACE=$(EDGE_NAMESPACE) \
-	SPOKE_NAME_PREFIX=$(SPOKE_NAME_PREFIX) \
-	python3 scripts/topology/render-spokes.py -o $(SPOKES_GENERATED)
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	SPOKE_NAME_PREFIX='$(SPOKE_NAME_PREFIX)' \
+	python3 scripts/topology/render-spokes.py -o '$(SPOKES_GENERATED)'
 
 .PHONY: validate-topology
 validate-topology:
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	GITOPS_REPO_URL='$(GITOPS_REPO_URL)' \
 	GITOPS_REVISION='$(GITOPS_REVISION)' \
-	EDGE_NAMESPACE=$(EDGE_NAMESPACE) \
-	SPOKE_NAME_PREFIX=$(SPOKE_NAME_PREFIX) \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	SPOKE_NAME_PREFIX='$(SPOKE_NAME_PREFIX)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	python3 scripts/topology/validate.py
 	$(MAKE) render-spokes
 
 .PHONY: acm-prereq-check
 acm-prereq-check: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/prereq-check.sh
 
 .PHONY: acm-create-clusters
 acm-create-clusters: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	HIVE_BASE_DOMAIN='$(HIVE_BASE_DOMAIN)' \
 	HIVE_CLUSTER_IMAGE_SET='$(HIVE_CLUSTER_IMAGE_SET)' \
 	HIVE_AWS_REGION='$(HIVE_AWS_REGION)' \
@@ -342,8 +341,8 @@ acm-create-clusters: validate-topology
 
 .PHONY: acm-wait-for-clusters
 acm-wait-for-clusters: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	ACM_WAIT_TIMEOUT_SECONDS='$(ACM_WAIT_TIMEOUT_SECONDS)' \
 	ACM_WAIT_INTERVAL_SECONDS='$(ACM_WAIT_INTERVAL_SECONDS)' \
@@ -351,15 +350,15 @@ acm-wait-for-clusters: validate-topology
 
 .PHONY: acm-label-spokes
 acm-label-spokes: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/label-spokes.sh
 
 .PHONY: acm-distribute-kafka-certs
 acm-distribute-kafka-certs: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	NAMESPACE='$(NAMESPACE)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
@@ -370,7 +369,7 @@ acm-distribute-kafka-certs: validate-topology
 .PHONY: acm-apply-placement
 acm-apply-placement: validate-topology
 	@# Placement first (ManagedClusterSet), then labels, then GitOpsCluster + Policy.
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	NAMESPACE='$(NAMESPACE)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	ACM_HUB_CLUSTER='$(ACM_HUB_CLUSTER)' \
@@ -378,7 +377,7 @@ acm-apply-placement: validate-topology
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/apply-placement.sh --step=placement $(ACM_APPLY_ARGS)
 	$(MAKE) acm-label-spokes
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	NAMESPACE='$(NAMESPACE)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	ACM_HUB_CLUSTER='$(ACM_HUB_CLUSTER)' \
@@ -401,8 +400,8 @@ ACM_MANIFESTWORK_INTERVAL_SECONDS ?=
 
 .PHONY: argocd-apply
 argocd-apply: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	GITOPS_REPO_URL='$(GITOPS_REPO_URL)' \
 	GITOPS_REVISION='$(GITOPS_REVISION)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
@@ -412,8 +411,8 @@ argocd-apply: validate-topology
 
 .PHONY: argocd-wait-spokes
 argocd-wait-spokes: validate-topology
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
 	bash scripts/acm/argocd-wait-spokes.sh
 
@@ -459,9 +458,9 @@ endif
 acm-teardown: validate-topology
 	@# Always invoke the script: it refuses CLUSTER_COUNT=1 when hub-spoke leftovers exist.
 	@echo "=== acm-teardown (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
-	CLUSTER_COUNT=$(CLUSTER_COUNT) \
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
-	SPOKES_GENERATED=$(SPOKES_GENERATED) \
+	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	NAMESPACE='$(NAMESPACE)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
