@@ -101,9 +101,7 @@ def test_history_persists_across_separate_process_message_calls():
         )
         assert outputs == []
 
-    outputs = service.process_message(
-        ("\n".join([HEADER, _row(minute=15, throughput_mbps=18.89)])).encode("utf-8")
-    )
+    outputs = service.process_message(("\n".join([HEADER, _row(minute=15, throughput_mbps=18.89)])).encode("utf-8"))
 
     assert any(o["anomaly_type"] == "ThroughputDrop" for o in outputs)
 

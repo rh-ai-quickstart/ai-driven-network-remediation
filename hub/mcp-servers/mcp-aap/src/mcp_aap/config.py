@@ -22,9 +22,7 @@ GITEA_OWNER = os.getenv("GITEA_OWNER", "noc")
 GITEA_REPO = os.getenv("GITEA_REPO", "generated-playbooks")
 
 
-GITEA_TOKEN_PATH = os.getenv(
-    "GITEA_TOKEN_PATH", "/secrets/noc-gitea-secret/GITEA_TOKEN"
-)
+GITEA_TOKEN_PATH = os.getenv("GITEA_TOKEN_PATH", "/secrets/noc-gitea-secret/GITEA_TOKEN")
 
 
 def get_gitea_token() -> str:

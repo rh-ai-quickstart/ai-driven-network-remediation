@@ -251,10 +251,7 @@ def commit_playbook(
     """
     filepath = f"playbooks/{playbook_name}.yaml"
     encoded = base64.b64encode(playbook_content.encode()).decode()
-    url = (
-        f"{GITEA_URL}/api/v1/repos/{GITEA_OWNER}"
-        f"/{GITEA_REPO}/contents/{filepath}"
-    )
+    url = f"{GITEA_URL}/api/v1/repos/{GITEA_OWNER}" f"/{GITEA_REPO}/contents/{filepath}"
 
     try:
         with httpx.Client(

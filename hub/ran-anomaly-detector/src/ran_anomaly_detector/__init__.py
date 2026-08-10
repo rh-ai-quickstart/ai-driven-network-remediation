@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import click
-
 from ran_anomaly_detector.detection import AnomalyDetectionService
 
 _SAMPLE_CSV = """\

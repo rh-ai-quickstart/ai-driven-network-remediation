@@ -13,8 +13,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from ingestion_pipeline.clients.llamastack import (
     LlamaStackVectorStoreClient,
     VectorStoreFileContentSummary,
@@ -30,6 +28,8 @@ from ingestion_pipeline.documents import (
     split_markdown_units,
     supported_extensions,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionAlreadyInProgressError(Exception):
@@ -115,7 +115,9 @@ class IngestionPipelineService:
         }
         logger.info(
             "Runbook sync complete: uploaded=%d skipped=%d failed=%d",
-            len(uploaded), len(skipped), len(failed),
+            len(uploaded),
+            len(skipped),
+            len(failed),
         )
         if failed:
             logger.warning("Runbook sync failures: %s", failed)
@@ -166,7 +168,9 @@ class IngestionPipelineService:
             }
             logger.info(
                 "Runbook ingest complete: ingested=%d failed=%d into '%s'",
-                len(ingested), len(failed), settings.vector_store_name,
+                len(ingested),
+                len(failed),
+                settings.vector_store_name,
             )
             if failed:
                 logger.warning("Runbook ingest failures: %s", failed)
@@ -208,7 +212,8 @@ class IngestionPipelineService:
         }
         logger.info(
             "Telco doc sync complete: converted=%d failed=%d",
-            len(converted), len(failed),
+            len(converted),
+            len(failed),
         )
         if failed:
             logger.warning("Telco doc sync failures: %s", failed)
@@ -267,7 +272,9 @@ class IngestionPipelineService:
             }
             logger.info(
                 "Telco doc ingest complete: ingested=%d failed=%d into '%s'",
-                len(ingested), len(failed), settings.telco_vector_store_name,
+                len(ingested),
+                len(failed),
+                settings.telco_vector_store_name,
             )
             if failed:
                 logger.warning("Telco doc ingest failures: %s", failed)

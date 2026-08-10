@@ -1,9 +1,14 @@
+"""Tests for the RAN anomaly Kafka consumer."""
+
+from __future__ import annotations
+
 import threading
 import time
 
 import pytest
-import ran_anomaly_detector.kafka.consumer as consumer_module
-from ran_anomaly_detector.kafka.consumer import MetricsConsumer
+
+import ran_rca_service.kafka.consumer as consumer_module
+from ran_rca_service.kafka.consumer import AnomalyConsumer
 
 
 class _FakeMessage:
@@ -15,8 +20,6 @@ class _FakeMessage:
 
 
 class _FakeKafkaConsumer:
-    """Minimal stand-in for kafka.KafkaConsumer, delivering a fixed batch once then idling."""
-
     def __init__(self, *args, **kwargs) -> None:
         self.closed = False
         self._delivered = False
@@ -26,9 +29,9 @@ class _FakeKafkaConsumer:
             return {}
         self._delivered = True
         return {
-            ("ran-combined-metrics", 0): [
-                _FakeMessage("ran-combined-metrics", 0, 0, b"first"),
-                _FakeMessage("ran-combined-metrics", 0, 1, b"second"),
+            ("ran-anomalies", 0): [
+                _FakeMessage("ran-anomalies", 0, 0, b'{"cell_id":1}'),
+                _FakeMessage("ran-anomalies", 0, 1, b'{"cell_id":2}'),
             ]
         }
 
@@ -37,11 +40,7 @@ class _FakeKafkaConsumer:
 
 
 class _FlakyThenHealthyKafkaConsumer:
-    """Connects successfully every time, but the first instance's poll() raises once
-    (simulating a broker drop mid-stream) before the consumer reconnects and a second,
-    healthy instance delivers the batch."""
-
-    instances: list["_FlakyThenHealthyKafkaConsumer"] = []
+    instances: list[_FlakyThenHealthyKafkaConsumer] = []
 
     def __init__(self, *args, **kwargs) -> None:
         self.closed = False
@@ -56,9 +55,9 @@ class _FlakyThenHealthyKafkaConsumer:
             return {}
         self._delivered = True
         return {
-            ("ran-combined-metrics", 0): [
-                _FakeMessage("ran-combined-metrics", 0, 0, b"first"),
-                _FakeMessage("ran-combined-metrics", 0, 1, b"second"),
+            ("ran-anomalies", 0): [
+                _FakeMessage("ran-anomalies", 0, 0, b'{"cell_id":1}'),
+                _FakeMessage("ran-anomalies", 0, 1, b'{"cell_id":2}'),
             ]
         }
 
@@ -68,7 +67,7 @@ class _FlakyThenHealthyKafkaConsumer:
 
 def test_topic_is_required():
     with pytest.raises(ValueError):
-        MetricsConsumer(lambda value: None, bootstrap_servers="kafka:9092", topic="", group_id="g")
+        AnomalyConsumer(lambda value: None, bootstrap_servers="kafka:9092", topic="", group_id="g")
 
 
 def test_start_dispatches_polled_messages_to_handler(monkeypatch):
@@ -81,10 +80,10 @@ def test_start_dispatches_polled_messages_to_handler(monkeypatch):
         with lock:
             received.append(value)
 
-    consumer = MetricsConsumer(
+    consumer = AnomalyConsumer(
         handler,
         bootstrap_servers="kafka:9092",
-        topic="ran-combined-metrics",
+        topic="ran-anomalies",
         group_id="test-group",
         poll_timeout_ms=50,
     )
@@ -97,7 +96,7 @@ def test_start_dispatches_polled_messages_to_handler(monkeypatch):
     assert consumer.is_connected
     consumer.stop()
 
-    assert received == [b"first", b"second"]
+    assert received == [b'{"cell_id":1}', b'{"cell_id":2}']
 
 
 def test_handler_exception_does_not_crash_consumer_loop(monkeypatch):
@@ -109,10 +108,10 @@ def test_handler_exception_does_not_crash_consumer_loop(monkeypatch):
         call_count["n"] += 1
         raise RuntimeError("boom")
 
-    consumer = MetricsConsumer(
+    consumer = AnomalyConsumer(
         failing_handler,
         bootstrap_servers="kafka:9092",
-        topic="ran-combined-metrics",
+        topic="ran-anomalies",
         group_id="test-group",
         poll_timeout_ms=50,
     )
@@ -128,15 +127,10 @@ def test_handler_exception_does_not_crash_consumer_loop(monkeypatch):
 
 
 def test_consumer_closed_when_stopped_immediately_after_connecting(monkeypatch):
-    """Regression test: if _running flips to False in the exact window right after
-    KafkaConsumer() succeeds but before the poll loop starts, the already-created
-    consumer must still be closed (not leaked). The race is simulated at the
-    KafkaConsumer() construction site itself, so this holds regardless of how
-    _run()'s internals are structured."""
-    consumer = MetricsConsumer(
+    consumer = AnomalyConsumer(
         lambda value: None,
         bootstrap_servers="kafka:9092",
-        topic="ran-combined-metrics",
+        topic="ran-anomalies",
         group_id="test-group",
     )
 
@@ -146,7 +140,7 @@ def test_consumer_closed_when_stopped_immediately_after_connecting(monkeypatch):
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             created.append(self)
-            consumer._running = False  # simulate stop() firing right after connect succeeds
+            consumer._running = False
 
     monkeypatch.setattr(consumer_module, "KafkaConsumer", _RaceKafkaConsumer)
 
@@ -158,10 +152,7 @@ def test_consumer_closed_when_stopped_immediately_after_connecting(monkeypatch):
     assert consumer._consumer is None
 
 
-def test_poll_failure_triggers_reconnect_instead_of_killing_the_thread(monkeypatch):
-    """Regression test: if poll() raises after a successful connect (broker restart,
-    auth failure, deleted topic, ...), the consumer must reconnect and keep processing
-    messages rather than letting the thread die silently."""
+def test_poll_failure_triggers_reconnect(monkeypatch):
     monkeypatch.setattr(consumer_module, "KafkaConsumer", _FlakyThenHealthyKafkaConsumer)
     _FlakyThenHealthyKafkaConsumer.instances = []
 
@@ -172,14 +163,13 @@ def test_poll_failure_triggers_reconnect_instead_of_killing_the_thread(monkeypat
         with lock:
             received.append(value)
 
-    consumer = MetricsConsumer(
+    consumer = AnomalyConsumer(
         handler,
         bootstrap_servers="kafka:9092",
-        topic="ran-combined-metrics",
+        topic="ran-anomalies",
         group_id="test-group",
         poll_timeout_ms=50,
     )
-    # Avoid waiting out the real 5s backoff between the failed and healthy connections.
     monkeypatch.setattr(consumer._stop_event, "wait", lambda timeout: None)
 
     consumer.start()
@@ -190,16 +180,16 @@ def test_poll_failure_triggers_reconnect_instead_of_killing_the_thread(monkeypat
 
     consumer.stop()
 
-    assert received == [b"first", b"second"]
+    assert received == [b'{"cell_id":1}', b'{"cell_id":2}']
     assert len(_FlakyThenHealthyKafkaConsumer.instances) == 2
     assert _FlakyThenHealthyKafkaConsumer.instances[0].closed is True
 
 
 def test_is_connected_false_before_start():
-    consumer = MetricsConsumer(
+    consumer = AnomalyConsumer(
         lambda value: None,
         bootstrap_servers="kafka:9092",
-        topic="ran-combined-metrics",
+        topic="ran-anomalies",
         group_id="test-group",
     )
 

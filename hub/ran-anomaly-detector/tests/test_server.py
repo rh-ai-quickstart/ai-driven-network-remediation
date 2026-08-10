@@ -1,14 +1,14 @@
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from ran_anomaly_detector.server import app
 
 
 @pytest.fixture
 def client():
-    with patch("ran_anomaly_detector.server.MetricsConsumer"):
+    with patch("ran_anomaly_detector.server.MetricsConsumer"), patch("ran_anomaly_detector.server.KafkaProducer"):
         with TestClient(app) as test_client:
             yield test_client
 
@@ -70,7 +70,9 @@ class TestAnomaliesEndpoint:
 
     def test_anomalies_respects_limit(self, client):
         for i in range(5):
-            client.app.state.recent_anomalies.append({"cell_id": i, "band": "Band 29", "anomaly_type": "X", "anomaly": "x"})
+            client.app.state.recent_anomalies.append(
+                {"cell_id": i, "band": "Band 29", "anomaly_type": "X", "anomaly": "x"}
+            )
 
         response = client.get("/anomalies", params={"limit": 2})
 
@@ -80,6 +82,7 @@ class TestAnomaliesEndpoint:
 
 
 class TestKafkaLifespan:
+    @patch("ran_anomaly_detector.server.KafkaProducer")
     @patch("ran_anomaly_detector.server.MetricsConsumer")
     @patch.multiple(
         "ran_anomaly_detector.server",
@@ -88,7 +91,7 @@ class TestKafkaLifespan:
         KAFKA_METRICS_TOPIC="ran-combined-metrics",
         KAFKA_GROUP_ID="test-group",
     )
-    def test_lifespan_starts_consumer_when_enabled(self, MetricsConsumer):
+    def test_lifespan_starts_consumer_when_enabled(self, MetricsConsumer, KafkaProducer):
         mock_consumer = MagicMock()
         MetricsConsumer.return_value = mock_consumer
 
@@ -103,17 +106,19 @@ class TestKafkaLifespan:
         mock_consumer.start.assert_called_once()
         mock_consumer.stop.assert_called_once()
 
+    @patch("ran_anomaly_detector.server.KafkaProducer")
     @patch("ran_anomaly_detector.server.MetricsConsumer")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", False)
-    def test_lifespan_skips_consumer_when_disabled(self, MetricsConsumer):
+    def test_lifespan_skips_consumer_when_disabled(self, MetricsConsumer, KafkaProducer):
         with TestClient(app):
             pass
 
         MetricsConsumer.assert_not_called()
 
+    @patch("ran_anomaly_detector.server.KafkaProducer")
     @patch("ran_anomaly_detector.server.MetricsConsumer")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", True)
-    def test_lifespan_wires_handler_into_recent_anomalies(self, MetricsConsumer):
+    def test_lifespan_wires_handler_into_recent_anomalies(self, MetricsConsumer, KafkaProducer):
         captured_handler = {}
 
         def _capture(handler, **kwargs):
@@ -134,3 +139,40 @@ class TestKafkaLifespan:
 
             response = client.get("/anomalies")
             assert response.json()["count"] == 1
+
+    @patch("ran_anomaly_detector.server.KafkaProducer")
+    @patch("ran_anomaly_detector.server.MetricsConsumer")
+    @patch.multiple(
+        "ran_anomaly_detector.server",
+        KAFKA_CONSUMER_ENABLED=True,
+        KAFKA_PRODUCER_ENABLED=True,
+        KAFKA_ANOMALIES_TOPIC="ran-anomalies",
+    )
+    def test_handler_publishes_anomalies_to_kafka(self, MetricsConsumer, KafkaProducer):
+        mock_producer = MagicMock()
+        KafkaProducer.return_value = mock_producer
+
+        captured_handler = {}
+
+        def _capture(handler, **kwargs):
+            captured_handler["handler"] = handler
+            return MagicMock()
+
+        MetricsConsumer.side_effect = _capture
+
+        with TestClient(app):
+            csv_blob = (
+                "cell_id,max_capacity,lat,lon,area_type,city,band,frequency,datetime,"
+                "ues_usage,rsrp,rsrq,sinr,throughput_mbps,latency_ms\n"
+                "42,100,33.05,-96.8,industrial,Plano,Band 29,700,2026-07-29T10:00:00Z,10,"
+                "-125.0,-15.0,5.0,50.0,20.0\n"
+            ).encode("utf-8")
+
+            captured_handler["handler"](csv_blob)
+
+            mock_producer.send.assert_called_once()
+            topic, payload = mock_producer.send.call_args[0]
+            assert topic == "ran-anomalies"
+            published = json.loads(payload)
+            assert published["cell_id"] == 42
+            assert published["anomaly_type"] == "LowRsrp"

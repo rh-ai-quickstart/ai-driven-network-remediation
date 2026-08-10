@@ -5,11 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from loguru import logger
-from telco_oran.domain.anomaly import Anomaly
-from telco_oran.domain.anomaly_detector import AnomalyDetector
-
 from ran_anomaly_detector.csv_mapper import parse_csv_records
 from ran_anomaly_detector.metrics_store import DEFAULT_HISTORY_SIZE, MetricsStore
+from telco_oran.domain.anomaly import Anomaly
+from telco_oran.domain.anomaly_detector import AnomalyDetector
 
 AnomalyOutput = dict[str, Any]
 

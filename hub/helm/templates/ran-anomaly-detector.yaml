@@ -31,6 +31,10 @@ spec:
               value: {{ .Values.ranAnomalyDetector.env.kafkaGroupId | quote }}
             - name: KAFKA_CONSUMER_ENABLED
               value: {{ .Values.ranAnomalyDetector.env.kafkaConsumerEnabled | quote }}
+            - name: KAFKA_ANOMALIES_TOPIC
+              value: {{ .Values.ranAnomalyDetector.env.kafkaAnomaliesTopic | quote }}
+            - name: KAFKA_PRODUCER_ENABLED
+              value: {{ .Values.ranAnomalyDetector.env.kafkaProducerEnabled | quote }}
             - name: HISTORY_WINDOW_SIZE
               value: {{ .Values.ranAnomalyDetector.env.historyWindowSize | quote }}
             - name: RECENT_ANOMALIES_LIMIT

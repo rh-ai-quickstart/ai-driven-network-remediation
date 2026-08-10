@@ -19,7 +19,8 @@ from agent_service.config import (
 )
 from agent_service.models import RemediationResult
 from agent_service.nodes.rag_retrieval import store_generated_playbook
-from agent_service.utils import build_launch_extra_vars, invoke_tool as _invoke_tool
+from agent_service.utils import build_launch_extra_vars
+from agent_service.utils import invoke_tool as _invoke_tool
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
@@ -276,7 +277,8 @@ async def _await_project_sync(update_id: int) -> bool:
     deadline = time.monotonic() + _SYNC_POLL_TIMEOUT
     while time.monotonic() < deadline:
         status = await _invoke_tool(
-            "get_project_update_status", {"update_id": update_id},
+            "get_project_update_status",
+            {"update_id": update_id},
         )
         sync_status = status.get("status", "")
         if sync_status == "successful":

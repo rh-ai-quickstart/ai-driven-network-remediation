@@ -481,9 +481,7 @@ class TestCommitPlaybook:
         ctx = MagicMock()
         ctx.__enter__ = MagicMock(return_value=ctx)
         ctx.__exit__ = MagicMock(return_value=False)
-        ctx.get.return_value = _mock_response(
-            json_data={"sha": "old-sha-111"}
-        )
+        ctx.get.return_value = _mock_response(json_data={"sha": "old-sha-111"})
         ctx.put.return_value = _mock_response(
             json_data={
                 "content": {"sha": "new-sha-222", "path": "playbooks/my-fix.yaml"},

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections import deque
 from contextlib import asynccontextmanager
@@ -9,12 +10,14 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from kafka import KafkaProducer
 from loguru import logger
-
 from ran_anomaly_detector.config import (
     HISTORY_WINDOW_SIZE,
+    KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
     KAFKA_CONSUMER_ENABLED,
+    KAFKA_PRODUCER_ENABLED,
     KAFKA_GROUP_ID,
     KAFKA_METRICS_TOPIC,
     RECENT_ANOMALIES_LIMIT,
@@ -29,11 +32,18 @@ def _handle_metrics_message(
     raw_value: bytes,
     service: AnomalyDetectionService,
     recent_anomalies: AnomalyBuffer,
+    producer: KafkaProducer | None = None,
+    anomalies_topic: str = "",
 ) -> None:
     anomalies = service.process_message(raw_value)
     for anomaly in anomalies:
         logger.info("RAN anomaly detected: {}", anomaly)
         recent_anomalies.append(anomaly)
+        if producer is not None:
+            try:
+                producer.send(anomalies_topic, json.dumps(anomaly).encode("utf-8"))
+            except Exception:
+                logger.exception("Failed to publish anomaly to Kafka")
 
 
 @asynccontextmanager
@@ -44,10 +54,19 @@ async def lifespan(app: FastAPI):
     app.state.detection_service = detection_service
     app.state.recent_anomalies = recent_anomalies
 
+    producer: KafkaProducer | None = None
+    if KAFKA_PRODUCER_ENABLED:
+        try:
+            producer = KafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP)
+        except Exception:
+            logger.warning("Could not connect Kafka producer, anomalies will not be published")
+
     consumer: MetricsConsumer | None = None
     if KAFKA_CONSUMER_ENABLED:
         consumer = MetricsConsumer(
-            lambda raw_value: _handle_metrics_message(raw_value, detection_service, recent_anomalies),
+            lambda raw_value: _handle_metrics_message(
+                raw_value, detection_service, recent_anomalies, producer, KAFKA_ANOMALIES_TOPIC
+            ),
             bootstrap_servers=KAFKA_BOOTSTRAP,
             topic=KAFKA_METRICS_TOPIC,
             group_id=KAFKA_GROUP_ID,
@@ -58,11 +77,14 @@ async def lifespan(app: FastAPI):
         logger.info("RAN anomaly detector Kafka consumer disabled")
 
     app.state.kafka_consumer = consumer
+    app.state.kafka_producer = producer
 
     yield
 
     if consumer is not None:
         consumer.stop()
+    if producer is not None:
+        producer.close()
 
 
 app = FastAPI(title=os.environ.get("APP_TITLE", "ran-anomaly-detector"), lifespan=lifespan)

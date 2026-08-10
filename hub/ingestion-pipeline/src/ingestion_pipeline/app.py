@@ -5,7 +5,10 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from ingestion_pipeline.clients.llamastack import VectorStoreFileContentSummary, VectorStoreSummary
+from ingestion_pipeline.clients.llamastack import (
+    VectorStoreFileContentSummary,
+    VectorStoreSummary,
+)
 from ingestion_pipeline.config import settings
 from ingestion_pipeline.service import IngestionPipelineService
 
