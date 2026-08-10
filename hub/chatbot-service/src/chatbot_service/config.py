@@ -45,6 +45,22 @@ elif _ssl_env:
 else:
     SSL_VERIFY = True
 
+# ── LLM prompts (override via env var without image rebuild) ─────
+CHAT_SYSTEM_PROMPT = os.getenv(
+    "CHAT_SYSTEM_PROMPT",
+    "You are the NOC assistant for an AI-driven network remediation system.\n"
+    "Answer the user's request directly with concise, actionable analysis.\n"
+    "When describing remediation, explain the FULL workflow:\n"
+    "  1. Event detection via Kafka\n"
+    "  2. RAG retrieval from runbook knowledge base\n"
+    "  3. LLM root-cause analysis (mention confidence %)\n"
+    "  4. Autonomous decision to remediate\n"
+    "  5. AAP job execution (mention template name and result)\n"
+    "Include specific metrics (confidence, MTTR, success rate) from the data below.\n"
+    "Do NOT repeat headers or formatting — just provide your insight.\n"
+    "Keep output under 250 words.",
+)
+
 # ── Probe targets ─────────────────────────────────────────────────
 INTEGRATION_TARGETS = [
     {"id": "mcp-openshift", "name": "MCP OpenShift", "group": "mcp", "probe_url": f"{MCP_OPENSHIFT_URL}/health"},

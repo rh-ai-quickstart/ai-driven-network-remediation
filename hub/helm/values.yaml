@@ -354,6 +354,8 @@ ingestionPipeline:
     periodSeconds: 10
 
 chatbotService:
+  prompts:
+    chatSystem: ""
   replicaCount: 1
   service:
     type: ClusterIP
@@ -406,6 +408,9 @@ frontend:
     periodSeconds: 10
 
 agentService:
+  prompts:
+    analyzeSystem: ""
+    investigateSystem: ""
   replicaCount: 1
   granite:
     # make helm-install overrides this to adnr-llm/<ADNR_LLM_ID> when LLM env is set.

@@ -78,6 +78,14 @@ spec:
             {{- end }}
             - name: SERVICENOW_CREATE_RESOLVED
               value: {{ .Values.agentService.servicenowCreateResolved | quote }}
+            {{- if .Values.agentService.prompts.analyzeSystem }}
+            - name: ANALYZE_SYSTEM_PROMPT
+              value: {{ .Values.agentService.prompts.analyzeSystem | quote }}
+            {{- end }}
+            {{- if .Values.agentService.prompts.investigateSystem }}
+            - name: INVESTIGATE_SYSTEM_PROMPT
+              value: {{ .Values.agentService.prompts.investigateSystem | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 8001

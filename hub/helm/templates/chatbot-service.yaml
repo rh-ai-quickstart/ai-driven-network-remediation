@@ -48,6 +48,10 @@ spec:
               value: {{ .Values.chatbotService.env.demoTopic | quote }}
             - name: AUDIT_TOPIC
               value: {{ .Values.chatbotService.env.auditTopic | quote }}
+            {{- if .Values.chatbotService.prompts.chatSystem }}
+            - name: CHAT_SYSTEM_PROMPT
+              value: {{ .Values.chatbotService.prompts.chatSystem | quote }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.chatbotService.livenessProbe | nindent 12 }}
           readinessProbe:

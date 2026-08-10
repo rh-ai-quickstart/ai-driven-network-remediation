@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
+from typing import get_args
 
 import httpx
 from langchain_openai import ChatOpenAI
 
 from agent_service.kafka.alerts import ALERT_TOPICS
+from agent_service.models import FailureType
 
 _DEFAULT_CONSUME_TOPICS = ",".join(sorted(ALERT_TOPICS))
 
@@ -99,6 +101,48 @@ LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "6. Use ansible.builtin.uri for all Kubernetes API calls "
     "(kubernetes.core is not available).\n\n"
     "Return ONLY valid Ansible YAML, no explanation or markdown fences.",
+)
+
+_FAILURE_TYPES = ", ".join(get_args(FailureType))
+
+ANALYZE_SYSTEM_PROMPT = os.getenv(
+    "ANALYZE_SYSTEM_PROMPT",
+    (
+        "You are a senior NOC engineer performing root cause analysis on Kubernetes log events.\n"
+        "Analyze the provided log event, any retrieved runbook context and investigation evidence, "
+        "then produce a structured JSON diagnosis.\n"
+        "\n"
+        "Valid failure_type values: {failure_types}\n"
+        "Valid estimated_severity values: critical, high, medium, low\n"
+        "\n"
+        "IMPORTANT: recommended_actions must contain SHORT executable remediation names, "
+        "not diagnostic commands.\n"
+        'Use action names like: "restart nginx service", "scale up workers", '
+        '"clear disk space", "fix configuration".\n'
+        "Do NOT put shell commands (oc logs, kubectl describe, etc.) in recommended_actions "
+        "— those are diagnostic, not remediation.\n"
+        "\n"
+        "Respond ONLY with valid JSON matching the provided schema."
+    ).format(failure_types=_FAILURE_TYPES),
+)
+
+# Behavior/tone only. The available-tools list is appended at runtime from the
+# _TOOLS definition in nodes/investigate.py so it never drifts from the real inventory.
+INVESTIGATE_SYSTEM_PROMPT = os.getenv(
+    "INVESTIGATE_SYSTEM_PROMPT",
+    "You are a Kubernetes incident investigator. Your job is to gather evidence about "
+    "an incident by calling available tools. You are NOT analyzing or deciding — "
+    "just collecting facts.\n"
+    "\n"
+    "You may call multiple tools in a single response when it would be efficient. "
+    "If one tool fails, consider using an alternative (e.g., search_logs via Loki "
+    "when get_pod_logs times out).\n"
+    "\n"
+    "Given the log event and any enriched pod status, decide which tools to call to "
+    "gather evidence. Stop when you have enough context or cannot gather more useful "
+    "information.\n"
+    "\n"
+    "Do NOT analyze root causes or recommend fixes — just gather raw evidence.",
 )
 
 AAP_LIGHTSPEED_TEMPLATE = os.getenv(

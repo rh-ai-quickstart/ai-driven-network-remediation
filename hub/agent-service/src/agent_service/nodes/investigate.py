@@ -3,7 +3,7 @@ import asyncio
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from loguru import logger
 
-from agent_service.config import get_llm
+from agent_service.config import INVESTIGATE_SYSTEM_PROMPT, get_llm
 from agent_service.models import GraphConfig
 from agent_service.utils import invoke_tool
 
@@ -86,24 +86,14 @@ _TOOLS = [
     },
 ]
 
-_SYSTEM_PROMPT = """\
-You are a Kubernetes incident investigator. Your job is to gather evidence about \
-an incident by calling available tools. You are NOT analyzing or deciding — just collecting facts.
 
-Available tools:
-- get_events(namespace, limit): Get recent Kubernetes events for a namespace
-- find_error_patterns(namespace, app, duration, top_n, tenant, regex): Find recurring error patterns in logs
-- get_pod_logs(pod_name, namespace, container, tail_lines): Get logs from a specific pod
-- search_logs(namespace, pod, container, labels, text, tenant, duration, limit): Search aggregated logs via Loki
-
-You may call multiple tools in a single response when it would be efficient. \
-If one tool fails, consider using an alternative (e.g., search_logs via Loki \
-when get_pod_logs times out).
-
-Given the log event and any enriched pod status, decide which tools to call to \
-gather evidence. Stop when you have enough context or cannot gather more useful information.
-
-Do NOT analyze root causes or recommend fixes — just gather raw evidence."""
+_TOOL_DOCS = "\n".join(
+    f"- {t['function']['name']}"
+    f"({', '.join(t['function']['parameters']['properties'])}): "
+    f"{t['function']['description']}"
+    for t in _TOOLS
+)
+_SYSTEM_PROMPT = f"{INVESTIGATE_SYSTEM_PROMPT}\n\nAvailable tools:\n{_TOOL_DOCS}"
 
 
 def _extract_events(result: dict) -> list[dict]:

@@ -1,28 +1,12 @@
 import json
 import time
-from typing import get_args
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
-from agent_service.config import get_llm
+from agent_service.config import ANALYZE_SYSTEM_PROMPT, get_llm
 from agent_service.evidence import build_evidence_prompt
-from agent_service.models import FailureType, RootCauseAnalysis
-
-_FAILURE_TYPES = ", ".join(get_args(FailureType))
-
-_SYSTEM_PROMPT = f"""\
-You are a senior NOC engineer performing root cause analysis on Kubernetes log events.
-Analyze the provided log event, any retrieved runbook context and investigation evidence, then produce a structured JSON diagnosis.
-
-Valid failure_type values: {_FAILURE_TYPES}
-Valid estimated_severity values: critical, high, medium, low
-
-IMPORTANT: recommended_actions must contain SHORT executable remediation names, not diagnostic commands.
-Use action names like: "restart nginx service", "scale up workers", "clear disk space", "fix configuration".
-Do NOT put shell commands (oc logs, kubectl describe, etc.) in recommended_actions — those are diagnostic, not remediation.
-
-Respond ONLY with valid JSON matching the provided schema."""
+from agent_service.models import RootCauseAnalysis
 
 _MAX_CONTEXT_CHARS = 5000
 
@@ -54,7 +38,7 @@ async def analyze_node(state: dict) -> dict:
         user_content += f"\n\nInvestigation evidence:\n{evidence}"
 
     messages = [
-        SystemMessage(content=_SYSTEM_PROMPT),
+        SystemMessage(content=ANALYZE_SYSTEM_PROMPT),
         HumanMessage(content=user_content),
     ]
 

@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from .config import (
+    CHAT_SYSTEM_PROMPT,
     MODEL_API_URL,
     MODEL_MAX_TOKENS,
     MODEL_NAME,
@@ -80,17 +81,7 @@ def build_chat_context(
     slo_context = _format_slo_context(integrations_data)
 
     return (
-        "You are the NOC assistant for an AI-driven network remediation system.\n"
-        "Answer the user's request directly with concise, actionable analysis.\n"
-        "When describing remediation, explain the FULL workflow:\n"
-        "  1. Event detection via Kafka\n"
-        "  2. RAG retrieval from runbook knowledge base\n"
-        "  3. LLM root-cause analysis (mention confidence %)\n"
-        "  4. Autonomous decision to remediate\n"
-        "  5. AAP job execution (mention template name and result)\n"
-        "Include specific metrics (confidence, MTTR, success rate) from the data below.\n"
-        "Do NOT repeat headers or formatting — just provide your insight.\n"
-        "Keep output under 250 words.\n\n"
+        f"{CHAT_SYSTEM_PROMPT}\n\n"
         f"Current state:\n"
         f"- Model: {MODEL_NAME}\n"
         f"- Site: {summary_data.get('site')} | Cluster: {summary_data.get('cluster')}\n"
