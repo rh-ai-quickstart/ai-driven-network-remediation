@@ -227,11 +227,11 @@ this task built the *pipeline that delivers real data to it and exposes the resu
 This task only covers **detection**. Two related pieces of work were scoped as separate, later
 issues and are intentionally not part of this:
 
-| Not yet built | What it would add |
+| Item | Status |
 |---|---|
-| **Vendor documentation RAG ingestion** (separate task) | Index vendor manuals (e.g. gNodeB documentation) into a vector store so recommended fixes can cite real documentation sections. |
-| **LLM-based root cause + recommended fix** | For each anomaly this workflow detects, ask an LLM to explain *why* it likely happened and retrieve a specific recommended fix from the ingested docs — layered **on top of**, not replacing, the rule-based detection above. |
-| **Actual remediation** | Unlike Workflow 1, nothing here executes a real-world fix (e.g. adjusting antenna tilt) — it only reports. |
+| **Vendor documentation RAG ingestion** | Not yet built — index vendor manuals into a vector store so recommended fixes can cite real documentation sections. |
+| **LLM-based root cause + recommended fix** | **Done** — see [`docs/telco-oran-rca.md`](telco-oran-rca.md). The `ran-rca-service` consumes detected anomalies, enriches them via RAG + Granite LLM, and publishes to `ran-anomalies-enriched`. |
+| **Actual remediation** | Not yet built — nothing executes a real-world fix (e.g. adjusting antenna tilt); both services only detect and report. |
 
 **Note on persistence:** anomalies are only logged and kept in a small in-memory buffer
 (`/anomalies`) — nothing is written to a database or object storage. Unlike the items above, this

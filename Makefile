@@ -12,6 +12,7 @@ CHATBOT_IMG        := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG      := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
 AGENT_IMG          := $(REGISTRY)/noc-agent-service:$(VERSION)
 RAN_ANOMALY_IMG    := $(REGISTRY)/noc-ran-anomaly-detector:$(VERSION)
+RAN_RCA_IMG        := $(REGISTRY)/noc-ran-rca-service:$(VERSION)
 FRONTEND_IMG       := $(REGISTRY)/noc-frontend:$(VERSION)
 MCP_OPENSHIFT_IMG  := $(REGISTRY)/noc-mcp-openshift:$(VERSION)
 MCP_LOKISTACK_IMG  := $(REGISTRY)/noc-mcp-lokistack:$(VERSION)
@@ -27,6 +28,9 @@ MCP_CONTEXT                 := hub/mcp-servers
 # uv path source, so its build context must be `hub/`, not its own directory.
 RAN_ANOMALY_CONTAINERFILE   := hub/ran-anomaly-detector/Containerfile
 RAN_ANOMALY_CONTEXT         := hub
+
+RAN_RCA_CONTAINERFILE       := hub/ran-rca-service/Containerfile
+RAN_RCA_CONTEXT             := hub
 
 # ── Feature flags ─────────────────────────────────────────────────
 ENABLE_HUB             ?= true
@@ -99,6 +103,7 @@ CORE_BUILD_PUSH_IMAGES := \
 	$(INGESTION_IMG) \
 	$(AGENT_IMG) \
 	$(RAN_ANOMALY_IMG) \
+	$(RAN_RCA_IMG) \
 	$(FRONTEND_IMG) \
 	$(MCP_OPENSHIFT_IMG) \
 	$(MCP_LOKISTACK_IMG) \
@@ -236,6 +241,7 @@ helm_all_args = \
 	--set image.ingestionPipeline=noc-ingestion-pipeline \
 	--set image.agentService=noc-agent-service \
 	--set image.ranAnomalyDetector=noc-ran-anomaly-detector \
+	--set image.ranRcaService=noc-ran-rca-service \
 	--set image.frontend=noc-frontend \
 	--set image.tag=$(VERSION) \
 	--set global.routes.enabled=$(ROUTES_ENABLED) \
@@ -353,7 +359,7 @@ edge-rbac-teardown:
 # ══════════════════════════════════════════════════════════════════════
 
 .PHONY: build-all-images
-build-all-images: build-chatbot-image build-agent-image build-ran-anomaly-image build-frontend-image build-mcp-images
+build-all-images: build-chatbot-image build-agent-image build-ran-anomaly-image build-ran-rca-image build-frontend-image build-mcp-images
 
 .PHONY: build-chatbot-image
 build-chatbot-image:
@@ -367,6 +373,10 @@ build-agent-image:
 .PHONY: build-ran-anomaly-image
 build-ran-anomaly-image:
 	$(CONTAINER_TOOL) build -t $(RAN_ANOMALY_IMG) --platform=$(ARCH) -f $(RAN_ANOMALY_CONTAINERFILE) $(RAN_ANOMALY_CONTEXT)
+
+.PHONY: build-ran-rca-image
+build-ran-rca-image:
+	$(CONTAINER_TOOL) build -t $(RAN_RCA_IMG) --platform=$(ARCH) -f $(RAN_RCA_CONTAINERFILE) $(RAN_RCA_CONTEXT)
 
 .PHONY: build-frontend-image
 build-frontend-image:
@@ -512,6 +522,7 @@ unit-tests:
 	cd hub/infra/servicenow-mock && uv sync --group dev && uv run pytest
 	cd hub/telco-oran && uv sync --group dev && uv run pytest
 	cd hub/ran-anomaly-detector && uv sync --group dev && uv run pytest
+	cd hub/ran-rca-service && uv sync --group dev && uv run pytest
 
 .PHONY: integration-tests
 integration-tests:

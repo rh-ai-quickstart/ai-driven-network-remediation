@@ -5,6 +5,7 @@ image:
   ingestionPipeline: hub-ingestion-pipeline
   agentService: hub-agent-service
   ranAnomalyDetector: hub-ran-anomaly-detector
+  ranRcaService: hub-ran-rca-service
   frontend: noc-frontend
   pullPolicy: Always
   tag: "0.0.1"
@@ -418,6 +419,8 @@ ranAnomalyDetector:
     kafkaMetricsTopic: "ran-combined-metrics"
     kafkaGroupId: "ran-anomaly-detector"
     kafkaConsumerEnabled: "true"
+    kafkaAnomaliesTopic: "ran-anomalies"
+    kafkaProducerEnabled: "true"
     historyWindowSize: "10"
     recentAnomaliesLimit: "100"
   service:
@@ -435,6 +438,43 @@ ranAnomalyDetector:
     httpGet:
       path: /ready
       port: 8002
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ══════════════════════════════════════════════════════════════════════
+# RAN RCA Service (Telco/O-RAN) — LLM-based root cause analysis.
+# Consumes anomalies from ran-anomaly-detector, enriches them via
+# LangGraph (RAG + Granite LLM), publishes to ran-anomalies-enriched.
+# ══════════════════════════════════════════════════════════════════════
+
+ranRcaService:
+  enabled: true
+  replicaCount: 1
+  env:
+    llamastackUrl: "http://llamastack-service:8321"
+    vectorStoreName: "telco_oran_docs"
+    graniteModelName: "ibm-granite/granite-3.3-8b-instruct"
+    kafkaBootstrap: "kafka:9092"
+    kafkaAnomaliesTopic: "ran-anomalies"
+    kafkaEnrichedTopic: "ran-anomalies-enriched"
+    kafkaGroupId: "ran-rca-service"
+    kafkaConsumerEnabled: "true"
+    recentAnomaliesLimit: "100"
+  service:
+    type: ClusterIP
+    port: 8003
+    targetPort: 8003
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8003
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8003
     initialDelaySeconds: 10
     periodSeconds: 10
 

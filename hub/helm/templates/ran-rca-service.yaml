@@ -1,0 +1,72 @@
+{{- if .Values.ranRcaService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hub.fullname" . }}-ran-rca-service
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-rca-service
+spec:
+  replicas: {{ .Values.ranRcaService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "hub.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ran-rca-service
+  template:
+    metadata:
+      labels:
+        {{- include "hub.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ran-rca-service
+    spec:
+      containers:
+        - name: ran-rca-service
+          image: "{{ .Values.image.registry }}/{{ .Values.image.ranRcaService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LLAMASTACK_URL
+              value: {{ .Values.ranRcaService.env.llamastackUrl | quote }}
+            - name: VECTOR_STORE_NAME
+              value: {{ .Values.ranRcaService.env.vectorStoreName | quote }}
+            - name: GRANITE_MODEL_NAME
+              value: {{ .Values.ranRcaService.env.graniteModelName | quote }}
+            - name: KAFKA_BOOTSTRAP
+              value: {{ .Values.ranRcaService.env.kafkaBootstrap | quote }}
+            - name: KAFKA_ANOMALIES_TOPIC
+              value: {{ .Values.ranRcaService.env.kafkaAnomaliesTopic | quote }}
+            - name: KAFKA_ENRICHED_TOPIC
+              value: {{ .Values.ranRcaService.env.kafkaEnrichedTopic | quote }}
+            - name: KAFKA_GROUP_ID
+              value: {{ .Values.ranRcaService.env.kafkaGroupId | quote }}
+            - name: KAFKA_CONSUMER_ENABLED
+              value: {{ .Values.ranRcaService.env.kafkaConsumerEnabled | quote }}
+            - name: RECENT_ANOMALIES_LIMIT
+              value: {{ .Values.ranRcaService.env.recentAnomaliesLimit | quote }}
+          ports:
+            - name: http
+              containerPort: 8003
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.ranRcaService.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.ranRcaService.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ranRcaService.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hub.fullname" . }}-ran-rca-service
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-rca-service
+spec:
+  type: {{ .Values.ranRcaService.service.type }}
+  ports:
+    - port: {{ .Values.ranRcaService.service.port }}
+      targetPort: {{ .Values.ranRcaService.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "hub.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-rca-service
+{{- end }}
