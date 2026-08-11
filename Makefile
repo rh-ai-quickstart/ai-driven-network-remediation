@@ -523,6 +523,7 @@ autorag-status:
 
 .PHONY: unit-tests
 unit-tests:
+	cd hub/shared && uv sync --group dev && uv run pytest
 	cd hub/chatbot-service && uv sync --group dev && uv run pytest tests/ -o "addopts="
 	cd hub/agent-service && uv sync --group dev && uv run pytest
 	cd hub/mcp-servers/mcp-openshift && uv sync --group dev && uv run pytest

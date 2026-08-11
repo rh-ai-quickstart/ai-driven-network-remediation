@@ -38,6 +38,35 @@ class RagClient:
         )
         return [content.text for item in response.data for content in item.content]
 
+    async def upload_file(
+        self,
+        filename: str,
+        content: bytes,
+        *,
+        mime_type: str = "text/markdown",
+        chunk_size_tokens: int = 512,
+        chunk_overlap_tokens: int = 64,
+    ) -> None:
+        vs_id = await self._resolve_vector_store_id()
+        if vs_id is None:
+            return
+
+        created_file = await self._client.files.create(
+            file=(filename, content, mime_type),
+            purpose="assistants",
+        )
+        await self._client.vector_stores.files.create(
+            vs_id,
+            file_id=created_file.id,
+            chunking_strategy={
+                "type": "static",
+                "static": {
+                    "max_chunk_size_tokens": chunk_size_tokens,
+                    "chunk_overlap_tokens": chunk_overlap_tokens,
+                },
+            },
+        )
+
     async def _resolve_vector_store_id(self) -> str | None:
         if self._vector_store_id is not None:
             return self._vector_store_id

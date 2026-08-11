@@ -30,7 +30,8 @@ ran-anomaly-detector
 
 | Variable | Default |
 |---|---|
-| `LLAMASTACK_URL` | `http://llamastack:8321` |
+| `LLAMASTACK_HOST` | `llamastack-service` |
+| `LLAMASTACK_PORT` | `8321` |
 | `VECTOR_STORE_NAME` | `telco_oran_docs` |
 | `GRANITE_MODEL_NAME` | `ibm-granite/granite-3.3-8b-instruct` |
 | `KAFKA_BOOTSTRAP` | `kafka:9092` |

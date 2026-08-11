@@ -54,25 +54,11 @@ async def store_generated_playbook(
     filename = f"{playbook_name}.md"
 
     try:
-        client = _get_rag_client()
-        vs_id = await client._resolve_vector_store_id()
-        if vs_id is None:
-            return
-
-        created_file = await client._client.files.create(
-            file=(filename, content.encode("utf-8"), "text/markdown"),
-            purpose="assistants",
-        )
-        await client._client.vector_stores.files.create(
-            vs_id,
-            file_id=created_file.id,
-            chunking_strategy={
-                "type": "static",
-                "static": {
-                    "max_chunk_size_tokens": VECTOR_STORE_CHUNK_SIZE_TOKENS,
-                    "chunk_overlap_tokens": VECTOR_STORE_CHUNK_OVERLAP_TOKENS,
-                },
-            },
+        await _get_rag_client().upload_file(
+            filename,
+            content.encode("utf-8"),
+            chunk_size_tokens=VECTOR_STORE_CHUNK_SIZE_TOKENS,
+            chunk_overlap_tokens=VECTOR_STORE_CHUNK_OVERLAP_TOKENS,
         )
         logger.info(f"Stored generated playbook '{playbook_name}' in vector store")
     except Exception:

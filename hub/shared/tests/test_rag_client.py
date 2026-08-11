@@ -100,6 +100,53 @@ class TestVectorStoreResolution:
         mock_llamastack.vector_stores.list.assert_awaited_once()
 
 
+class TestUploadFile:
+    @pytest.mark.asyncio
+    async def test_uploads_and_attaches_file(self, rag_client, mock_llamastack):
+        rag_client._vector_store_id = "vs-123"
+        mock_file = MagicMock()
+        mock_file.id = "file-abc"
+        mock_llamastack.files.create = AsyncMock(return_value=mock_file)
+        mock_llamastack.vector_stores.files.create = AsyncMock()
+
+        await rag_client.upload_file("test.md", b"hello world")
+
+        mock_llamastack.files.create.assert_awaited_once()
+        file_arg = mock_llamastack.files.create.call_args.kwargs["file"]
+        assert file_arg[0] == "test.md"
+        assert file_arg[1] == b"hello world"
+
+        mock_llamastack.vector_stores.files.create.assert_awaited_once()
+        call = mock_llamastack.vector_stores.files.create.call_args
+        assert call[0][0] == "vs-123"
+        assert call.kwargs["file_id"] == "file-abc"
+
+    @pytest.mark.asyncio
+    async def test_skips_when_vector_store_not_found(self, rag_client, mock_llamastack):
+        mock_llamastack.files.create = AsyncMock()
+
+        await rag_client.upload_file("test.md", b"content")
+
+        mock_llamastack.files.create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_passes_chunking_strategy(self, rag_client, mock_llamastack):
+        rag_client._vector_store_id = "vs-123"
+        mock_file = MagicMock()
+        mock_file.id = "file-abc"
+        mock_llamastack.files.create = AsyncMock(return_value=mock_file)
+        mock_llamastack.vector_stores.files.create = AsyncMock()
+
+        await rag_client.upload_file(
+            "test.md", b"content", chunk_size_tokens=1024, chunk_overlap_tokens=128
+        )
+
+        call = mock_llamastack.vector_stores.files.create.call_args
+        strategy = call.kwargs["chunking_strategy"]
+        assert strategy["static"]["max_chunk_size_tokens"] == 1024
+        assert strategy["static"]["chunk_overlap_tokens"] == 128
+
+
 class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_search_error_propagates(self, rag_client, mock_llamastack):

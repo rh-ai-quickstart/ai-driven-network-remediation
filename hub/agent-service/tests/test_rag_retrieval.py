@@ -76,12 +76,8 @@ class TestRagErrorHandling:
 class TestStoreGeneratedPlaybook:
     @pytest.mark.asyncio
     async def test_stores_composite_document(self):
-        mock_file = MagicMock()
-        mock_file.id = "file-abc"
         mock_rag = MagicMock()
-        mock_rag._resolve_vector_store_id = AsyncMock(return_value="vs-123")
-        mock_rag._client.files.create = AsyncMock(return_value=mock_file)
-        mock_rag._client.vector_stores.files.create = AsyncMock()
+        mock_rag.upload_file = AsyncMock()
 
         with _patch_rag_client(mock_rag):
             from agent_service.nodes.rag_retrieval import store_generated_playbook
@@ -93,8 +89,8 @@ class TestStoreGeneratedPlaybook:
                 summary="Container killed by OOM",
             )
 
-        file_arg = mock_rag._client.files.create.call_args.kwargs["file"]
-        content = file_arg[1]
+        call = mock_rag.upload_file.call_args
+        content = call[0][1]
         expected = (
             "Failure: OOMKilled\n"
             "Summary: Container killed by OOM\n"
@@ -105,12 +101,8 @@ class TestStoreGeneratedPlaybook:
 
     @pytest.mark.asyncio
     async def test_uses_playbook_name_as_filename(self):
-        mock_file = MagicMock()
-        mock_file.id = "file-abc"
         mock_rag = MagicMock()
-        mock_rag._resolve_vector_store_id = AsyncMock(return_value="vs-123")
-        mock_rag._client.files.create = AsyncMock(return_value=mock_file)
-        mock_rag._client.vector_stores.files.create = AsyncMock()
+        mock_rag.upload_file = AsyncMock()
 
         with _patch_rag_client(mock_rag):
             from agent_service.nodes.rag_retrieval import store_generated_playbook
@@ -122,17 +114,13 @@ class TestStoreGeneratedPlaybook:
                 summary="Pod crashing",
             )
 
-        file_arg = mock_rag._client.files.create.call_args.kwargs["file"]
-        assert file_arg[0] == "remediate-crash.md"
+        call = mock_rag.upload_file.call_args
+        assert call[0][0] == "remediate-crash.md"
 
     @pytest.mark.asyncio
-    async def test_attaches_file_to_vector_store(self):
-        mock_file = MagicMock()
-        mock_file.id = "file-abc"
+    async def test_passes_chunking_params(self):
         mock_rag = MagicMock()
-        mock_rag._resolve_vector_store_id = AsyncMock(return_value="vs-123")
-        mock_rag._client.files.create = AsyncMock(return_value=mock_file)
-        mock_rag._client.vector_stores.files.create = AsyncMock()
+        mock_rag.upload_file = AsyncMock()
 
         with _patch_rag_client(mock_rag):
             from agent_service.nodes.rag_retrieval import store_generated_playbook
@@ -144,16 +132,15 @@ class TestStoreGeneratedPlaybook:
                 summary="DNS resolution failed",
             )
 
-        mock_rag._client.vector_stores.files.create.assert_awaited_once()
-        call = mock_rag._client.vector_stores.files.create.call_args
-        assert call[0][0] == "vs-123"
-        assert call.kwargs["file_id"] == "file-abc"
+        mock_rag.upload_file.assert_awaited_once()
+        call = mock_rag.upload_file.call_args
+        assert "chunk_size_tokens" in call.kwargs
+        assert "chunk_overlap_tokens" in call.kwargs
 
     @pytest.mark.asyncio
     async def test_logs_error_on_client_failure(self):
         mock_rag = MagicMock()
-        mock_rag._resolve_vector_store_id = AsyncMock(return_value="vs-123")
-        mock_rag._client.files.create = AsyncMock(
+        mock_rag.upload_file = AsyncMock(
             side_effect=ConnectionError("upload failed"),
         )
 
@@ -166,20 +153,3 @@ class TestStoreGeneratedPlaybook:
                 failure_type="CrashLoop",
                 summary="Pod crashing",
             )
-
-    @pytest.mark.asyncio
-    async def test_skips_when_vector_store_not_found(self):
-        mock_rag = MagicMock()
-        mock_rag._resolve_vector_store_id = AsyncMock(return_value=None)
-
-        with _patch_rag_client(mock_rag):
-            from agent_service.nodes.rag_retrieval import store_generated_playbook
-
-            await store_generated_playbook(
-                playbook_name="fix-net",
-                playbook_yaml="tasks: []",
-                failure_type="NetworkFailure",
-                summary="Network unreachable",
-            )
-
-        mock_rag._client.files.create.assert_not_called()

@@ -12,6 +12,7 @@ dependencies = [
     "telco-oran",
     "click>=8.1.0",
     "fastapi>=0.115",
+    "kafka-python-ng>=2.2",
     "loguru>=0.7.0",
     "pydantic>=2.0.0",
     "uvicorn>=0.34",
