@@ -9,6 +9,7 @@ from mcp_openshift.tools import (
     get_events,
     get_namespaces,
     get_pod_logs,
+    get_pod_spec,
     get_pods,
     patch_deployment_memory,
     rollout_restart,
@@ -372,6 +373,87 @@ class TestPatchDeploymentMemory:
         }
         result = patch_deployment_memory(deployment="no-limits", memory_limit="512Mi")
         assert result["success"] is False
+
+
+@patch("mcp_openshift.tools._run_oc")
+class TestGetPodSpec:
+    """Tests for the get_pod_spec tool."""
+
+    def test_exact_match(self, mock_oc):
+        oc_output = json.dumps(
+            {
+                "apiVersion": "v1",
+                "kind": "Pod",
+                "metadata": {"name": "nginx-abc", "namespace": "prod"},
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "nginx",
+                            "image": "nginx:1.25",
+                            "resources": {"limits": {"cpu": "500m", "memory": "256Mi"}},
+                        }
+                    ]
+                },
+            }
+        )
+        mock_oc.return_value = {
+            "stdout": oc_output,
+            "stderr": "",
+            "returncode": 0,
+            "success": True,
+        }
+        result = get_pod_spec(name="nginx-abc", namespace="prod")
+        assert result["success"] is True
+        assert result["name"] == "nginx-abc"
+        assert result["namespace"] == "prod"
+        assert result["spec"]["containers"][0]["image"] == "nginx:1.25"
+        assert result["error"] is None
+        cmd = mock_oc.call_args[0][0]
+        assert cmd[:3] == ["get", "pod", "nginx-abc"]
+        assert "-o" in cmd
+        assert "json" in cmd
+
+    def test_prefix_fallback(self, mock_oc):
+        pod_list = json.dumps(
+            {
+                "items": [
+                    {
+                        "metadata": {"name": "myapp-6b7f8c-x2k9z"},
+                        "spec": {"containers": [{"name": "myapp", "resources": {"limits": {"cpu": "500m"}}}]},
+                    },
+                ]
+            }
+        )
+        mock_oc.side_effect = [
+            {"stdout": "", "stderr": "not found", "returncode": 1, "success": False},
+            {"stdout": pod_list, "stderr": "", "returncode": 0, "success": True},
+        ]
+        result = get_pod_spec(name="myapp", namespace="prod")
+        assert result["success"] is True
+        assert result["name"] == "myapp-6b7f8c-x2k9z"
+        assert result["spec"]["containers"][0]["resources"]["limits"]["cpu"] == "500m"
+
+    def test_not_found(self, mock_oc):
+        mock_oc.side_effect = [
+            {"stdout": "", "stderr": 'pods "gone" not found', "returncode": 1, "success": False},
+            {"stdout": json.dumps({"items": []}), "stderr": "", "returncode": 0, "success": True},
+        ]
+        result = get_pod_spec(name="gone", namespace="prod")
+        assert result["success"] is False
+        assert result["error"] is not None
+        assert result["spec"] == {}
+
+    def test_invalid_json_from_oc(self, mock_oc):
+        mock_oc.return_value = {
+            "stdout": "not valid json {",
+            "stderr": "",
+            "returncode": 0,
+            "success": True,
+        }
+        result = get_pod_spec(name="broken", namespace="prod")
+        assert result["success"] is False
+        assert result["error"] is not None
+        assert result["spec"] == {}
 
 
 @patch("mcp_openshift.tools._run_oc")

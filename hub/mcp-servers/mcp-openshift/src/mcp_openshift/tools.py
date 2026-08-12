@@ -250,6 +250,82 @@ def patch_deployment_memory(
 
 
 @mcp.tool()
+def get_pod_spec(
+    name: str,
+    namespace: str,
+    edge_site_id: str = "",
+) -> dict:
+    """
+    Get the structured spec for a pod as JSON. Includes container resource
+    limits, requests, probes, env vars, and other spec fields.
+
+    If an exact pod name match is not found, falls back to prefix matching
+    (e.g. "myapp" matches "myapp-6b7f8c9d4-x2k9z").
+
+    Args:
+        name:      Pod name (exact or prefix)
+        namespace: Namespace
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
+
+    Returns:
+        Dict with parsed spec and success flag.
+    """
+    kc = _kubeconfig_for(edge_site_id)
+    result = _run_oc(["get", "pod", name, "-n", namespace, "-o", "json"], kubeconfig=kc)
+    if result["success"]:
+        return _parse_pod_spec(name, namespace, result["stdout"])
+
+    list_result = _run_oc(
+        ["get", "pods", "-n", namespace, "-o", "json"],
+        kubeconfig=kc,
+    )
+    if not list_result["success"]:
+        return _pod_spec_error(name, namespace, result["stderr"])
+
+    try:
+        pods = json.loads(list_result["stdout"])
+    except json.JSONDecodeError as exc:
+        return _pod_spec_error(name, namespace, f"JSON parse error: {exc}")
+
+    for pod in pods.get("items", []):
+        pod_name = pod.get("metadata", {}).get("name", "")
+        if pod_name.startswith(name):
+            return {
+                "name": pod_name,
+                "namespace": namespace,
+                "spec": pod.get("spec", {}),
+                "success": True,
+                "error": None,
+            }
+
+    return _pod_spec_error(name, namespace, f"no pod matching '{name}'")
+
+
+def _parse_pod_spec(name: str, namespace: str, stdout: str) -> dict:
+    try:
+        parsed = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return _pod_spec_error(name, namespace, f"JSON parse error: {exc}")
+    return {
+        "name": name,
+        "namespace": namespace,
+        "spec": parsed.get("spec", parsed),
+        "success": True,
+        "error": None,
+    }
+
+
+def _pod_spec_error(name: str, namespace: str, error: str) -> dict:
+    return {
+        "name": name,
+        "namespace": namespace,
+        "spec": {},
+        "success": False,
+        "error": error,
+    }
+
+
+@mcp.tool()
 def get_pod_logs(
     pod_name: str,
     namespace: str = DEFAULT_NAMESPACE,
