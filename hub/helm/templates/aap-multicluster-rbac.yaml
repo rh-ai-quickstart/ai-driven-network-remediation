@@ -1,0 +1,33 @@
+{{- /*
+  Hub-spoke multicluster only (silently skipped for other topologies): grant the
+  AAP integration identity spoke API access through ACM cluster-proxy. Proxy auth
+  arrives as User cluster:hub:system:serviceaccount:<ns>:<sa> (bind that User, not
+  a spoke ServiceAccount subject). Mirrors the mcp-noc-openshift ClusterPermission
+  in multi-cluster-creds-job.yaml (same pattern, broader resource scope).
+*/}}
+{{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 0) .Values.aapCredential.enabled .Values.aapCredential.multicluster.enabled }}
+{{- $saNs := .Values.aapCredential.multicluster.hubServiceAccountNamespace }}
+{{- $saName := .Values.aapCredential.multicluster.hubServiceAccountName }}
+{{- range .Values.topology.spokes }}
+---
+apiVersion: rbac.open-cluster-management.io/v1alpha1
+kind: ClusterPermission
+metadata:
+  name: {{ include "hub.fullname" $ }}-aap-integration
+  namespace: {{ .name }}
+  labels:
+    {{- include "hub.labels" $ | nindent 4 }}
+spec:
+  clusterRole:
+    rules:
+      # Broad read+patch: Lightspeed generates patches for arbitrary kinds at runtime.
+      - apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+        resources: ["*"]
+        verbs: ["get", "list", "patch"]
+  clusterRoleBinding:
+    subject:
+      apiGroup: rbac.authorization.k8s.io
+      kind: User
+      name: cluster:hub:system:serviceaccount:{{ $saNs }}:{{ $saName }}
+{{- end }}
+{{- end }}

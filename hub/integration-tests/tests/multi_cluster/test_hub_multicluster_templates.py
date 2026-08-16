@@ -110,6 +110,39 @@ def test_hub_spoke_renders_multi_cluster_creds_job():
     assert "templates/edge-rbac-sa.yaml" not in rendered
 
 
+def test_aap_multicluster_rbac_renders_per_spoke():
+    values = _render_spokes_values(2)
+    try:
+        rendered = _helm_template(
+            values,
+            "aapCredential.enabled=true",
+            "aapCredential.multicluster.enabled=true",
+        )
+    finally:
+        values.unlink(missing_ok=True)
+
+    assert "templates/aap-multicluster-rbac.yaml" in rendered
+    assert rendered.count("kind: ClusterPermission") >= 2
+    assert "cluster:hub:system:serviceaccount:aap:aap-integration-serviceaccount" in rendered
+    assert "edge-site-01" in rendered
+    assert "edge-site-02" in rendered
+    assert 'kind: User' in rendered
+
+
+def test_aap_multicluster_rbac_skipped_without_hub_spoke():
+    values = _render_spokes_values(1)
+    try:
+        rendered = _helm_template(
+            values,
+            "aapCredential.enabled=true",
+            "aapCredential.multicluster.enabled=true",
+        )
+    finally:
+        values.unlink(missing_ok=True)
+
+    assert "templates/aap-multicluster-rbac.yaml" not in rendered
+
+
 def test_single_cluster_omits_multi_cluster_creds_job():
     values = _render_spokes_values(1)
     try:

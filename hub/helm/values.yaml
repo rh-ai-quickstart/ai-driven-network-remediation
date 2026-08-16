@@ -312,13 +312,18 @@ aapCredential:
   # RHACM multicluster: route cluster access through ACM hub proxy.
   # Creates an AAP Custom Credential Type + credential instead of a per-cluster SA.
   # Prerequisites (user-managed): RHACM 2.9+, ManagedServiceAccount addon,
-  # hub ServiceAccount with multicluster RBAC, cluster-proxy route.
+  # cluster-proxy route. Spoke RBAC for the hub SA is provisioned by the chart
+  # (aap-multicluster-rbac.yaml).
   multicluster:
     enabled: false
     clusterProxyUrl: ""
     hubToken: ""
     credentialTypeName: "RHACM Cluster Proxy"
     credentialName: "rhacm-hub"
+    # Identity whose token is supplied in hubToken; granted spoke RBAC via a
+    # per-spoke ClusterPermission (aap-multicluster-rbac.yaml).
+    hubServiceAccountNamespace: "aap"
+    hubServiceAccountName: "aap-integration-serviceaccount"
 
 # ══════════════════════════════════════════════════════════════════════
 # Hub application services
