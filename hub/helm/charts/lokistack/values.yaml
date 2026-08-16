@@ -158,7 +158,7 @@ mcpLokistack:
 
 # ClusterLogForwarder — collects pod logs and forwards them to LokiStack.
 # Runs in the openshift-logging namespace (where the log collector DaemonSet lives).
-# The logcollector ServiceAccount and its RBAC are managed by the Loki Operator.
+# The logcollector ServiceAccount and RBAC are created by logcollector-rbac.yaml.
 clusterLogForwarder:
   enabled: true
   name: instance

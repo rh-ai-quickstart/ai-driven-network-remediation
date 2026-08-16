@@ -1,0 +1,55 @@
+{{- if .Values.clusterLogForwarder.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+  namespace: {{ .Values.clusterLogForwarder.namespace }}
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.clusterLogForwarder.serviceAccountName }}-application
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-application-logs
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    namespace: {{ .Values.clusterLogForwarder.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.clusterLogForwarder.serviceAccountName }}-infrastructure
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: collect-infrastructure-logs
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    namespace: {{ .Values.clusterLogForwarder.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.clusterLogForwarder.serviceAccountName }}-logs-writer
+  labels:
+    {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: logging-collector-logs-writer
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    namespace: {{ .Values.clusterLogForwarder.namespace }}
+{{- end }}

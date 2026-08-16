@@ -143,6 +143,21 @@ def test_aap_multicluster_rbac_skipped_without_hub_spoke():
     assert "templates/aap-multicluster-rbac.yaml" not in rendered
 
 
+def test_lokistack_logcollector_rbac():
+    values = _render_spokes_values(1)
+    try:
+        rendered = _helm_template(values, "lokistack.enabled=true")
+    finally:
+        values.unlink(missing_ok=True)
+
+    assert "kind: ServiceAccount" in rendered
+    assert "name: logcollector" in rendered
+    assert "collect-application-logs" in rendered
+    assert "collect-infrastructure-logs" in rendered
+    assert "logging-collector-logs-writer" in rendered
+    assert rendered.count("kind: ClusterRoleBinding") >= 3
+
+
 def test_single_cluster_omits_multi_cluster_creds_job():
     values = _render_spokes_values(1)
     try:
