@@ -21,6 +21,7 @@ INCIDENT_STATE_FIELDS = {
     "pod_status",
     "cluster_events",
     "pod_logs",
+    "resource_specs",
     "log_search_results",
     "recent_errors",
     "slack_thread_ts",

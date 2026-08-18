@@ -142,6 +142,11 @@ INVESTIGATE_SYSTEM_PROMPT = os.getenv(
     "gather evidence. Stop when you have enough context or cannot gather more useful "
     "information.\n"
     "\n"
+    "If the evidence suggests cascading failures across services, consider "
+    "investigating dependent services using get_pod_spec, search_logs, or "
+    "find_error_patterns to check their health and resource configuration. "
+    "Prioritize investigating services you have NOT yet examined.\n"
+    "\n"
     "Do NOT analyze root causes or recommend fixes — just gather raw evidence.",
 )
 

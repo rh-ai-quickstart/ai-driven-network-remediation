@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 from helpers import make_state
 
 from agent_service.models import GraphConfig
-from agent_service.nodes.investigate import make_investigate_node
+from agent_service.nodes.investigate import _merge_tool_result, make_investigate_node
 
 
 def _llm_no_tool_call():
@@ -293,3 +293,61 @@ class TestInvestigateNode:
         assert result["pod_logs"] == ""
         assert result["log_search_results"] == _STUB_LOG_SEARCH
         assert mock_llm.ainvoke.call_count == 3
+
+
+def _empty_evidence():
+    """Return a fresh evidence dict matching the structure in investigate_node."""
+    return {
+        "cluster_events": [],
+        "recent_errors": [],
+        "pod_logs": "",
+        "resource_specs": "",
+        "log_search_results": [],
+    }
+
+
+_STUB_POD_SPEC = {
+    "name": "myapp-6b7f8c-x2k9z",
+    "namespace": "prod",
+    "spec": {
+        "containers": [
+            {
+                "name": "myapp",
+                "image": "myapp:1.0",
+                "resources": {"limits": {"cpu": "500m", "memory": "256Mi"}},
+            }
+        ]
+    },
+    "success": True,
+    "error": None,
+}
+
+
+class TestMergeToolResult:
+    """Tests for _merge_tool_result with the get_pod_spec branch."""
+
+    def test_get_pod_spec_stores_spec_data(self):
+        evidence = _empty_evidence()
+        _merge_tool_result("get_pod_spec", _STUB_POD_SPEC, evidence)
+        assert evidence["resource_specs"] != ""
+        assert "myapp" in evidence["resource_specs"]
+        assert "500m" in evidence["resource_specs"]
+
+    def test_get_pod_spec_error_leaves_evidence_unchanged(self):
+        evidence = _empty_evidence()
+        error_result = {
+            "name": "gone",
+            "namespace": "prod",
+            "spec": {},
+            "success": False,
+            "error": "not found",
+        }
+        _merge_tool_result("get_pod_spec", error_result, evidence)
+        assert evidence["resource_specs"] == ""
+
+    def test_get_pod_spec_appends_to_existing(self):
+        evidence = _empty_evidence()
+        evidence["resource_specs"] = "Pod: existing-pod\n  limits: cpu: 100m"
+        _merge_tool_result("get_pod_spec", _STUB_POD_SPEC, evidence)
+        assert "existing-pod" in evidence["resource_specs"]
+        assert "myapp" in evidence["resource_specs"]

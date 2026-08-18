@@ -84,6 +84,25 @@ _TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pod_spec",
+            "description": (
+                "Get structured spec for a pod as JSON. Includes container "
+                "resource limits, requests, probes, and env vars. Supports "
+                "prefix matching (e.g. 'myapp' finds 'myapp-6b7f8c-x2k9z')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Pod name (exact or prefix)"},
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                },
+                "required": ["name", "namespace"],
+            },
+        },
+    },
 ]
 
 
@@ -112,6 +131,22 @@ def _pin_tool_args(tool_args: dict, log_event) -> dict:
     return pinned
 
 
+def _format_pod_resources(tool_result: dict) -> str:
+    """Format a pod's container limits/requests into readable text for evidence."""
+    name = tool_result.get("name", "unknown")
+    spec = tool_result.get("spec", {})
+    lines = [f"Pod: {name}"]
+    for container in spec.get("containers", []):
+        lines.append(f"  Container: {container.get('name', '?')}")
+        resources = container.get("resources", {})
+        for section in ("limits", "requests"):
+            vals = resources.get(section, {})
+            if vals:
+                parts = ", ".join(f"{k}: {v}" for k, v in vals.items())
+                lines.append(f"    {section}: {parts}")
+    return "\n".join(lines)
+
+
 def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict) -> None:
     if tool_result.get("error"):
         return
@@ -126,6 +161,10 @@ def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict) -> Non
             evidence["pod_logs"] = logs if not prev else prev + "\n" + logs
     elif tool_name == "search_logs":
         evidence["log_search_results"].extend(tool_result.get("logs", []))
+    elif tool_name == "get_pod_spec":
+        formatted = _format_pod_resources(tool_result)
+        prev = evidence["resource_specs"]
+        evidence["resource_specs"] = formatted if not prev else prev + "\n" + formatted
 
 
 def make_investigate_node(config: GraphConfig):
@@ -147,6 +186,7 @@ def make_investigate_node(config: GraphConfig):
             "cluster_events": list(state.cluster_events),
             "recent_errors": list(state.recent_errors),
             "pod_logs": state.pod_logs,
+            "resource_specs": state.resource_specs,
             "log_search_results": list(state.log_search_results),
         }
 

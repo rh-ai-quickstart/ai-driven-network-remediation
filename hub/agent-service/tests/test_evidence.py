@@ -76,3 +76,11 @@ class TestBuildEvidencePrompt:
         assert "q-0" in result
         assert "q-19" in result
         assert "q-20" not in result
+
+    def test_resource_specs_included_when_populated(self):
+        spec_text = "Deployment/myapp\n  replicas: 3\n  cpu: 500m"
+        state = make_state(resource_specs=spec_text)
+        result = build_evidence_prompt(state)
+        assert "Resource Configuration" in result
+        assert "replicas: 3" in result
+        assert "cpu: 500m" in result

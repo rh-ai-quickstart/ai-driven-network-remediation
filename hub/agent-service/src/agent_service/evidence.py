@@ -13,6 +13,9 @@ _JSON_SECTIONS = [
 def build_evidence_prompt(state) -> str:
     sections = []
 
+    if state.resource_specs:
+        sections.append("## Resource Configuration\n" + state.resource_specs)
+
     for attr, heading, limit in _JSON_SECTIONS:
         data = getattr(state, attr)
         if data:

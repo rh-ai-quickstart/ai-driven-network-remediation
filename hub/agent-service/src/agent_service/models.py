@@ -93,6 +93,7 @@ class IncidentState(BaseModel):
     pod_status: dict = {}
     cluster_events: list[dict] = []
     pod_logs: str = ""
+    resource_specs: str = ""
     log_search_results: list[dict] = []
     recent_errors: list[dict] = []
     slack_thread_ts: str = ""
