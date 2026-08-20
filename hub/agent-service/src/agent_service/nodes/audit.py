@@ -66,6 +66,8 @@ def build_audit_payload(state) -> dict[str, Any]:
         payload["servicenow_ticket"] = state.servicenow_ticket
     if aap_job_id:
         payload["aap_job_id"] = aap_job_id
+    if state.fast_path_actuation:
+        payload["fast_path_actuation"] = state.fast_path_actuation
     return payload
 
 

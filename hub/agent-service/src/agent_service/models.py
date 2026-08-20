@@ -99,5 +99,6 @@ class IncidentState(BaseModel):
     slack_thread_ts: str = ""
     servicenow_ticket: str = ""
     langfuse_trace_id: str = ""
+    fast_path_actuation: str = ""
     total_duration_ms: float = 0.0
     error_message: str = ""

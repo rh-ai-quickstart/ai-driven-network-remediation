@@ -4,9 +4,15 @@ import time
 from loguru import logger
 
 from agent_service.config import (
+    FAST_PATH_LAST_HEAL_ANNOTATION,
     POLL_INTERVAL_SECONDS,
     TERMINAL_STATUSES,
     now_iso,
+)
+from agent_service.fast_path import (
+    should_check_fast_path,
+    spoke_fast_path_recent,
+    target_deployment_name,
 )
 from agent_service.models import GraphConfig, RemediationResult
 from agent_service.utils import build_launch_extra_vars
@@ -129,6 +135,33 @@ def make_remediate_node(config: GraphConfig):
                     timestamp=now_iso(),
                 ),
             }
+
+        log_event = state.log_event
+        if log_event and should_check_fast_path(rca.failure_type):
+            deployment = target_deployment_name(log_event.pod_name)
+            if await spoke_fast_path_recent(
+                namespace=log_event.namespace,
+                deployment=deployment,
+                edge_site_id=log_event.edge_site_id,
+            ):
+                summary = (
+                    f"Spoke fast-path healer already restarted {deployment} "
+                    f"(annotation {FAST_PATH_LAST_HEAL_ANNOTATION} within cooldown)"
+                )
+                logger.info(summary)
+                return {
+                    "should_retry": False,
+                    "fast_path_actuation": "spoke",
+                    "remediation_result": RemediationResult(
+                        action_taken="fast_path_skip",
+                        tool_used="spoke",
+                        success=True,
+                        job_id="",
+                        duration_seconds=0,
+                        output_summary=summary,
+                        timestamp=now_iso(),
+                    ),
+                }
 
         try:
             launch = await _launch_job(template, state.log_event)

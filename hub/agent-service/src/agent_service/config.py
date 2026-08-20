@@ -188,3 +188,9 @@ POLL_INTERVAL_SECONDS = 5
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# Spoke edge fast-path healer coordination
+FAST_PATH_LAST_HEAL_ANNOTATION = "adnr.io/fast-path-last-heal"
+FAST_PATH_COOLDOWN_SECONDS = int(os.getenv("FAST_PATH_COOLDOWN_SECONDS", "300"))
+FAST_PATH_DEPLOYMENT = os.getenv("FAST_PATH_DEPLOYMENT", "edge-nginx")

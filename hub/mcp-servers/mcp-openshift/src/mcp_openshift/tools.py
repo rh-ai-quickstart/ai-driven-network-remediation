@@ -350,6 +350,44 @@ def _pod_spec_error(name: str, namespace: str, error: str) -> dict:
 
 
 @mcp.tool()
+def get_deployment(
+    deployment: str,
+    namespace: str = DEFAULT_NAMESPACE,
+    edge_site_id: str = "",
+) -> dict:
+    """
+    Get a deployment's metadata and annotations.
+
+    Args:
+        deployment: Deployment name
+        namespace: Namespace (default: dark-noc-edge)
+        edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
+
+    Returns:
+        Dict with deployment name, namespace, and annotations
+    """
+    result = _run_oc(
+        ["get", "deployment", deployment, "-n", namespace, "-o", "json"],
+        kubeconfig=_kubeconfig_for(edge_site_id),
+    )
+
+    if not result["success"]:
+        return {"success": False, "error": result["stderr"], "annotations": {}}
+
+    try:
+        data = json.loads(result["stdout"])
+        return {
+            "success": True,
+            "deployment": deployment,
+            "namespace": namespace,
+            "annotations": data.get("metadata", {}).get("annotations") or {},
+        }
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"Failed to parse deployment output: {e}", "annotations": {}}
+
+
+
+@mcp.tool()
 def get_pod_logs(
     pod_name: str,
     namespace: str = DEFAULT_NAMESPACE,

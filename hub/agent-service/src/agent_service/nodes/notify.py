@@ -41,6 +41,8 @@ def _build_title(rca, log_event, severity: str) -> str:
 
 def _resolve_status(decision, rem) -> tuple[str, str]:
     if decision == "remediate" and rem:
+        if rem.action_taken == "fast_path_skip":
+            return "Resolved", rem.output_summary
         if rem.success:
             return (
                 "Resolved",
