@@ -1,0 +1,22 @@
+FROM python:3.13-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+WORKDIR /app
+COPY fast-path-healer/pyproject.toml fast-path-healer/uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable --no-dev
+COPY fast-path-healer/ /app/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --no-dev
+
+FROM python:3.13-slim
+RUN useradd --create-home --uid 1001 app
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+USER 1001
+WORKDIR /app
+CMD ["edge-fast-path-watcher"]
