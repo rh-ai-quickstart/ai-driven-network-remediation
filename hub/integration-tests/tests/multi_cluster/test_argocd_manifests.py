@@ -29,6 +29,7 @@ def test_appproject_restricts_edge_destinations_and_resources():
     assert "kind: ClusterRoleBinding" in text
     assert "kind: ClusterLogForwarder" in text
     assert "kind: Deployment" in text
+    assert "kind: NetworkPolicy" in text
     assert "sourceRepos:" in text
     assert 'name: "*"' in text
 

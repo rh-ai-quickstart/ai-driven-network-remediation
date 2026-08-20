@@ -151,3 +151,17 @@ def test_kafka_external_host_required_when_clf_enabled():
     )
     assert result.returncode != 0
     assert "kafka.externalHost" in (result.stderr + result.stdout)
+
+
+def test_fast_path_healer_enabled_renders_runner_and_watcher():
+    rendered = _helm_template("fastPathHealer.enabled=true")
+    assert "name: edge-fast-path-runner" in rendered
+    assert "name: edge-fast-path-watcher" in rendered
+    assert "EDGE_SITE_ID" in rendered
+    assert 'value: "edge-01"' in rendered
+    assert "kind: NetworkPolicy" in rendered
+
+
+def test_fast_path_healer_disabled_renders_no_runner():
+    rendered = _helm_template("fastPathHealer.enabled=false")
+    assert "edge-fast-path-runner" not in rendered

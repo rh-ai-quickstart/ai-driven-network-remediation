@@ -247,6 +247,15 @@ oc get secret kafka-client-certs -n dark-noc-edge
 
 Expect nginx Ready, ClusterLogForwarder Running, and CLF labels with `edge_site_id: edge-01` / `edge-02`.
 
+When `fastPathHealer.enabled=true` (default in the edge chart), also confirm:
+
+```bash
+oc get deploy -n dark-noc-edge | rg 'edge-nginx|fast-path'
+oc logs -n dark-noc-edge deploy/edge-fast-path-runner --tail=20
+```
+
+See [edge-fast-path-healer.md](edge-fast-path-healer.md) for the OOM dual-path demo checklist.
+
 Hub MCP secrets (per spoke):
 
 ```bash
