@@ -1,0 +1,78 @@
+{{- if .Values.fastPathHealer.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: edge-fast-path-runner
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+    app: edge-fast-path-runner
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: edge-fast-path-watcher
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+    app: edge-fast-path-watcher
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: edge-fast-path-runner
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: edge-fast-path-watcher
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: edge-fast-path-runner
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: edge-fast-path-runner
+subjects:
+  - kind: ServiceAccount
+    name: edge-fast-path-runner
+    namespace: {{ include "adnr-edge.namespace" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: edge-fast-path-watcher
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: edge-fast-path-watcher
+subjects:
+  - kind: ServiceAccount
+    name: edge-fast-path-watcher
+    namespace: {{ include "adnr-edge.namespace" . }}
+{{- end }}

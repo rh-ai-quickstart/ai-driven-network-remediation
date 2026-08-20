@@ -45,5 +45,11 @@ spec:
       kind: Deployment
     - group: observability.openshift.io
       kind: ClusterLogForwarder
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+    - group: rbac.authorization.k8s.io
+      kind: Role
+    - group: rbac.authorization.k8s.io
+      kind: RoleBinding
   orphanedResources:
     warn: false

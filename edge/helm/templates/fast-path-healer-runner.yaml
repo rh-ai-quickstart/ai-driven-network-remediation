@@ -1,0 +1,91 @@
+{{- if .Values.fastPathHealer.enabled }}
+{{- $imageTag := .Values.fastPathHealer.image.tag | default .Chart.AppVersion }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-fast-path-runner
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+    app: edge-fast-path-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edge-fast-path-runner
+      {{- include "adnr-edge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: edge-fast-path-runner
+        {{- include "adnr-edge.selectorLabels" . | nindent 8 }}
+        adnr.io/site-id: {{ required "siteId is required (e.g. edge-01)" .Values.siteId | quote }}
+    spec:
+      serviceAccountName: edge-fast-path-runner
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: runner
+          image: "{{ .Values.fastPathHealer.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.fastPathHealer.image.pullPolicy }}
+          command: ["edge-fast-path-runner"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: {{ .Values.fastPathHealer.runner.port }}
+              protocol: TCP
+          env:
+            - name: EDGE_NAMESPACE
+              value: {{ include "adnr-edge.namespace" . | quote }}
+            - name: EDGE_DEPLOYMENT
+              value: {{ .Values.nginx.name | quote }}
+            - name: EDGE_SITE_ID
+              value: {{ .Values.siteId | quote }}
+            - name: EDGE_MEMORY_REQUEST
+              value: {{ .Values.fastPathHealer.remediation.memoryRequest | quote }}
+            - name: EDGE_MEMORY_LIMIT
+              value: {{ .Values.fastPathHealer.remediation.memoryLimit | quote }}
+            - name: EDGE_COOLDOWN_SECONDS
+              value: {{ .Values.fastPathHealer.remediation.cooldownSeconds | quote }}
+            - name: PORT
+              value: {{ .Values.fastPathHealer.runner.port | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-fast-path-runner
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+    app: edge-fast-path-runner
+spec:
+  selector:
+    app: edge-fast-path-runner
+    {{- include "adnr-edge.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.fastPathHealer.runner.port }}
+      targetPort: http
+      protocol: TCP
+{{- end }}

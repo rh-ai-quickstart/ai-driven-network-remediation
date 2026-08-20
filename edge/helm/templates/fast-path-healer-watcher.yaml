@@ -1,0 +1,57 @@
+{{- if .Values.fastPathHealer.enabled }}
+{{- $imageTag := .Values.fastPathHealer.image.tag | default .Chart.AppVersion }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge-fast-path-watcher
+  namespace: {{ include "adnr-edge.namespace" . }}
+  labels:
+    {{- include "adnr-edge.labels" . | nindent 4 }}
+    app: edge-fast-path-watcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edge-fast-path-watcher
+      {{- include "adnr-edge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: edge-fast-path-watcher
+        {{- include "adnr-edge.selectorLabels" . | nindent 8 }}
+        adnr.io/site-id: {{ required "siteId is required (e.g. edge-01)" .Values.siteId | quote }}
+    spec:
+      serviceAccountName: edge-fast-path-watcher
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: watcher
+          image: "{{ .Values.fastPathHealer.image.repository }}:{{ $imageTag }}"
+          imagePullPolicy: {{ .Values.fastPathHealer.image.pullPolicy }}
+          command: ["edge-fast-path-watcher"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: EDGE_NAMESPACE
+              value: {{ include "adnr-edge.namespace" . | quote }}
+            - name: EDGE_DEPLOYMENT
+              value: {{ .Values.nginx.name | quote }}
+            - name: EDGE_SITE_ID
+              value: {{ .Values.siteId | quote }}
+            - name: EDGE_LABEL_SELECTOR
+              value: {{ printf "app=%s" .Values.nginx.name | quote }}
+            - name: EDGE_RUNNER_URL
+              value: {{ printf "http://edge-fast-path-runner:%v/endpoint" .Values.fastPathHealer.runner.port | quote }}
+            - name: EDGE_UNSAFE_MEMORY_LIMIT_MI
+              value: {{ .Values.fastPathHealer.remediation.unsafeMemoryLimitMi | quote }}
+            - name: EDGE_POLL_INTERVAL_SECONDS
+              value: {{ .Values.fastPathHealer.watcher.pollIntervalSeconds | quote }}
+{{- end }}

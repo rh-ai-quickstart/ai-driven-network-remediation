@@ -41,6 +41,24 @@ kafka:
     keyKey: client.key
   insecureSkipVerify: false
 
+fastPathHealer:
+  enabled: true
+  image:
+    repository: quay.io/rh-ai-quickstart/noc-edge-fast-path-healer
+    tag: "0.1.5-fast-path"
+    pullPolicy: IfNotPresent
+  runner:
+    port: 8080
+  watcher:
+    pollIntervalSeconds: 10
+  remediation:
+    memoryRequest: 64Mi
+    memoryLimit: 128Mi
+    unsafeMemoryLimitMi: 32
+    cooldownSeconds: 300
+  networkPolicy:
+    enabled: true
+
 clusterLogForwarder:
   enabled: true
   name: adnr-edge-forwarder
