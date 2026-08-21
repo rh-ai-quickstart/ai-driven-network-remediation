@@ -26,6 +26,7 @@ class WatcherSettings:
     runner_url: str
     unsafe_memory_limit_mi: int
     poll_interval_seconds: int
+    cooldown_seconds: int
 
 
 def settings_from_env() -> WatcherSettings:
@@ -37,6 +38,7 @@ def settings_from_env() -> WatcherSettings:
         runner_url=os.environ["EDGE_RUNNER_URL"],
         unsafe_memory_limit_mi=int(os.environ.get("EDGE_UNSAFE_MEMORY_LIMIT_MI", "32")),
         poll_interval_seconds=int(os.environ.get("EDGE_POLL_INTERVAL_SECONDS", "10")),
+        cooldown_seconds=int(os.environ.get("EDGE_COOLDOWN_SECONDS", "300")),
     )
 
 
@@ -77,7 +79,7 @@ def scan_once(
     pods = core_api.list_namespaced_pod(namespace=settings.namespace, label_selector=settings.label_selector)
     for item in pods.items:
         pod = client.ApiClient().sanitize_for_serialization(item)
-        key = pod_oom_event_key(pod)
+        key = pod_oom_event_key(pod, max_age_seconds=settings.cooldown_seconds)
         if key and key not in seen:
             event = RemediationEvent(
                 failure_type="OOMKilled",

@@ -54,4 +54,6 @@ spec:
               value: {{ .Values.fastPathHealer.remediation.unsafeMemoryLimitMi | quote }}
             - name: EDGE_POLL_INTERVAL_SECONDS
               value: {{ .Values.fastPathHealer.watcher.pollIntervalSeconds | quote }}
+            - name: EDGE_COOLDOWN_SECONDS
+              value: {{ .Values.fastPathHealer.remediation.cooldownSeconds | quote }}
 {{- end }}

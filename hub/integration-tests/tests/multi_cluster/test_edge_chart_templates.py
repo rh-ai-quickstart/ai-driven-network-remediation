@@ -162,6 +162,7 @@ def test_fast_path_healer_enabled_renders_runner_and_watcher():
     assert "kind: NetworkPolicy" in rendered
     assert "noc-edge-fast-path-healer:0.1.0" in rendered
     assert "0.1.6-fast-path" not in rendered
+    assert "EDGE_COOLDOWN_SECONDS" in rendered
 
 
 def test_fast_path_healer_disabled_renders_no_runner():

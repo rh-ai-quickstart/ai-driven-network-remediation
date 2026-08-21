@@ -11,7 +11,7 @@ This is a POC-inspired pattern. It is not product Event-Driven Ansible (EDA) and
 | **Watcher** (`edge-fast-path-watcher`) | Polls pods and the target Deployment via the Kubernetes API. POSTs structured events to the runner on OOM or unsafe memory limit. |
 | **Runner** (`edge-fast-path-runner`) | FastAPI webhook that patches the Deployment (memory bump + rollout restart annotation), enforces cooldown, and emits structured JSON logs for CLF forwarding. |
 
-Cooldown is tracked with the Deployment annotation `adnr.io/fast-path-last-heal`.
+Cooldown is tracked with the Deployment annotation `adnr.io/fast-path-last-heal`. The watcher ignores OOM `lastState` older than that same cooldown window so a watcher restart does not re-heal a healthy Deployment.
 
 ## Helm values
 
