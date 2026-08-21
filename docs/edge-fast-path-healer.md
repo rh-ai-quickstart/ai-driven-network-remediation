@@ -27,6 +27,7 @@ Enable or disable with `fastPathHealer.enabled` in `edge/helm/values.yaml`:
 | `fastPathHealer.remediation.cooldownSeconds` | `300` | Skip repeat heals within this window |
 | `fastPathHealer.watcher.pollIntervalSeconds` | `10` | Watcher poll interval |
 | `fastPathHealer.networkPolicy.enabled` | `true` | Restrict watcher → runner traffic |
+| `fastPathHealer.resources` | `10m`/`32Mi` request, `100m`/`64Mi` limit | CPU and memory for watcher and runner pods |
 
 `siteId` and `nginx.name` are required chart values. They are injected as `EDGE_SITE_ID` and `EDGE_DEPLOYMENT` on both pods.
 
@@ -41,10 +42,12 @@ oc logs -n dark-noc-edge deploy/edge-fast-path-watcher --tail=50
 oc logs -n dark-noc-edge deploy/edge-fast-path-runner --tail=50
 
 # Trigger OOM demo (hub chatbot or workload stress), then confirm:
-oc get deploy edge-nginx -n dark-noc-edge -o jsonpath='{.spec.template.metadata.annotations}'
+# Hub skip reads Deployment metadata. Template annotations are the rollout markers.
+oc get deploy edge-nginx -n dark-noc-edge -o jsonpath='{.metadata.annotations}{"\n"}'
+oc get deploy edge-nginx -n dark-noc-edge -o jsonpath='{.spec.template.metadata.annotations}{"\n"}'
 ```
 
-Expect `adnr.io/fast-path-last-heal` and `kubectl.kubernetes.io/restartedAt` on the nginx Deployment after a successful heal.
+Expect `adnr.io/fast-path-last-heal` and `kubectl.kubernetes.io/restartedAt` on the nginx Deployment after a successful heal. Hub skip uses `adnr.io/fast-path-last-heal` on Deployment metadata.
 
 ## Hub agent coordination
 

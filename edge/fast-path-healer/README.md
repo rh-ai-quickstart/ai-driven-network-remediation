@@ -7,4 +7,4 @@ Two console scripts share this package:
 - `edge-fast-path-watcher` polls pods and POSTs remediation events
 - `edge-fast-path-runner` receives events and patches the target Deployment
 
-See `docs/edge-fast-path-healer.md` for operator runbook (added in a later commit).
+See `docs/edge-fast-path-healer.md` for the operator runbook.

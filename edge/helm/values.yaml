@@ -59,6 +59,13 @@ fastPathHealer:
     cooldownSeconds: 300
   networkPolicy:
     enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
 
 clusterLogForwarder:
   enabled: true

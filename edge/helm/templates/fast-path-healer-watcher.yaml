@@ -39,6 +39,8 @@ spec:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+          resources:
+            {{- toYaml .Values.fastPathHealer.resources | nindent 12 }}
           env:
             - name: EDGE_NAMESPACE
               value: {{ include "adnr-edge.namespace" . | quote }}

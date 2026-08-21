@@ -39,6 +39,8 @@ spec:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+          resources:
+            {{- toYaml .Values.fastPathHealer.resources | nindent 12 }}
           ports:
             - name: http
               containerPort: {{ .Values.fastPathHealer.runner.port }}

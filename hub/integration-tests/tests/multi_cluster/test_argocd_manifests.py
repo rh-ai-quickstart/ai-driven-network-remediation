@@ -56,3 +56,5 @@ def test_applicationset_list_generator_and_site_id_params():
     assert "RespectIgnoreDifferences=true" in text
     assert "name: edge-nginx" in text
     assert "/spec/template/spec/containers/0/resources" in text
+    assert "/metadata/annotations" in text
+    assert "/spec/template/metadata/annotations" in text
