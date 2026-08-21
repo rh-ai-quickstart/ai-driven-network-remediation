@@ -64,7 +64,6 @@ def scan_once(
     limit_mi = deployment_memory_limit_mi(dep)
     unsafe_key = unsafe_limit_event_key(limit_mi, settings.unsafe_memory_limit_mi)
     if unsafe_key and unsafe_key not in seen:
-        seen.add(unsafe_key)
         event = RemediationEvent(
             failure_type="OOMKilled",
             namespace=settings.namespace,
@@ -73,13 +72,13 @@ def scan_once(
             reason=f"unsafe-memory-limit-{limit_mi}Mi",
         )
         post_event(http_client, settings.runner_url, event)
+        seen.add(unsafe_key)
 
     pods = core_api.list_namespaced_pod(namespace=settings.namespace, label_selector=settings.label_selector)
     for item in pods.items:
         pod = client.ApiClient().sanitize_for_serialization(item)
         key = pod_oom_event_key(pod)
         if key and key not in seen:
-            seen.add(key)
             event = RemediationEvent(
                 failure_type="OOMKilled",
                 namespace=settings.namespace,
@@ -88,6 +87,7 @@ def scan_once(
                 pod=pod.get("metadata", {}).get("name"),
             )
             post_event(http_client, settings.runner_url, event)
+            seen.add(key)
 
 
 def main() -> None:

@@ -19,6 +19,7 @@ def test_fast_path_cooldown_inactive_when_stale():
 
 def test_should_check_fast_path_for_oom():
     assert should_check_fast_path("OOMKilled") is True
+    assert should_check_fast_path("CrashLoopBackOff") is False
     assert should_check_fast_path("DNSFailure") is False
 
 

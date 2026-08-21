@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from agent_service.config import FAST_PATH_COOLDOWN_SECONDS, FAST_PATH_DEPLOYMENT, FAST_PATH_LAST_HEAL_ANNOTATION
 from agent_service.utils import invoke_tool
 
-_RESTART_CLASS_FAILURES = frozenset({"OOMKilled", "CrashLoopBackOff"})
+_FAST_PATH_FAILURES = frozenset({"OOMKilled"})
 
 
 def fast_path_cooldown_active(annotation_value: str | None, cooldown_seconds: int) -> bool:
@@ -51,4 +51,4 @@ def target_deployment_name(pod_name: str) -> str:
 
 
 def should_check_fast_path(failure_type: str | None) -> bool:
-    return failure_type in _RESTART_CLASS_FAILURES
+    return failure_type in _FAST_PATH_FAILURES

@@ -160,6 +160,8 @@ def test_fast_path_healer_enabled_renders_runner_and_watcher():
     assert "EDGE_SITE_ID" in rendered
     assert 'value: "edge-01"' in rendered
     assert "kind: NetworkPolicy" in rendered
+    assert "noc-edge-fast-path-healer:0.1.0" in rendered
+    assert "0.1.6-fast-path" not in rendered
 
 
 def test_fast_path_healer_disabled_renders_no_runner():

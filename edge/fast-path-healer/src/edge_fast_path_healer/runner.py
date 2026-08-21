@@ -34,7 +34,13 @@ def settings_from_env() -> RunnerSettings:
 
 def create_app(settings: RunnerSettings) -> FastAPI:
     app = FastAPI(title="edge-fast-path-runner", docs_url=None, redoc_url=None)
-    api = load_k8s_apps_api()
+    api = None
+
+    def get_api():
+        nonlocal api
+        if api is None:
+            api = load_k8s_apps_api()
+        return api
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -57,7 +63,7 @@ def create_app(settings: RunnerSettings) -> FastAPI:
             return {"ignored": True, "reason": "deployment mismatch"}
 
         result = remediate_oom(
-            api,
+            get_api(),
             namespace=settings.namespace,
             deployment=settings.deployment,
             site_id=settings.site_id,

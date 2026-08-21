@@ -49,7 +49,13 @@ class TestClusterName:
         state = make_state(
             root_cause_analysis=make_rca(recommended_actions=["restart nginx"]),
         )
-        with patch("agent_service.nodes.remediate._invoke_tool", AsyncMock(side_effect=mock_invoke)):
+        with (
+            patch(
+                "agent_service.nodes.remediate.spoke_fast_path_recent",
+                AsyncMock(return_value=False),
+            ),
+            patch("agent_service.nodes.remediate._invoke_tool", AsyncMock(side_effect=mock_invoke)),
+        ):
             result = await node(state)
 
         assert result["remediation_result"].success is True

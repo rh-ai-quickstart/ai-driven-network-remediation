@@ -30,6 +30,8 @@ Enable or disable with `fastPathHealer.enabled` in `edge/helm/values.yaml`:
 
 `siteId` and `nginx.name` are required chart values. They are injected as `EDGE_SITE_ID` and `EDGE_DEPLOYMENT` on both pods.
 
+For a lab image that is not `appVersion`, set `fastPathHealer.image.tag` on the ArgoCD Application (for example `0.1.6-fast-path`). Do not commit that tag into `values.yaml`.
+
 ## Lab validation
 
 ```bash
