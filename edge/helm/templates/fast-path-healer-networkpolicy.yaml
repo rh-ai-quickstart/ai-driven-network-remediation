@@ -23,6 +23,8 @@ spec:
         - protocol: TCP
           port: {{ .Values.fastPathHealer.runner.port }}
 ---
+# Watcher egress must include kube API and DNS. An egress-only-to-runner
+# policy times out on kubernetes.default.svc (connect timeout to 172.30.0.1:443).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -46,4 +48,22 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.fastPathHealer.runner.port }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+      ports:
+        - protocol: UDP
+          port: 5353
+        - protocol: TCP
+          port: 5353
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
 {{- end }}
