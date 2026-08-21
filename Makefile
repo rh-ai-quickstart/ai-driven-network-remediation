@@ -656,7 +656,7 @@ build-mcp-images:
 
 .PHONY: build-edge-fast-path-healer-image
 build-edge-fast-path-healer-image:
-	$(CONTAINER_TOOL) build -f edge/fast-path-healer/Containerfile -t $(EDGE_FAST_PATH_HEALER_IMG) edge/
+	$(CONTAINER_TOOL) build --platform=$(ARCH) -f edge/fast-path-healer/Containerfile -t $(EDGE_FAST_PATH_HEALER_IMG) edge/
 
 .PHONY: push-edge-fast-path-healer-image
 push-edge-fast-path-healer-image:
