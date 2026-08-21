@@ -376,11 +376,19 @@ def get_deployment(
 
     try:
         data = json.loads(result["stdout"])
+        meta = data.get("metadata", {}).get("annotations") or {}
+        tpl = (
+            data.get("spec", {})
+            .get("template", {})
+            .get("metadata", {})
+            .get("annotations")
+            or {}
+        )
         return {
             "success": True,
             "deployment": deployment,
             "namespace": namespace,
-            "annotations": data.get("metadata", {}).get("annotations") or {},
+            "annotations": {**tpl, **meta},
         }
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"Failed to parse deployment output: {e}", "annotations": {}}

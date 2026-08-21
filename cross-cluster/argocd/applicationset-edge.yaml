@@ -68,3 +68,14 @@ spec:
           selfHeal: true
         syncOptions:
           - CreateNamespace=true
+          - RespectIgnoreDifferences=true
+      # Healer patches nginx memory and last-heal annotations at runtime.
+      # Without this, selfHeal reverts the bump and hub skip cannot see the heal.
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          name: edge-nginx
+          jsonPointers:
+            - /spec/template/spec/containers/0/resources
+            - /spec/template/metadata/annotations
+            - /metadata/annotations

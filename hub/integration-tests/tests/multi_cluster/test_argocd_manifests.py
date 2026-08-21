@@ -53,3 +53,6 @@ def test_applicationset_list_generator_and_site_id_params():
     assert 'name: "{{.name}}"' in text
     assert "resources-finalizer.argocd.argoproj.io" in text
     assert "project: adnr-edge" in text
+    assert "RespectIgnoreDifferences=true" in text
+    assert "name: edge-nginx" in text
+    assert "/spec/template/spec/containers/0/resources" in text

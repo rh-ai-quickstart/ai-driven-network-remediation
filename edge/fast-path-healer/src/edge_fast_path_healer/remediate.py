@@ -21,9 +21,17 @@ def parse_memory_mi(value: str) -> int | None:
     return None
 
 
+def _annotation_maps(deployment: dict) -> tuple[dict, dict]:
+    meta = (deployment.get("metadata") or {}).get("annotations") or {}
+    tpl = (
+        ((deployment.get("spec") or {}).get("template") or {}).get("metadata") or {}
+    ).get("annotations") or {}
+    return meta, tpl
+
+
 def cooldown_active(deployment: dict, cooldown_seconds: int) -> bool:
-    annotations = deployment.get("metadata", {}).get("annotations") or {}
-    raw = annotations.get(ANNOTATION_LAST_HEAL)
+    meta, tpl = _annotation_maps(deployment)
+    raw = meta.get(ANNOTATION_LAST_HEAL) or tpl.get(ANNOTATION_LAST_HEAL)
     if not raw:
         return False
     try:
@@ -34,28 +42,45 @@ def cooldown_active(deployment: dict, cooldown_seconds: int) -> bool:
     return age.total_seconds() < cooldown_seconds
 
 
-def build_restart_patch(memory_request: str, memory_limit: str, restarted_at: str) -> dict:
+def build_restart_patch(
+    memory_request: str,
+    memory_limit: str,
+    restarted_at: str,
+    site_id: str = "",
+    container_name: str = "nginx",
+    extra_resources: dict | None = None,
+) -> dict:
+    requests = {"memory": memory_request}
+    limits = {"memory": memory_limit}
+    current = extra_resources or {}
+    if (current.get("requests") or {}).get("cpu"):
+        requests["cpu"] = current["requests"]["cpu"]
+    if (current.get("limits") or {}).get("cpu"):
+        limits["cpu"] = current["limits"]["cpu"]
+    heal_annotations = {
+        ANNOTATION_LAST_HEAL: restarted_at,
+        ANNOTATION_SITE: site_id,
+    }
     return {
+        "metadata": {"annotations": heal_annotations},
         "spec": {
             "template": {
                 "metadata": {
                     "annotations": {
+                        **heal_annotations,
                         "kubectl.kubernetes.io/restartedAt": restarted_at,
-                        ANNOTATION_LAST_HEAL: restarted_at,
                     }
                 },
                 "spec": {
                     "containers": [
                         {
-                            "resources": {
-                                "requests": {"memory": memory_request},
-                                "limits": {"memory": memory_limit},
-                            }
+                            "name": container_name,
+                            "resources": {"requests": requests, "limits": limits},
                         }
                     ]
                 },
             }
-        }
+        },
     }
 
 
@@ -85,27 +110,17 @@ def remediate_oom(
             message=msg,
         )
 
-    patch = [
-        {
-            "op": "replace",
-            "path": "/spec/template/spec/containers/0/resources/requests/memory",
-            "value": memory_request,
-        },
-        {
-            "op": "replace",
-            "path": "/spec/template/spec/containers/0/resources/limits/memory",
-            "value": memory_limit,
-        },
-        {
-            "op": "add",
-            "path": "/spec/template/metadata/annotations",
-            "value": {
-                "kubectl.kubernetes.io/restartedAt": ts,
-                ANNOTATION_LAST_HEAL: ts,
-                ANNOTATION_SITE: site_id,
-            },
-        },
-    ]
+    containers = ((dep.get("spec") or {}).get("template") or {}).get("spec", {}).get("containers") or []
+    container_name = (containers[0].get("name") if containers else None) or "nginx"
+    extra_resources = (containers[0].get("resources") if containers else None) or {}
+    patch = build_restart_patch(
+        memory_request,
+        memory_limit,
+        ts,
+        site_id=site_id,
+        container_name=container_name,
+        extra_resources=extra_resources,
+    )
     try:
         api.patch_namespaced_deployment(
             name=deployment,
@@ -113,23 +128,15 @@ def remediate_oom(
             body=patch,
         )
     except client.exceptions.ApiException as exc:
-        if exc.status == 422 and "already exists" in (exc.body or ""):
-            patch[2] = {
-                "op": "replace",
-                "path": "/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt",
-                "value": ts,
-            }
-            api.patch_namespaced_deployment(name=deployment, namespace=namespace, body=patch)
-        else:
-            log_event("runner", site_id=site_id, action="local_fast_path_restart", result="failed", error=str(exc))
-            return RemediationResult(
-                site_id=site_id,
-                namespace=namespace,
-                deployment=deployment,
-                result="failed",
-                timestamp=datetime.now(timezone.utc),
-                message=str(exc),
-            )
+        log_event("runner", site_id=site_id, action="local_fast_path_restart", result="failed", error=str(exc))
+        return RemediationResult(
+            site_id=site_id,
+            namespace=namespace,
+            deployment=deployment,
+            result="failed",
+            timestamp=datetime.now(timezone.utc),
+            message=str(exc),
+        )
 
     log_event(
         "runner",

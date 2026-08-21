@@ -22,6 +22,11 @@ def test_cooldown_active_recent_annotation():
         "metadata": {"annotations": {ANNOTATION_LAST_HEAL: now}},
     }
     assert cooldown_active(dep, cooldown_seconds=300) is True
+    tpl_only = {
+        "metadata": {},
+        "spec": {"template": {"metadata": {"annotations": {ANNOTATION_LAST_HEAL: now}}}},
+    }
+    assert cooldown_active(tpl_only, cooldown_seconds=300) is True
 
 
 def test_cooldown_inactive_when_missing():
@@ -29,8 +34,9 @@ def test_cooldown_inactive_when_missing():
 
 
 def test_build_restart_patch_includes_memory_and_restart():
-    patch = build_restart_patch("64Mi", "128Mi", "2026-08-18T12:00:00Z")
+    patch = build_restart_patch("64Mi", "128Mi", "2026-08-18T12:00:00Z", site_id="edge-01")
     assert patch["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["memory"] == "128Mi"
+    assert patch["metadata"]["annotations"][ANNOTATION_LAST_HEAL] == "2026-08-18T12:00:00Z"
     assert "kubectl.kubernetes.io/restartedAt" in patch["spec"]["template"]["metadata"]["annotations"]
 
 

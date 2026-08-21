@@ -45,7 +45,7 @@ fastPathHealer:
   enabled: true
   image:
     repository: quay.io/rh-ai-quickstart/noc-edge-fast-path-healer
-    tag: "0.1.5-fast-path"
+    tag: "0.1.6-fast-path"
     pullPolicy: IfNotPresent
   runner:
     port: 8080
