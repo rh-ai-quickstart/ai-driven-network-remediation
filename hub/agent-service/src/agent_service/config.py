@@ -66,22 +66,15 @@ LIGHTSPEED_URL = os.getenv("LIGHTSPEED_URL", "")
 LIGHTSPEED_TOKEN = os.getenv("LIGHTSPEED_TOKEN", "")
 LIGHTSPEED_VERIFY_SSL = os.getenv("LIGHTSPEED_VERIFY_SSL", "false").lower() == "true"
 
-# Configurable via env var to allow prompt experimentation without redeploying
+# Configurable via env var to allow prompt experimentation without redeploying.
+# Contains only static playbook-generation instructions; dynamic fields are
+# assembled in _build_prompt() and prepended at runtime.
 LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "LIGHTSPEED_PROMPT_TEMPLATE",
-    "Generate an Ansible playbook to remediate this OpenShift cluster issue.\n"
-    "\n"
-    "Failure type: {failure_type}\n"
-    "Severity: {severity}\n"
-    "Namespace: {namespace}\n"
-    "Pod: {pod_name}\n"
-    "Summary: {summary}\n\n"
-    "Evidence:\n{evidence}\n\n"
-    "Recommended actions: {recommended_actions}\n\n"
     "The playbook must apply a corrective fix, not investigate or diagnose.\n"
     "Include all tasks needed for a complete remediation.\n"
     "The playbook must be self-contained and executable standalone.\n\n"
-    "CRITICAL REQUIREMENTS -- the playbook WILL FAIL if any of these are violated:\n\n"
+    "CRITICAL REQUIREMENTS:\n\n"
     "1. validate_certs: false -- MUST appear on EVERY ansible.builtin.uri task. "
     "The cluster uses self-signed certificates.\n\n"
     "2. Kubernetes API path -- use the correct API group for each resource kind "
@@ -90,16 +83,29 @@ LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "deployment name by stripping the last TWO dash-separated segments "
     "(replicaset hash + pod hash) from the pod name "
     '(e.g. pod "myapp-6b7f8c9d4-x2k9z" -> deployment "myapp").\n\n'
-    "4. Authentication -- AAP injects credentials as environment variables:\n"
-    """   k8s_api_url:   "{{{{ lookup('env', 'K8S_AUTH_HOST') }}}}"\n"""
-    """   k8s_api_token: "{{{{ lookup('env', 'K8S_AUTH_API_KEY') }}}}"\n"""
-    "   NEVER use lookup('file', '/var/run/secrets/...') or hardcoded tokens.\n\n"
+    "4. Authentication -- target the spoke cluster through the ACM cluster-proxy. "
+    "AAP injects these variables at launch:\n"
+    "   hub_url:       cluster-proxy base URL\n"
+    "   edge_site_id:  target spoke cluster id\n"
+    "   token_acm:     cluster-proxy bearer token\n"
+    "   Build every Kubernetes API URL from the base "
+    '"{{ hub_url }}/{{ edge_site_id }}" and authenticate with the header '
+    'Authorization: "Bearer {{ token_acm }}".\n'
+    "   Do not read tokens from files or hardcode credentials.\n\n"
     "5. Play-level settings -- Every play MUST include:\n"
     "   hosts: localhost\n"
     "   connection: local\n"
     "   gather_facts: false\n\n"
     "6. Use ansible.builtin.uri for all Kubernetes API calls "
     "(kubernetes.core is not available).\n\n"
+    "7. PATCH body -- when updating an EXISTING resource, use a YAML dict and set "
+    "body_format: json, Content-Type application/strategic-merge-patch+json and status_code: 200.\n\n"
+    "8. Creating resources -- a strategic-merge PATCH to a named resource returns 404 "
+    "if it does not exist yet (e.g. a new HorizontalPodAutoscaler). To create-or-update "
+    "idempotently, use server-side apply: method PATCH on the named-resource URL with "
+    "query ?fieldManager=ansible&force=true, Content-Type application/apply-patch+yaml, "
+    "the FULL object (apiVersion, kind, metadata.name, complete spec) as the body, "
+    "body_format: json, and status_code: [200, 201].\n\n"
     "Return ONLY valid Ansible YAML, no explanation or markdown fences.",
 )
 
@@ -121,6 +127,9 @@ ANALYZE_SYSTEM_PROMPT = os.getenv(
         '"clear disk space", "fix configuration".\n'
         "Do NOT put shell commands (oc logs, kubectl describe, etc.) in recommended_actions "
         "— those are diagnostic, not remediation.\n"
+        "\n"
+        "When applicable, trace symptoms to their root cause. The root cause is the "
+        "underlying condition that triggers the chain of failures, not the most visible symptom.\n"
         "\n"
         "Respond ONLY with valid JSON matching the provided schema."
     ).format(failure_types=_FAILURE_TYPES),
@@ -147,7 +156,50 @@ INVESTIGATE_SYSTEM_PROMPT = os.getenv(
     "find_error_patterns to check their health and resource configuration. "
     "Prioritize investigating services you have NOT yet examined.\n"
     "\n"
+    "Skip any tool call whose output has already appeared in evidence "
+    "from a previous iteration to avoid redundant work.\n"
+    "\n"
+    "If logs or errors reference a service on a different cluster or namespace, "
+    "investigate it by passing that edge_site_id and namespace to get_pod_spec, "
+    "get_pod_logs, or get_events. The Loki search tools (search_logs, "
+    "find_error_patterns) only cover hub logs, so use the pod tools for spoke "
+    "workloads.\n"
+    "\n"
     "Do NOT analyze root causes or recommend fixes — just gather raw evidence.",
+)
+
+LIGHTSPEED_SYSTEM_PROMPT = os.getenv(
+    "LIGHTSPEED_SYSTEM_PROMPT",
+    "IMPORTANT: Before generating a playbook, consider using available tools "
+    "to gather relevant context -- such as searching documentation, checking logs, "
+    "or querying metrics -- if they would help produce a better remediation. "
+    "Use your judgement on which tools are useful for the specific failure.",
+)
+
+LIGHTSPEED_SUMMARIZE_PROMPT = os.getenv(
+    "LIGHTSPEED_SUMMARIZE_PROMPT",
+    "You are a Kubernetes incident analyst preparing a remediation brief.\n"
+    "\n"
+    "Given the root cause analysis and investigation evidence below, identify "
+    "the component that needs the fix (which may differ from the alerting "
+    "component), the root cause, and the remediation steps.\n"
+    "\n"
+    "Respond with a JSON object:\n"
+    '{{"affected_component": "<service/pod/resource to fix>", '
+    '"root_cause": "<one-sentence root cause>", '
+    '"remediation_steps": "<comma-separated corrective actions>", '
+    '"edge_site_id": "<cluster/site id if a different cluster is implicated, else empty>"}}\n'
+    "\n"
+    "Root cause analysis:\n"
+    "{rca_summary}\n"
+    "\n"
+    "Evidence:\n"
+    "{rca_evidence}\n"
+    "\n"
+    "Recommended actions: {recommended_actions}\n"
+    "\n"
+    "Investigation evidence:\n"
+    "{investigation_evidence}",
 )
 
 AAP_LIGHTSPEED_TEMPLATE = os.getenv(
@@ -158,7 +210,9 @@ GITEA_PROJECT_NAME = os.getenv("GITEA_PROJECT_NAME", "lightspeed-generated")
 LIGHTSPEED_SKIP_AAP = _env_bool("LIGHTSPEED_SKIP_AAP", False)
 
 HTTP_TIMEOUT_SECONDS = 30
-LIGHTSPEED_TIMEOUT_SECONDS = 60
+LIGHTSPEED_TIMEOUT_SECONDS = int(os.getenv("LIGHTSPEED_TIMEOUT_SECONDS", "180"))
+# Max chars of investigation evidence sent to the summarizer LLM (~10k tokens at 40k chars).
+LIGHTSPEED_MAX_SUMMARIZE_CHARS = int(os.getenv("LIGHTSPEED_MAX_SUMMARIZE_CHARS", "40000"))
 
 # Slack notifications
 SLACK_ENABLED = _env_bool("SLACK_ENABLED", False)
