@@ -105,6 +105,6 @@ See [Graph Nodes](graph-nodes.md) for the full pipeline diagram and per-node ref
 
 - Collect logs from monitored workloads
 - Stream to hub via Kafka
-- Edge fast-path healer (watcher + runner) for known-safe OOM restart on spoke
+- Edge fast-path healer (watcher + runner) for known-safe OOM restart on spoke. Demo script: [FAST-PATH-HEALER-DEMO-SCRIPT.md](FAST-PATH-HEALER-DEMO-SCRIPT.md)
 - Execute remediation playbooks via AAP
 - Report status back to hub

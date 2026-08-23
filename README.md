@@ -301,6 +301,7 @@ oc get pods -n $NAMESPACE
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [Architecture Guide](docs/architecture.md)
 - [Multi-cluster deployment guide](docs/multi-cluster-deploy.md)
+- [Fast-path healer demo script](docs/FAST-PATH-HEALER-DEMO-SCRIPT.md)
 
 ## Tags
 

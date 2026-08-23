@@ -254,7 +254,8 @@ oc get deploy -n dark-noc-edge | rg 'edge-nginx|fast-path'
 oc logs -n dark-noc-edge deploy/edge-fast-path-runner --tail=20
 ```
 
-See [edge-fast-path-healer.md](edge-fast-path-healer.md) for the OOM dual-path demo checklist.
+See [edge-fast-path-healer.md](edge-fast-path-healer.md) for healer operations, and
+[FAST-PATH-HEALER-DEMO-SCRIPT.md](FAST-PATH-HEALER-DEMO-SCRIPT.md) for the OOM dual-path demo.
 
 Hub MCP secrets (per spoke):
 

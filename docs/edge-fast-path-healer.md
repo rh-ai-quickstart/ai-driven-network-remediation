@@ -55,11 +55,14 @@ The hub agent reads `adnr.io/fast-path-last-heal` on the target Deployment befor
 
 ## OOM dual-path demo
 
+Step-by-step recording script (in-pod OOM, ArgoCD notes, hub skip proof):
+[FAST-PATH-HEALER-DEMO-SCRIPT.md](FAST-PATH-HEALER-DEMO-SCRIPT.md).
+
 Pre-req: `fastPathHealer.enabled=true` on the spoke; hub agent running.
 
-1. Induce OOM on `edge-nginx` (demo trigger or workload stress).
+1. OOM the running `edge-nginx` container (`dd` into `/dev/shm`). Do not patch the Deployment if ArgoCD is auto-syncing.
 2. Within ~10s: spoke runner logs show `result=success`; deployment has `adnr.io/fast-path-last-heal`.
-3. In parallel: hub agent runs normalize → investigate → analyze → decide → remediate.
+3. Then publish the hub OOM alert (dashboard or curl) so the agent graph runs.
 4. Remediate must NOT launch `scale-up-workers` / `restart-nginx` when fast-path already acted.
 5. Slack and `incident-audit` show spoke fast path acted and agent validated (no duplicate `job_id`).
 
