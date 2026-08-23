@@ -5,6 +5,8 @@ import subprocess
 from unittest.mock import MagicMock, patch
 
 from mcp_openshift.tools import (
+    _find_pod,
+    _is_not_found,
     _run_oc,
     get_events,
     get_namespaces,
@@ -375,6 +377,68 @@ class TestPatchDeploymentMemory:
         assert result["success"] is False
 
 
+def _pods(*names):
+    return json.dumps({"items": [{"metadata": {"name": n}, "spec": {}} for n in names]})
+
+
+class TestIsNotFound:
+    """Tests for the _is_not_found predicate."""
+
+    def test_not_found_message(self):
+        assert _is_not_found({"success": False, "stderr": 'Error from server (NotFound): pods "x" not found'})
+
+    def test_forbidden_is_not_a_not_found(self):
+        assert not _is_not_found({"success": False, "stderr": "Error from server (Forbidden): denied"})
+
+    def test_success_is_never_not_found(self):
+        assert not _is_not_found({"success": True, "stderr": ""})
+
+
+@patch("mcp_openshift.tools._run_oc")
+class TestFindPod:
+    """Tests for the _find_pod name-boundary matching."""
+
+    def _list(self, mock_oc, *names):
+        mock_oc.return_value = {"stdout": _pods(*names), "stderr": "", "returncode": 0, "success": True}
+
+    def test_exact_full_name(self, mock_oc):
+        self._list(mock_oc, "app-6b7f8c-x2k9z")
+        pod, error = _find_pod("app-6b7f8c-x2k9z", "prod", "/kc")
+        assert pod["metadata"]["name"] == "app-6b7f8c-x2k9z"
+        assert error is None
+
+    def test_app_only_prefix(self, mock_oc):
+        self._list(mock_oc, "app-6b7f8c-x2k9z")
+        pod, error = _find_pod("app", "prod", "/kc")
+        assert pod["metadata"]["name"] == "app-6b7f8c-x2k9z"
+        assert error is None
+
+    def test_replicaset_prefix(self, mock_oc):
+        self._list(mock_oc, "app-6b7f8c-x2k9z")
+        pod, error = _find_pod("app-6b7f8c", "prod", "/kc")
+        assert pod["metadata"]["name"] == "app-6b7f8c-x2k9z"
+
+    def test_does_not_cross_app_boundary(self, mock_oc):
+        self._list(mock_oc, "application-7d9-abc")
+        assert _find_pod("app", "prod", "/kc") == (None, None)
+
+    def test_no_match_returns_none(self, mock_oc):
+        self._list(mock_oc, "other-pod-1")
+        assert _find_pod("app", "prod", "/kc") == (None, None)
+
+    def test_list_failure_returns_error(self, mock_oc):
+        mock_oc.return_value = {"stdout": "", "stderr": "forbidden", "returncode": 1, "success": False}
+        pod, error = _find_pod("app", "prod", "/kc")
+        assert pod is None
+        assert error == "forbidden"
+
+    def test_unparseable_list_returns_error(self, mock_oc):
+        mock_oc.return_value = {"stdout": "not json {", "stderr": "", "returncode": 0, "success": True}
+        pod, error = _find_pod("app", "prod", "/kc")
+        assert pod is None
+        assert "failed to parse" in error
+
+
 @patch("mcp_openshift.tools._run_oc")
 class TestGetPodSpec:
     """Tests for the get_pod_spec tool."""
@@ -440,8 +504,23 @@ class TestGetPodSpec:
         ]
         result = get_pod_spec(name="gone", namespace="prod")
         assert result["success"] is False
-        assert result["error"] is not None
+        assert result["error"] == "no pod matching 'gone'"
         assert result["spec"] == {}
+
+    def test_list_failure_surfaces_oc_error(self, mock_oc):
+        mock_oc.side_effect = [
+            {"stdout": "", "stderr": 'pods "app" not found', "returncode": 1, "success": False},
+            {
+                "stdout": "",
+                "stderr": "Error from server (Forbidden): pods is forbidden",
+                "returncode": 1,
+                "success": False,
+            },
+        ]
+        result = get_pod_spec(name="app", namespace="prod")
+        assert result["success"] is False
+        assert "Forbidden" in result["error"]
+        assert "no pod matching" not in result["error"]
 
     def test_invalid_json_from_oc(self, mock_oc):
         mock_oc.return_value = {
@@ -454,6 +533,18 @@ class TestGetPodSpec:
         assert result["success"] is False
         assert result["error"] is not None
         assert result["spec"] == {}
+
+    def test_forbidden_does_not_fall_back(self, mock_oc):
+        mock_oc.return_value = {
+            "stdout": "",
+            "stderr": "Error from server (Forbidden): pods is forbidden",
+            "returncode": 1,
+            "success": False,
+        }
+        result = get_pod_spec(name="nginx", namespace="prod")
+        assert result["success"] is False
+        assert "Forbidden" in result["error"]
+        assert mock_oc.call_count == 1
 
 
 @patch("mcp_openshift.tools._run_oc")
@@ -494,3 +585,30 @@ class TestGetPodLogs:
         result = get_pod_logs(pod_name="gone")
         assert result["success"] is False
         assert result["error"] is not None
+
+    def test_prefix_fallback(self, mock_oc):
+        pod_list = json.dumps({"items": [{"metadata": {"name": "myapp-6b7f8c-x2k9z"}}]})
+        mock_oc.side_effect = [
+            {"stdout": "", "stderr": "not found", "returncode": 1, "success": False},
+            {"stdout": pod_list, "stderr": "", "returncode": 0, "success": True},
+            {"stdout": "logline", "stderr": "", "returncode": 0, "success": True},
+        ]
+        result = get_pod_logs(pod_name="myapp", namespace="prod")
+        assert result["success"] is True
+        assert result["pod"] == "myapp-6b7f8c-x2k9z"
+        assert "logline" in result["logs"]
+        retry_cmd = mock_oc.call_args[0][0]
+        assert retry_cmd[:2] == ["logs", "myapp-6b7f8c-x2k9z"]
+
+    def test_container_error_does_not_fall_back(self, mock_oc):
+        mock_oc.return_value = {
+            "stdout": "",
+            "stderr": 'error: container "sidecar" is not valid for pod "app-xyz"',
+            "returncode": 1,
+            "success": False,
+        }
+        result = get_pod_logs(pod_name="app", container="sidecar", namespace="prod")
+        assert result["success"] is False
+        assert result["pod"] == "app"
+        assert "not valid" in result["error"]
+        assert mock_oc.call_count == 1

@@ -18,6 +18,7 @@ _TOOLS = [
                 "properties": {
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
                     "limit": {"type": "integer", "description": "Max events to return", "default": 20},
+                    "edge_site_id": {"type": "string", "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster."},
                 },
                 "required": ["namespace"],
             },
@@ -35,7 +36,6 @@ _TOOLS = [
                     "app": {"type": "string", "description": "Application name"},
                     "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
                     "top_n": {"type": "integer", "description": "Max patterns to return", "default": 10},
-                    "tenant": {"type": "string", "description": "Tenant identifier"},
                     "regex": {"type": "string", "description": "Optional regex filter"},
                 },
                 "required": ["namespace", "app"],
@@ -54,6 +54,7 @@ _TOOLS = [
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
                     "container": {"type": "string", "description": "Container name"},
                     "tail_lines": {"type": "integer", "description": "Number of lines from the end", "default": 100},
+                    "edge_site_id": {"type": "string", "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster."},
                 },
                 "required": ["pod_name", "namespace"],
             },
@@ -76,7 +77,6 @@ _TOOLS = [
                         "additionalProperties": {"type": "string"},
                     },
                     "text": {"type": "string", "description": "Text to search for"},
-                    "tenant": {"type": "string", "description": "Tenant identifier"},
                     "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
                     "limit": {"type": "integer", "description": "Max results", "default": 50},
                 },
@@ -98,6 +98,7 @@ _TOOLS = [
                 "properties": {
                     "name": {"type": "string", "description": "Pod name (exact or prefix)"},
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "edge_site_id": {"type": "string", "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster."},
                 },
                 "required": ["name", "namespace"],
             },
@@ -122,13 +123,17 @@ def _extract_events(result: dict) -> list[dict]:
     return [result]
 
 
-def _pin_tool_args(tool_args: dict, log_event) -> dict:
-    """Override LLM-chosen namespace/tenant with incident-scoped values."""
-    pinned = dict(tool_args)
-    pinned["namespace"] = log_event.namespace
-    if "tenant" in pinned:
-        pinned["tenant"] = log_event.edge_site_id
-    return pinned
+_OPENSHIFT_TOOLS = {"get_events", "get_pod_logs", "get_pod_spec"}
+
+
+def _default_tool_args(tool_name: str, tool_args: dict, log_event) -> dict:
+    # Only the OpenShift tools route by cluster via edge_site_id. The Loki tools
+    # select a log stream via a separate tenant argument (application|
+    # infrastructure|audit), so we leave it at the server default instead.
+    args = dict(tool_args)
+    if tool_name in _OPENSHIFT_TOOLS and "edge_site_id" not in args:
+        args["edge_site_id"] = log_event.edge_site_id
+    return args
 
 
 def _format_pod_resources(tool_result: dict) -> str:
@@ -200,19 +205,37 @@ def make_investigate_node(config: GraphConfig):
             async with asyncio.timeout(config.investigate_timeout):
                 for iteration in range(config.investigate_max_iterations):
                     tool_choice = "required" if iteration == 0 else "auto"
+                    logger.info(
+                        f"Investigate iteration {iteration + 1}/{config.investigate_max_iterations}"
+                        f" tool_choice={tool_choice}"
+                    )
                     response = await get_llm().ainvoke(messages, tools=_TOOLS, tool_choice=tool_choice)
                     if not response.tool_calls:
+                        logger.info(f"Agent stopped calling tools after {iteration + 1} iteration(s)")
                         break
 
                     messages.append(response)
                     tool_calls = response.tool_calls
+                    defaulted_args = [_default_tool_args(tc["name"], tc["args"], state.log_event) for tc in tool_calls]
+                    logger.debug(
+                        f"Agent requested {len(tool_calls)} tool(s): "
+                        f"{list(zip((tc['name'] for tc in tool_calls), defaulted_args))}"
+                    )
+
                     results = await asyncio.gather(
-                        *[_call_tool(tc["name"], _pin_tool_args(tc["args"], state.log_event)) for tc in tool_calls]
+                        *[_call_tool(tc["name"], args) for tc, args in zip(tool_calls, defaulted_args)]
                     )
 
                     for tool_call, tool_result in zip(tool_calls, results):
                         _merge_tool_result(tool_call["name"], tool_result, evidence)
                         messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
+
+                logger.info(
+                    f"Investigate finished: events={len(evidence['cluster_events'])}"
+                    f" errors={len(evidence['recent_errors'])}"
+                    f" log_results={len(evidence['log_search_results'])}"
+                    f" has_pod_logs={bool(evidence['pod_logs'])}"
+                )
         except TimeoutError:
             logger.warning("Investigate node timed out, returning partial evidence")
         except Exception:

@@ -275,30 +275,50 @@ def get_pod_spec(
     if result["success"]:
         return _parse_pod_spec(name, namespace, result["stdout"])
 
-    list_result = _run_oc(
-        ["get", "pods", "-n", namespace, "-o", "json"],
-        kubeconfig=kc,
-    )
-    if not list_result["success"]:
-        return _pod_spec_error(name, namespace, result["stderr"])
+    if _is_not_found(result):
+        pod, list_error = _find_pod(name, namespace, kc)
+        if pod is not None:
+            return _pod_spec_ok(pod.get("metadata", {}).get("name", name), namespace, pod.get("spec", {}))
+        if list_error is not None:
+            return _pod_spec_error(name, namespace, list_error)
+        return _pod_spec_error(name, namespace, f"no pod matching '{name}'")
+    return _pod_spec_error(name, namespace, result["stderr"])
 
+
+def _is_not_found(result: dict) -> bool:
+    """True when an oc command failed because the resource does not exist.
+
+    Real oc output is ``Error from server (NotFound): pods "x" not found``;
+    match case-insensitively so RBAC (Forbidden) and container errors do not
+    trigger the prefix fallback.
+    """
+    return not result["success"] and "not found" in result["stderr"].lower()
+
+
+def _find_pod(name: str, namespace: str, kubeconfig: str) -> tuple[dict | None, str | None]:
+    """Resolve name to a live pod, returning (pod, error).
+
+    Lists pods once so callers can resolve a deployment/partial name to a live
+    pod (e.g. "myapp" matches "myapp-6b7f8c9d4-x2k9z"). A pod matches when its
+    name equals name or starts with ``name + "-"`` so "app" cannot match
+    "application-...".
+
+    Returns (pod, None) on a match, (None, error) when the list call fails or
+    its output is unparseable, and (None, None) when the list succeeded but
+    nothing matched.
+    """
+    list_result = _run_oc(["get", "pods", "-n", namespace, "-o", "json"], kubeconfig=kubeconfig)
+    if not list_result["success"]:
+        return None, list_result["stderr"]
     try:
         pods = json.loads(list_result["stdout"])
     except json.JSONDecodeError as exc:
-        return _pod_spec_error(name, namespace, f"JSON parse error: {exc}")
-
+        return None, f"failed to parse pod list: {exc}"
     for pod in pods.get("items", []):
         pod_name = pod.get("metadata", {}).get("name", "")
-        if pod_name.startswith(name):
-            return {
-                "name": pod_name,
-                "namespace": namespace,
-                "spec": pod.get("spec", {}),
-                "success": True,
-                "error": None,
-            }
-
-    return _pod_spec_error(name, namespace, f"no pod matching '{name}'")
+        if pod_name == name or pod_name.startswith(name + "-"):
+            return pod, None
+    return None, None
 
 
 def _parse_pod_spec(name: str, namespace: str, stdout: str) -> dict:
@@ -306,10 +326,14 @@ def _parse_pod_spec(name: str, namespace: str, stdout: str) -> dict:
         parsed = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return _pod_spec_error(name, namespace, f"JSON parse error: {exc}")
+    return _pod_spec_ok(name, namespace, parsed.get("spec", parsed))
+
+
+def _pod_spec_ok(name: str, namespace: str, spec: dict) -> dict:
     return {
         "name": name,
         "namespace": namespace,
-        "spec": parsed.get("spec", parsed),
+        "spec": spec,
         "success": True,
         "error": None,
     }
@@ -336,8 +360,11 @@ def get_pod_logs(
     """
     Get recent logs from a specific pod.
 
+    If an exact pod name is not found, falls back to prefix matching
+    (e.g. "myapp" matches "myapp-6b7f8c9d4-x2k9z").
+
     Args:
-        pod_name:   Pod name
+        pod_name:   Pod name (exact or prefix)
         namespace:  Namespace (default: dark-noc-edge)
         container:  Container name (optional, for multi-container pods)
         tail_lines: Number of log lines to return (default: 50)
@@ -346,11 +373,22 @@ def get_pod_logs(
     Returns:
         Dict with logs string
     """
-    args = ["logs", pod_name, "-n", namespace, f"--tail={tail_lines}"]
-    if container:
-        args += ["-c", container]
+    kc = _kubeconfig_for(edge_site_id)
 
-    result = _run_oc(args, kubeconfig=_kubeconfig_for(edge_site_id))
+    def _logs_args(target: str) -> list[str]:
+        args = ["logs", target, "-n", namespace, f"--tail={tail_lines}"]
+        if container:
+            args += ["-c", container]
+        return args
+
+    result = _run_oc(_logs_args(pod_name), kubeconfig=kc)
+    if _is_not_found(result):
+        pod, _ = _find_pod(pod_name, namespace, kc)
+        matched = pod.get("metadata", {}).get("name", "") if pod else ""
+        if matched and matched != pod_name:
+            pod_name = matched
+            result = _run_oc(_logs_args(pod_name), kubeconfig=kc)
+
     return {
         "pod": pod_name,
         "namespace": namespace,

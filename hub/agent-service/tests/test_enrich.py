@@ -27,4 +27,4 @@ class TestEnrichNode:
         with patch("agent_service.nodes.enrich.invoke_tool", mock_invoke):
             await enrich_node(state)
 
-        mock_invoke.assert_called_once_with("get_pods", {"namespace": "prod"})
+        mock_invoke.assert_called_once_with("get_pods", {"namespace": "prod", "edge_site_id": "edge-1"})

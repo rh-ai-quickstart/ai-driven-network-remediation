@@ -76,7 +76,7 @@ class TestInvestigateNode:
 
         assert len(result["cluster_events"]) == 2
         assert result["cluster_events"][0]["reason"] == "OOMKilled"
-        mock_invoke.assert_called_once_with("get_events", {"namespace": "prod", "limit": 20})
+        mock_invoke.assert_called_once_with("get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"})
 
     async def test_tool_failure_feeds_error_back_and_continues(self):
         config = GraphConfig()
@@ -293,6 +293,127 @@ class TestInvestigateNode:
         assert result["pod_logs"] == ""
         assert result["log_search_results"] == _STUB_LOG_SEARCH
         assert mock_llm.ainvoke.call_count == 3
+
+
+class TestToolArgDefaults:
+    async def test_incident_namespace_is_not_rewritten(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[_llm_with_tool_call(), _llm_no_tool_call()])
+        mock_invoke = AsyncMock(return_value=_STUB_EVENTS)
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            await node(state)
+
+        mock_invoke.assert_called_once_with("get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"})
+
+    async def test_discovered_namespace_is_not_rewritten(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        first = _llm_with_tool_call(args={"namespace": "prod", "limit": 20})
+        second = _llm_with_tool_call(
+            args={"namespace": "payments", "limit": 20},
+            call_id="call-2",
+        )
+        events_with_payments = {
+            "items": [
+                {"reason": "BackOff", "message": "crash", "metadata": {"namespace": "payments"}},
+            ]
+        }
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[first, second, _llm_no_tool_call()])
+        mock_invoke = AsyncMock(return_value=events_with_payments)
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            await node(state)
+
+        assert mock_invoke.call_args_list[0].args == ("get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"})
+        assert mock_invoke.call_args_list[1].args == ("get_events", {"namespace": "payments", "limit": 20, "edge_site_id": "edge-1"})
+
+    async def test_llm_provided_edge_site_id_is_preserved(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        tool_call = _llm_with_tool_call(
+            name="get_events",
+            args={"namespace": "prod", "limit": 20, "edge_site_id": "edge-site-02"},
+        )
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[tool_call, _llm_no_tool_call()])
+        mock_invoke = AsyncMock(return_value=_STUB_EVENTS)
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            await node(state)
+
+        mock_invoke.assert_called_once_with(
+            "get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-site-02"}
+        )
+
+    async def test_loki_tool_omits_edge_site_id_openshift_includes_it(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        calls = {}
+
+        async def _record_invoke(tool_name, tool_args):
+            calls[tool_name] = tool_args
+            if tool_name == "get_events":
+                return _STUB_EVENTS
+            return {"patterns": []}
+
+        mixed = AsyncMock()
+        mixed.tool_calls = [
+            {"name": "get_events", "args": {"namespace": "prod"}, "id": "c1"},
+            {"name": "search_logs", "args": {"namespace": "prod", "text": "error"}, "id": "c2"},
+        ]
+        mixed.content = ""
+
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[mixed, _llm_no_tool_call()])
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", _record_invoke),
+        ):
+            await node(state)
+
+        assert calls["get_events"]["edge_site_id"] == "edge-1"
+        assert "edge_site_id" not in calls["search_logs"]
+
+    async def test_omitted_edge_site_id_defaults_to_log_event(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        tool_call = _llm_with_tool_call(
+            name="get_events",
+            args={"namespace": "prod", "limit": 20},
+        )
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[tool_call, _llm_no_tool_call()])
+        mock_invoke = AsyncMock(return_value=_STUB_EVENTS)
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            await node(state)
+
+        mock_invoke.assert_called_once_with(
+            "get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"}
+        )
 
 
 def _empty_evidence():
