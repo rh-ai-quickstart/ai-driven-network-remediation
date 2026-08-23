@@ -1,8 +1,14 @@
 import json
+import re
 
 from loguru import logger
 
 from agent_service.config import get_http_client
+
+# Prefix stamped onto pod-spec evidence in investigate.py to record which cluster
+# it came from. Retargeting only trusts an edge_site_id that carries this stamp,
+# so a namespace or log line that merely mentions a cluster name is not enough.
+EDGE_SITE_STAMP = "Edge site:"
 
 
 async def warm_tool_cache() -> bool:
@@ -18,16 +24,37 @@ async def warm_tool_cache() -> bool:
     return True
 
 
-def build_launch_extra_vars(log_event) -> dict:
+def _normalize_component_name(component: str) -> str:
+    """Turn a free-text affected component into a matchable pod-name prefix.
+
+    Drops any '(...)' qualifier, a leading 'kind/' segment, and trailing words so
+    'deployment/orders-api (edge-site-02)' resolves to 'orders-api'.
+    """
+    without_paren = re.sub(r"\(.*?\)", " ", component)
+    last_segment = without_paren.strip().split("/")[-1]
+    tokens = last_segment.split()
+    return tokens[0].lower() if tokens else ""
+
+
+def build_launch_extra_vars(log_event, llm_summary=None, evidence_text="") -> dict:
     """Build the extra_vars dict from a log event for AAP job launches."""
     if not log_event:
         return {}
-    return {
+    extra_vars = {
         "namespace": log_event.namespace,
         "pod_name": log_event.pod_name,
         "container": log_event.container,
         "edge_site_id": log_event.edge_site_id,
     }
+    if not llm_summary:
+        return extra_vars
+    component = llm_summary.get("affected_component")
+    if isinstance(component, str) and component and re.search(rf"\b{re.escape(component)}\b", evidence_text):
+        extra_vars["deployment_name"] = component
+    site_id = llm_summary.get("edge_site_id")
+    if isinstance(site_id, str) and site_id and f"{EDGE_SITE_STAMP} {site_id}" in evidence_text:
+        extra_vars["edge_site_id"] = site_id
+    return extra_vars
 
 
 def _parse_tool_content(content) -> dict:

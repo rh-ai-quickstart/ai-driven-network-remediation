@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from agent_service.utils import invoke_tool, warm_tool_cache
+from agent_service.utils import (
+    _normalize_component_name,
+    build_launch_extra_vars,
+    invoke_tool,
+    warm_tool_cache,
+)
 
 
 def _response(data, status=200, method="POST", url="http://test/v1/tool-runtime/invoke"):
@@ -68,3 +73,74 @@ async def test_warm_tool_cache_survives_failure(_mock_client):
     _mock_client.get.side_effect = Exception("connection refused")
     result = await warm_tool_cache()
     assert result is False
+
+
+def _log_event(ns="prod", pod="nginx-abc", container="web", site="site-1"):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(namespace=ns, pod_name=pod, container=container, edge_site_id=site)
+
+
+class TestBuildLaunchExtraVarsGrounding:
+    def test_short_component_does_not_match_substring(self):
+        result = build_launch_extra_vars(
+            _log_event(),
+            {"affected_component": "app"},
+            "checking apps/v1 deployments in application namespace",
+        )
+        assert "deployment_name" not in result
+
+    def test_exact_word_component_matches(self):
+        result = build_launch_extra_vars(
+            _log_event(),
+            {"affected_component": "nginx"},
+            "pod nginx is crashlooping with OOMKilled",
+        )
+        assert result["deployment_name"] == "nginx"
+
+    def test_site_id_does_not_match_substring(self):
+        result = build_launch_extra_vars(
+            _log_event(),
+            {"edge_site_id": "site"},
+            "multisite deployment reported errors on website cluster",
+        )
+        assert result["edge_site_id"] == "site-1"
+
+    def test_namespace_not_accepted_as_edge_site_id(self):
+        result = build_launch_extra_vars(
+            _log_event(ns="edge-site-01", site="local-cluster"),
+            {"edge_site_id": "edge-site-01"},
+            "namespace edge-site-01 has high CPU usage",
+        )
+        assert result["edge_site_id"] == "local-cluster"
+
+    def test_edge_site_id_overlaid_when_stamped_in_evidence(self):
+        result = build_launch_extra_vars(
+            _log_event(site="edge-site-01"),
+            {"edge_site_id": "edge-site-02"},
+            "Edge site: edge-site-02\nPod: myapp\n  limits: cpu: 500m",
+        )
+        assert result["edge_site_id"] == "edge-site-02"
+
+    def test_edge_site_id_not_overlaid_when_absent_from_evidence(self):
+        result = build_launch_extra_vars(
+            _log_event(site="edge-site-01"),
+            {"edge_site_id": "edge-site-02"},
+            "Pod: myapp is crashlooping with OOMKilled",
+        )
+        assert result["edge_site_id"] == "edge-site-01"
+
+
+class TestNormalizeComponentName:
+    @pytest.mark.parametrize(
+        "component, expected",
+        [
+            ("deployment/orders-api (edge-site-02)", "orders-api"),
+            ("nginx", "nginx"),
+            ("Pod/My-App", "my-app"),
+            ("", ""),
+            ("web-frontend service (edge-site-01)", "web-frontend"),
+        ],
+    )
+    def test_normalize(self, component, expected):
+        assert _normalize_component_name(component) == expected
