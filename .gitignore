@@ -101,6 +101,7 @@ scripts/ci/test-local.sh
 hub/helm/spokes.generated.yaml
 
 dev-private/
+graphify-out
 issues/
 once.sh
 prompt.md
