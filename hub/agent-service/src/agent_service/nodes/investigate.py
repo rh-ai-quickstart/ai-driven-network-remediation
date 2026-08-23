@@ -5,7 +5,7 @@ from loguru import logger
 
 from agent_service.config import INVESTIGATE_SYSTEM_PROMPT, get_llm
 from agent_service.models import GraphConfig
-from agent_service.utils import invoke_tool
+from agent_service.utils import EDGE_SITE_STAMP, invoke_tool
 
 _TOOLS = [
     {
@@ -152,7 +152,7 @@ def _format_pod_resources(tool_result: dict) -> str:
     return "\n".join(lines)
 
 
-def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict) -> None:
+def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict, edge_site_id: str = "") -> None:
     if tool_result.get("error"):
         return
     if tool_name == "get_events":
@@ -168,6 +168,8 @@ def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict) -> Non
         evidence["log_search_results"].extend(tool_result.get("logs", []))
     elif tool_name == "get_pod_spec":
         formatted = _format_pod_resources(tool_result)
+        if edge_site_id:
+            formatted = f"{EDGE_SITE_STAMP} {edge_site_id}\n{formatted}"
         prev = evidence["resource_specs"]
         evidence["resource_specs"] = formatted if not prev else prev + "\n" + formatted
 
@@ -226,8 +228,8 @@ def make_investigate_node(config: GraphConfig):
                         *[_call_tool(tc["name"], args) for tc, args in zip(tool_calls, defaulted_args)]
                     )
 
-                    for tool_call, tool_result in zip(tool_calls, results):
-                        _merge_tool_result(tool_call["name"], tool_result, evidence)
+                    for tool_call, args, tool_result in zip(tool_calls, defaulted_args, results):
+                        _merge_tool_result(tool_call["name"], tool_result, evidence, args.get("edge_site_id", ""))
                         messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
 
                 logger.info(

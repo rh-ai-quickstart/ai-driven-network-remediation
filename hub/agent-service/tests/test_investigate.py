@@ -472,3 +472,33 @@ class TestMergeToolResult:
         _merge_tool_result("get_pod_spec", _STUB_POD_SPEC, evidence)
         assert "existing-pod" in evidence["resource_specs"]
         assert "myapp" in evidence["resource_specs"]
+
+
+class TestPodSpecStampsInvestigatedCluster:
+    """Change B: resource_specs must carry the edge_site_id the pod spec was fetched against."""
+
+    async def test_get_pod_spec_stamps_non_incident_cluster(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        pod_spec_call = _llm_with_tool_call(
+            name="get_pod_spec",
+            args={
+                "pod_name": "myapp-6b7f8c-x2k9z",
+                "namespace": "prod",
+                "edge_site_id": "edge-site-02",
+            },
+        )
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[pod_spec_call, _llm_no_tool_call()])
+        mock_invoke = AsyncMock(return_value=_STUB_POD_SPEC)
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            result = await node(state)
+
+        assert "edge-site-02" in result["resource_specs"]
+        assert "myapp" in result["resource_specs"]
+        assert "500m" in result["resource_specs"]
