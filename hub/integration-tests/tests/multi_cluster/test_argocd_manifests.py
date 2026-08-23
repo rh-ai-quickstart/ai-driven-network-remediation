@@ -41,9 +41,9 @@ def test_applicationset_list_generator_and_site_id_params():
     assert "SPOKE_ELEMENTS_START" in text
     assert "SPOKE_ELEMENTS_END" in text
     assert "name: edge-site-01" in text
-    assert "siteId: edge-01" in text
+    assert "siteId: edge-site-01" in text
     assert "name: edge-site-02" in text
-    assert "siteId: edge-02" in text
+    assert "siteId: edge-site-02" in text
     assert "path: edge/helm" in text
     assert "name: siteId" in text
     assert 'value: "{{.siteId}}"' in text

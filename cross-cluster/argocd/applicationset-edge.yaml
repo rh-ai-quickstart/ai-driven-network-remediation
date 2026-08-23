@@ -3,7 +3,9 @@
 # Generator: list elements are rendered by scripts/acm/argocd-apply.sh from
 # hub/helm/spokes.generated.yaml (gitignored; not usable as a Git file generator).
 # ClusterDecisionResource is an alternative once spokes are labeled; list keeps
-# siteId (edge-NN) aligned with topology without ManagedCluster label coupling.
+# siteId aligned with topology. siteId MUST equal the ManagedCluster name
+# (edge-site-NN): remediation routes to the spoke via ACM cluster-proxy using
+# edge_site_id as the cluster path segment.
 #
 # Sample values / spokes below are valid for kubectl --dry-run=client. The apply
 # script replaces the SPOKE_ELEMENTS block and substitutes repo/revision/kafka
@@ -26,10 +28,10 @@ spec:
         elements:
           # SPOKE_ELEMENTS_START
           - name: edge-site-01
-            siteId: edge-01
+            siteId: edge-site-01
             namespace: dark-noc-edge
           - name: edge-site-02
-            siteId: edge-02
+            siteId: edge-site-02
             namespace: dark-noc-edge
           # SPOKE_ELEMENTS_END
   template:
@@ -63,8 +65,10 @@ spec:
         name: "{{.name}}"
         namespace: "{{.namespace}}"
       syncPolicy:
+        # selfHeal off so AI remediation patches (e.g. raising CPU limits) persist
+        # instead of being reverted to the chart-declared values on drift detection.
         automated:
           prune: true
-          selfHeal: true
+          selfHeal: false
         syncOptions:
           - CreateNamespace=true

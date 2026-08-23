@@ -64,8 +64,8 @@ def test_create_clusters_dry_run_renders_two_clusterdeployments():
     assert out.count("kind: ClusterDeployment") == 2
     assert "edge-site-01" in out
     assert "edge-site-02" in out
-    assert "adnr.io/site-id: edge-01" in out
-    assert "adnr.io/site-id: edge-02" in out
+    assert "adnr.io/site-id: edge-site-01" in out
+    assert "adnr.io/site-id: edge-site-02" in out
     assert "__SPOKE_NAME__" not in out
     assert "OK: acm-create-clusters dry-run" in out
 
@@ -87,7 +87,7 @@ def test_argocd_apply_dry_run_renders_appproject_and_appset():
     assert "kind: ApplicationSet" in out
     assert out.count("name: edge-site-01") >= 1
     assert out.count("name: edge-site-02") >= 1
-    assert "siteId: edge-01" in out
+    assert "siteId: edge-site-01" in out
     assert "kafka.apps.hub.example.com" in out
     assert "ADNR_KAFKA_EXTERNAL_HOST" not in out
     assert "__KAFKA_EXTERNAL_HOST__" not in out

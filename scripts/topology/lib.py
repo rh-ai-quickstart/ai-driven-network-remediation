@@ -35,8 +35,11 @@ def build_spokes(
     count = spoke_count_for(cluster_count)
     return [
         {
+            # siteId MUST equal name (the ManagedCluster name): remediation routes to
+            # the spoke via ACM cluster-proxy using edge_site_id as the cluster path
+            # segment, so the CLF-stamped edge_site_id has to match the cluster name.
             "name": f"{prefix}-{i:02d}",
-            "siteId": f"edge-{i:02d}",
+            "siteId": f"{prefix}-{i:02d}",
             "namespace": namespace,
         }
         for i in range(1, count + 1)

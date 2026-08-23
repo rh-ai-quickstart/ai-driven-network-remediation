@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 EDGE_CHART = REPO_ROOT / "edge" / "helm"
 
 _BASE_SETS = [
-    "siteId=edge-01",
+    "siteId=edge-site-01",
     "namespace=dark-noc-edge",
     "kafka.externalHost=kafka.apps.hub.example.com",
 ]
@@ -72,7 +72,7 @@ def test_nginx_deployment_has_oom_friendly_memory_limit():
     assert "namespace: dark-noc-edge" in rendered
     assert "nginx:1.27-alpine" in rendered
     assert "memory: 64Mi" in rendered
-    assert "adnr.io/site-id" in rendered and "edge-01" in rendered
+    assert "adnr.io/site-id" in rendered and "edge-site-01" in rendered
 
 
 def test_clf_forwards_to_hub_kafka_with_mtls_and_site_id():
@@ -87,7 +87,7 @@ def test_clf_forwards_to_hub_kafka_with_mtls_and_site_id():
     assert "ca.crt" in rendered
     assert "client.crt" in rendered
     assert "client.key" in rendered
-    assert "edge_site_id" in rendered and "edge-01" in rendered
+    assert "edge_site_id" in rendered and "edge-site-01" in rendered
     assert "name: keep-warn-error" in rendered
     assert "type: drop" in rendered
     assert "name: edge-application" in rendered
@@ -142,7 +142,7 @@ def test_kafka_external_host_required_when_clf_enabled():
             "template",
             "edge-site-01",
             str(EDGE_CHART),
-            "--set=siteId=edge-01",
+            "--set=siteId=edge-site-01",
             "--set=namespace=dark-noc-edge",
         ],
         capture_output=True,
@@ -151,3 +151,9 @@ def test_kafka_external_host_required_when_clf_enabled():
     )
     assert result.returncode != 0
     assert "kafka.externalHost" in (result.stderr + result.stdout)
+
+
+def test_defaults_render_nginx_only():
+    rendered = _helm_template()
+    assert "kind: Deployment" in rendered
+    assert "name: edge-nginx" in rendered
