@@ -1,8 +1,9 @@
+import os
 import time
 import uuid
 from typing import Literal, NotRequired, Optional, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 FailureType = Literal[
     "OOMKilled",
@@ -32,13 +33,33 @@ class LogEvent(BaseModel):
 
 
 class RootCauseAnalysis(BaseModel):
-    failure_type: FailureType
-    confidence: float
-    summary: str
-    evidence: list[str]
-    recommended_actions: list[str]
-    estimated_severity: Literal["critical", "high", "medium", "low"]
-    runbook_reference: str
+    failure_type: FailureType = Field(description="Category of the failure")
+    confidence: float = Field(default=0.5, description="Confidence score between 0.0 and 1.0")
+    summary: str = Field(
+        default="Unable to determine root cause",
+        description="One-sentence human-readable summary of the root cause",
+    )
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="List of evidence strings supporting the diagnosis",
+    )
+    recommended_actions: list[str] = Field(
+        description="Short executable remediation action names (not shell commands)"
+    )
+    estimated_severity: Literal["critical", "high", "medium", "low"] = Field(
+        description="Severity level"
+    )
+    runbook_reference: str = Field(
+        default="n/a",
+        description="Runbook name or URL, or 'n/a' if none applies",
+    )
+
+    @field_validator("evidence", "recommended_actions", mode="before")
+    @classmethod
+    def _coerce_to_list(cls, v):
+        if isinstance(v, str):
+            return [v]
+        return v
 
 
 class RemediationResult(BaseModel):
@@ -69,8 +90,17 @@ class GraphConfig(BaseModel):
     max_retries: int = 1
     job_timeout: float = 120.0
     tool_call_timeout: int = 10
-    investigate_timeout: int = 45
-    investigate_max_iterations: int = 3
+    investigate_timeout: int = 120
+    investigate_max_iterations: int = 12
+
+    @model_validator(mode="before")
+    @classmethod
+    def _env_defaults(cls, values):
+        if "investigate_max_iterations" not in values:
+            env_val = os.getenv("INVESTIGATE_MAX_ITERATIONS")
+            if env_val is not None:
+                values["investigate_max_iterations"] = int(env_val)
+        return values
 
 
 class IncidentState(BaseModel):
