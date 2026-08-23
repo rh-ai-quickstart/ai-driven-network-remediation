@@ -15,18 +15,7 @@ async def analyze_node(state: dict) -> dict:
     logger.info("Analyze node invoked")
 
     # For testing
-    if state.confidence_override is not None and state.failure_type_override is not None:
-        log_event = state.log_event
-        rca = RootCauseAnalysis(
-            failure_type=state.failure_type_override,
-            confidence=state.confidence_override,
-            summary=log_event.message if log_event else "synthetic override",
-            evidence=[log_event.raw] if log_event else ["override"],
-            recommended_actions=["manual review"],
-            estimated_severity="medium",
-            runbook_reference="n/a",
-        )
-        return {"root_cause_analysis": rca}
+    has_overrides = state.confidence_override is not None and state.failure_type_override is not None
 
     log_event = state.log_event
     context = "\n---\n".join(state.context_snippets or [])[:_MAX_CONTEXT_CHARS]
@@ -57,6 +46,14 @@ async def analyze_node(state: dict) -> dict:
 
         rca = RootCauseAnalysis.model_validate(json.loads(response.content))
 
+        if has_overrides:
+            rca = rca.model_copy(
+                update={
+                    "failure_type": state.failure_type_override,
+                    "confidence": state.confidence_override,
+                }
+            )
+
         usage = response.usage_metadata or {}
         tokens = usage.get("total_tokens", 0)
 
@@ -71,12 +68,23 @@ async def analyze_node(state: dict) -> dict:
         fallback = RootCauseAnalysis(
             failure_type="Unknown",
             confidence=0.0,
-            summary="Analysis failed — escalate for manual review",
+            summary="Analysis failed, escalate for manual review",
             evidence=[],
             recommended_actions=["escalate to on-call engineer"],
             estimated_severity="critical",
             runbook_reference="n/a",
         )
+        if has_overrides:
+            fallback = fallback.model_copy(
+                update={
+                    "failure_type": state.failure_type_override,
+                    "confidence": state.confidence_override,
+                    "summary": log_event.message if log_event else "synthetic override",
+                    "evidence": [log_event.raw] if log_event else ["override"],
+                    "recommended_actions": ["manual review"],
+                    "estimated_severity": "medium",
+                }
+            )
         return {
             "root_cause_analysis": fallback,
             "analysis_tokens_used": 0,

@@ -112,8 +112,7 @@ class TestEvidenceInPrompt:
 
             state = make_state(
                 context_snippets=["some context"],
-                pod_status={"items": [{"metadata": {"name": "nginx-abc"}}]},
-                cluster_events=[{"reason": "OOMKilled"}],
+                recent_errors=[{"pattern": "OOMKilled", "count": 3}],
             )
             await analyze_node(state)
 
@@ -121,8 +120,7 @@ class TestEvidenceInPrompt:
         messages = call_args[0][0]
         user_msg = messages[1].content
         assert "Investigation evidence:" in user_msg
-        assert "Pod Status" in user_msg
-        assert "nginx-abc" in user_msg
+        assert "Recent Errors" in user_msg
         assert "OOMKilled" in user_msg
 
     @pytest.mark.asyncio
@@ -145,8 +143,9 @@ class TestEvidenceInPrompt:
 
 class TestOverrideBypass:
     @pytest.mark.asyncio
-    async def test_override_skips_llm_and_returns_synthetic_rca(self):
+    async def test_override_pins_type_and_confidence_on_llm_result(self):
         mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
 
         with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
             from agent_service.nodes.analyze import analyze_node
@@ -157,8 +156,28 @@ class TestOverrideBypass:
             )
             result = await analyze_node(state)
 
-        mock_llm.ainvoke.assert_not_called()
+        mock_llm.ainvoke.assert_called_once()
         rca = result["root_cause_analysis"]
         assert isinstance(rca, RootCauseAnalysis)
         assert rca.confidence == 0.42
         assert rca.failure_type == "DNSFailure"
+        assert rca.summary == "Container killed by OOM"
+
+    @pytest.mark.asyncio
+    async def test_override_fallback_when_llm_fails(self):
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("unreachable"))
+
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            state = make_state(
+                confidence_override=0.42,
+                failure_type_override="DNSFailure",
+            )
+            result = await analyze_node(state)
+
+        rca = result["root_cause_analysis"]
+        assert rca.confidence == 0.42
+        assert rca.failure_type == "DNSFailure"
+        assert rca.estimated_severity == "medium"
