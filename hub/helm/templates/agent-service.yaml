@@ -18,6 +18,25 @@ spec:
         {{- include "hub.labels" . | nindent 8 }}
         app.kubernetes.io/component: agent-service
     spec:
+      {{- if .Values.agentService.waitForDeps }}
+      initContainers:
+        - name: wait-for-llamastack
+          image: {{ .Values.waitImage | quote }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              retries=0
+              max_retries=36
+              until curl -sf http://{{ index .Values "llama-stack" "host" }}:{{ index .Values "llama-stack" "port" }}/v1/models; do
+                retries=$((retries + 1))
+                if [ $retries -ge $max_retries ]; then
+                  echo "LlamaStack not ready after $max_retries attempts — giving up"
+                  exit 1
+                fi
+                echo "Waiting for LlamaStack... ($retries/$max_retries)"
+                sleep 5
+              done
+      {{- end }}
       containers:
         - name: agent-service
           image: "{{ .Values.image.registry }}/{{ .Values.image.agentService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"

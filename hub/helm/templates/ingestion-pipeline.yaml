@@ -20,7 +20,7 @@ spec:
       {{- if .Values.ingestionPipeline.waitForDeps }}
       initContainers:
         - name: wait-for-minio
-          image: "curlimages/curl:8.13.0"
+          image: {{ $.Values.waitImage | quote }}
           command: ["sh", "-c"]
           args:
             - |
@@ -35,7 +35,7 @@ spec:
                 sleep 3
               done
         - name: wait-for-llamastack
-          image: "curlimages/curl:8.13.0"
+          image: {{ $.Values.waitImage | quote }}
           command: ["sh", "-c"]
           args:
             - |

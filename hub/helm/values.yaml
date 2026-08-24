@@ -12,6 +12,8 @@ image:
   pullPolicy: Always
   tag: "0.0.1"
 
+waitImage: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+
 global:
   routes:
     enabled: true
@@ -442,6 +444,7 @@ frontend:
 
 agentService:
   enabled: true
+  waitForDeps: true
   prompts:
     analyzeSystem: ""
     investigateSystem: ""

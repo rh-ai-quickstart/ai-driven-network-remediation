@@ -75,6 +75,7 @@ runs:
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
+            --set waitImage=curlimages/curl:8.14.1 \
             --set mcpSecrets.openshift.create=true \
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
