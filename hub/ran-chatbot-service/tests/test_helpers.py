@@ -191,3 +191,42 @@ class TestMlFieldsFormatting:
         })
         reply = format_chat_reply("What's wrong?", "insight", [anomaly])
         assert "ML class" not in reply
+
+
+class TestSteeringSkippedNote:
+    """Secondary seam: when ml_steer_used is false but ml_root_cause_class is
+    non-empty, the formatter notes that ML predicted a class but steering was
+    skipped due to low confidence."""
+
+    def test_context_shows_steering_skipped_note(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_root_cause_class": "Antenna Failure",
+            "ml_confidence": 0.3,
+            "ml_steer_used": False,
+        })
+        prompt = build_chat_context("Status?", [anomaly], [])
+        assert "Antenna Failure" in prompt
+        assert "steering" in prompt.lower() or "skipped" in prompt.lower()
+
+    def test_reply_shows_steering_skipped_note(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_root_cause_class": "Doppler Shift (Severe)",
+            "ml_confidence": 0.25,
+            "ml_steer_used": False,
+        })
+        reply = format_chat_reply("What's wrong?", "insight", [anomaly])
+        assert "Doppler Shift (Severe)" in reply
+        assert "steering" in reply.lower() or "skipped" in reply.lower()
+
+    def test_no_note_when_both_false_and_empty_class(self, sample_anomaly):
+        """ml_steer_used=false with empty class = classify didn't run at all;
+        no note needed."""
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_root_cause_class": "",
+            "ml_confidence": 0.0,
+            "ml_steer_used": False,
+        })
+        prompt = build_chat_context("Status?", [anomaly], [])
+        assert "ML" not in prompt
+        reply = format_chat_reply("What's wrong?", "insight", [anomaly])
+        assert "ML" not in reply

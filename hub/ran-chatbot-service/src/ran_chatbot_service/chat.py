@@ -23,6 +23,11 @@ def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
         ml_line = ""
         if a.ml_steer_used and a.ml_root_cause_class:
             ml_line = f"\n    ML class: {a.ml_root_cause_class} (confidence: {a.ml_confidence:.0%})"
+        elif not a.ml_steer_used and a.ml_root_cause_class:
+            ml_line = (
+                f"\n    ML class: {a.ml_root_cause_class} (confidence: {a.ml_confidence:.0%})"
+                f" — steering skipped (low confidence)"
+            )
         lines.append(
             f"  - Cell {a.cell_id} ({a.band}) [{a.anomaly_type}]: {a.anomaly}\n"
             f"    Root cause: {a.root_cause or 'n/a'}\n"
@@ -125,6 +130,11 @@ def format_chat_reply(
         recommended_fix = latest.recommended_fix or "n/a"
         if latest.ml_steer_used and latest.ml_root_cause_class:
             ml_line = f"\n- ML class: {latest.ml_root_cause_class} (confidence: {latest.ml_confidence:.0%})"
+        elif not latest.ml_steer_used and latest.ml_root_cause_class:
+            ml_line = (
+                f"\n- ML class: {latest.ml_root_cause_class} (confidence: {latest.ml_confidence:.0%})"
+                f" — steering skipped (low confidence)"
+            )
         else:
             ml_line = ""
 

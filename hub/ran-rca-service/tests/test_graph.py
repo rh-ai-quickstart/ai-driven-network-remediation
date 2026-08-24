@@ -297,6 +297,281 @@ class TestClassifyFailureGraph:
             graph = build_graph()
             result = await graph.ainvoke(anomaly_with_kpi)
 
+        assert result["ml_root_cause_class"] == ""
+        assert result["ml_confidence"] == 0.0
         assert result["ml_steer_used"] is False
         assert result["root_cause"] != ""
         assert result["recommended_fix"] != ""
+
+    @pytest.mark.asyncio
+    async def test_classify_http_error_output_matches_enriched_schema(self):
+        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
+        validator = jsonschema.Draft202012Validator(schema)
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, status_code=500)
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        enriched = {
+            "cell_id": result["cell_id"],
+            "band": result["band"],
+            "anomaly_type": result["anomaly_type"],
+            "anomaly": result["anomaly"],
+            "root_cause": result["root_cause"],
+            "recommended_fix": result["recommended_fix"],
+            "ml_root_cause_class": result["ml_root_cause_class"],
+            "ml_confidence": result["ml_confidence"],
+            "ml_steer_used": result["ml_steer_used"],
+        }
+        validator.validate(enriched)
+
+
+class TestConfidenceGating:
+    """Primary seam: confidence below MANTIS_CONFIDENCE_THRESHOLD populates ML
+    fields but sets ml_steer_used=false — RAG and analyze run unsteered."""
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_populates_ml_fields_but_no_steering(self):
+        low_conf_response = {"class": "Antenna Failure", "confidence": 0.3, "class_index": 0}
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, classify_response=low_conf_response)
+            stack.enter_context(patch("ran_rca_service.nodes.classify.MANTIS_CONFIDENCE_THRESHOLD", 0.6))
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        assert result["ml_root_cause_class"] == "Antenna Failure"
+        assert result["ml_confidence"] == 0.3
+        assert result["ml_steer_used"] is False
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_rag_runs_unsteered(self):
+        low_conf_response = {"class": "Antenna Failure", "confidence": 0.3, "class_index": 0}
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        mock_rag = MagicMock()
+        mock_rag.search = AsyncMock(return_value=[])
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag))
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, classify_response=low_conf_response)
+            stack.enter_context(patch("ran_rca_service.nodes.classify.MANTIS_CONFIDENCE_THRESHOLD", 0.6))
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        assert "Antenna Failure" not in result["rag_query_used"]
+        assert "LowRsrp" in result["rag_query_used"]
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_output_matches_enriched_schema(self):
+        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
+        validator = jsonschema.Draft202012Validator(schema)
+        low_conf_response = {"class": "Antenna Failure", "confidence": 0.3, "class_index": 0}
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, classify_response=low_conf_response)
+            stack.enter_context(patch("ran_rca_service.nodes.classify.MANTIS_CONFIDENCE_THRESHOLD", 0.6))
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        enriched = {
+            "cell_id": result["cell_id"],
+            "band": result["band"],
+            "anomaly_type": result["anomaly_type"],
+            "anomaly": result["anomaly"],
+            "root_cause": result["root_cause"],
+            "recommended_fix": result["recommended_fix"],
+            "ml_root_cause_class": result["ml_root_cause_class"],
+            "ml_confidence": result["ml_confidence"],
+            "ml_steer_used": result["ml_steer_used"],
+        }
+        validator.validate(enriched)
+
+
+class TestEmptyKpiWindow:
+    """Primary seam: empty or malformed kpi_window skips classify entirely."""
+
+    @pytest.mark.asyncio
+    async def test_empty_kpi_window_produces_ml_defaults(self):
+        anomaly_no_kpi = {**SAMPLE_ANOMALY, "kpi_window": []}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack)
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_no_kpi)
+
+        assert result["ml_root_cause_class"] == ""
+        assert result["ml_confidence"] == 0.0
+        assert result["ml_steer_used"] is False
+        assert result["root_cause"] != ""
+
+    @pytest.mark.asyncio
+    async def test_wrong_shape_kpi_window_produces_ml_defaults(self):
+        """kpi_window present but not 128×18 — treated as missing."""
+        wrong_shape = [[1.0, 2.0, 3.0] for _ in range(10)]
+        anomaly = {**SAMPLE_ANOMALY, "kpi_window": wrong_shape}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack)
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly)
+
+        assert result["ml_root_cause_class"] == ""
+        assert result["ml_confidence"] == 0.0
+        assert result["ml_steer_used"] is False
+        assert result["root_cause"] != ""
+
+    @pytest.mark.asyncio
+    async def test_missing_kpi_window_output_matches_enriched_schema(self):
+        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
+        validator = jsonschema.Draft202012Validator(schema)
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack)
+            graph = build_graph()
+            result = await graph.ainvoke(SAMPLE_ANOMALY)
+
+        enriched = {
+            "cell_id": result["cell_id"],
+            "band": result["band"],
+            "anomaly_type": result["anomaly_type"],
+            "anomaly": result["anomaly"],
+            "root_cause": result["root_cause"],
+            "recommended_fix": result["recommended_fix"],
+            "ml_root_cause_class": result["ml_root_cause_class"],
+            "ml_confidence": result["ml_confidence"],
+            "ml_steer_used": result["ml_steer_used"],
+        }
+        validator.validate(enriched)
+
+
+class TestInvalidClassIndex:
+    """Primary seam: class_index outside RCA_CLASSES range treated as classify failure."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_class_index_produces_ml_defaults(self):
+        bad_response = {"class": "Unknown", "confidence": 0.95, "class_index": 999}
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, classify_response=bad_response)
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        assert result["ml_root_cause_class"] == ""
+        assert result["ml_confidence"] == 0.0
+        assert result["ml_steer_used"] is False
+        assert result["root_cause"] != ""
+
+    @pytest.mark.asyncio
+    async def test_negative_class_index_produces_ml_defaults(self):
+        bad_response = {"class": "Antenna Failure", "confidence": 0.9, "class_index": -1}
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, classify_response=bad_response)
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        assert result["ml_root_cause_class"] == ""
+        assert result["ml_confidence"] == 0.0
+        assert result["ml_steer_used"] is False
+
+    @pytest.mark.asyncio
+    async def test_invalid_class_index_output_matches_enriched_schema(self):
+        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
+        validator = jsonschema.Draft202012Validator(schema)
+        bad_response = {"class": "Unknown", "confidence": 0.95, "class_index": 999}
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with ExitStack() as stack:
+            stack.enter_context(_mock_rag_client())
+            stack.enter_context(_mock_llm())
+            _enable_mantis(stack, classify_response=bad_response)
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        enriched = {
+            "cell_id": result["cell_id"],
+            "band": result["band"],
+            "anomaly_type": result["anomaly_type"],
+            "anomaly": result["anomaly"],
+            "root_cause": result["root_cause"],
+            "recommended_fix": result["recommended_fix"],
+            "ml_root_cause_class": result["ml_root_cause_class"],
+            "ml_confidence": result["ml_confidence"],
+            "ml_steer_used": result["ml_steer_used"],
+        }
+        validator.validate(enriched)
+
+
+class TestMantisDisabledWithUrl:
+    """Primary seam: MANTIS_ENABLED=false with classify URL set still bypasses classify."""
+
+    @pytest.mark.asyncio
+    async def test_disabled_with_url_produces_ml_defaults(self):
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with (
+            _mock_rag_client(),
+            _mock_llm(),
+            patch("ran_rca_service.nodes.classify.MANTIS_ENABLED", False),
+            patch("ran_rca_service.nodes.classify.CLASSIFY_INFERENCE_URL", "http://classify:8080/v1/classify"),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        assert result["ml_root_cause_class"] == ""
+        assert result["ml_confidence"] == 0.0
+        assert result["ml_steer_used"] is False
+        assert result["root_cause"] != ""
+        assert result["recommended_fix"] != ""
+
+    @pytest.mark.asyncio
+    async def test_disabled_with_url_output_matches_enriched_schema(self):
+        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
+        validator = jsonschema.Draft202012Validator(schema)
+        anomaly_with_kpi = {**SAMPLE_ANOMALY, "kpi_window": SAMPLE_KPI_WINDOW}
+
+        with (
+            _mock_rag_client(),
+            _mock_llm(),
+            patch("ran_rca_service.nodes.classify.MANTIS_ENABLED", False),
+            patch("ran_rca_service.nodes.classify.CLASSIFY_INFERENCE_URL", "http://classify:8080/v1/classify"),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke(anomaly_with_kpi)
+
+        enriched = {
+            "cell_id": result["cell_id"],
+            "band": result["band"],
+            "anomaly_type": result["anomaly_type"],
+            "anomaly": result["anomaly"],
+            "root_cause": result["root_cause"],
+            "recommended_fix": result["recommended_fix"],
+            "ml_root_cause_class": result["ml_root_cause_class"],
+            "ml_confidence": result["ml_confidence"],
+            "ml_steer_used": result["ml_steer_used"],
+        }
+        validator.validate(enriched)
