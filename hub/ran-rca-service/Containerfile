@@ -10,6 +10,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 COPY shared/ /shared/
+COPY telco-oran/ /telco-oran/
 
 COPY ran-rca-service/pyproject.toml ran-rca-service/uv.lock ./
 
