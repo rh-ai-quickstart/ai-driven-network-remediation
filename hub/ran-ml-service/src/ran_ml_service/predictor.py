@@ -100,9 +100,9 @@ class ClassifyPredictor:
                 "class_index": class_index,
             }
 
-        x = torch.tensor(arr, dtype=torch.float32).unsqueeze(0)
+        x = torch.tensor(arr, dtype=torch.float32).unsqueeze(0)  # [B, T, C]
         with torch.no_grad():
-            logits = self._head(self._encoder(x.permute(0, 2, 1)))
+            logits = self._head(self._encoder(x))
             probs = F.softmax(logits, dim=1)
             confidence, class_index = probs.max(dim=1)
 

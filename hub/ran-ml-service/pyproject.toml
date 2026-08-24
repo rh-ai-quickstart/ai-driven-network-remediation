@@ -16,6 +16,10 @@ dependencies = [
     "uvicorn>=0.34",
 ]
 
+[project.optional-dependencies]
+local = ["mantis-tsfm"]
+mlflow = ["mlflow"]
+
 [tool.uv.sources]
 telco-oran = { path = "../telco-oran" }
 
