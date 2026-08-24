@@ -150,3 +150,44 @@ class TestFormatChatReply:
         reply = format_chat_reply("What's wrong?", "insight", [oldest, newest])
         assert "Latest anomaly: Cell 2" in reply
         assert "Latest anomaly: Cell 1" not in reply
+
+
+class TestMlFieldsFormatting:
+    """Formatter unit tests for ML classification fields."""
+
+    def test_ml_class_shown_in_context_when_steered(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_root_cause_class": "Antenna Failure",
+            "ml_confidence": 0.92,
+            "ml_steer_used": True,
+        })
+        prompt = build_chat_context("Status?", [anomaly], [])
+        assert "ML class: Antenna Failure" in prompt
+        assert "92%" in prompt
+
+    def test_ml_class_hidden_in_context_when_not_steered(self, sample_anomaly):
+        prompt = build_chat_context("Status?", [sample_anomaly], [])
+        assert "ML class" not in prompt
+
+    def test_ml_class_shown_in_reply_when_steered(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_root_cause_class": "Doppler Shift (Severe)",
+            "ml_confidence": 0.85,
+            "ml_steer_used": True,
+        })
+        reply = format_chat_reply("What's wrong?", "insight", [anomaly])
+        assert "ML class: Doppler Shift (Severe)" in reply
+        assert "85%" in reply
+
+    def test_ml_class_hidden_in_reply_when_not_steered(self, sample_anomaly):
+        reply = format_chat_reply("What's wrong?", "insight", [sample_anomaly])
+        assert "ML class" not in reply
+
+    def test_ml_class_hidden_when_empty_string(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_root_cause_class": "",
+            "ml_confidence": 0.0,
+            "ml_steer_used": True,
+        })
+        reply = format_chat_reply("What's wrong?", "insight", [anomaly])
+        assert "ML class" not in reply

@@ -20,13 +20,14 @@ def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
     # anomalies is in ascending Kafka offset order (oldest first, see kafka.py's
     # seek-to-start_offset + forward iteration), so the 5 most recent are the tail.
     for a in anomalies[-5:]:
-        # root_cause/recommended_fix are required-but-possibly-empty strings (ran-rca-service
-        # publishes "" rather than omitting the field when LLM enrichment itself failed), so
-        # `or "n/a"` is needed here — a plain default only covers the field being absent.
+        ml_line = ""
+        if a.ml_steer_used and a.ml_root_cause_class:
+            ml_line = f"\n    ML class: {a.ml_root_cause_class} (confidence: {a.ml_confidence:.0%})"
         lines.append(
             f"  - Cell {a.cell_id} ({a.band}) [{a.anomaly_type}]: {a.anomaly}\n"
             f"    Root cause: {a.root_cause or 'n/a'}\n"
             f"    Recommended fix: {a.recommended_fix or 'n/a'}"
+            f"{ml_line}"
         )
     return "\n".join(lines)
 
@@ -114,16 +115,18 @@ def format_chat_reply(
         cells_line = "- No RAN anomalies currently detected."
         root_cause = "n/a"
         recommended_fix = "n/a"
+        ml_line = ""
     else:
-        # anomalies is in ascending Kafka offset order (oldest first, see kafka.py),
-        # so the newest/latest anomaly is the last element, not the first.
         latest = anomalies[-1]
         cells_line = (
             f"- Latest anomaly: Cell {latest.cell_id} ({latest.band}) " f"[{latest.anomaly_type}] — {latest.anomaly}"
         )
-        # See _format_anomalies: root_cause/recommended_fix can be present-but-empty.
         root_cause = latest.root_cause or "n/a"
         recommended_fix = latest.recommended_fix or "n/a"
+        if latest.ml_steer_used and latest.ml_root_cause_class:
+            ml_line = f"\n- ML class: {latest.ml_root_cause_class} (confidence: {latest.ml_confidence:.0%})"
+        else:
+            ml_line = ""
 
     if raw_reply:
         model_insight = raw_reply.strip()
@@ -133,7 +136,8 @@ def format_chat_reply(
     return (
         "Summary:\n"
         f"- Anomalies detected: {len(anomalies)}\n"
-        f"{cells_line}\n"
+        f"{cells_line}"
+        f"{ml_line}\n"
         f"- Request: {user_message}\n\n"
         "Root Cause:\n"
         f"- {root_cause}\n\n"

@@ -39,6 +39,12 @@ async def analyze_node(state: RCAState) -> dict:
     context = "\n---\n".join(state.context_snippets or [])[:_MAX_CONTEXT_CHARS]
 
     user_content = f"Anomaly: {state.anomaly}\nCell: {state.cell_id}, Band: {state.band}, Type: {state.anomaly_type}"
+    if state.ml_steer_used and state.ml_root_cause_class:
+        user_content += (
+            f"\n\nML classification hint: The ML model predicts the root cause class is "
+            f'"{state.ml_root_cause_class}" (confidence: {state.ml_confidence:.2f}). '
+            f"Use this as a starting hypothesis but validate against the evidence."
+        )
     if context:
         user_content += f"\n\nVendor documentation context:\n{context}"
 

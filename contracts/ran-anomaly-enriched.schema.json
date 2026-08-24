@@ -4,7 +4,7 @@
   "title": "Enriched RAN Anomaly (ran-anomalies-enriched topic)",
   "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis.",
   "type": "object",
-  "required": ["cell_id", "band", "anomaly_type", "anomaly", "root_cause", "recommended_fix"],
+  "required": ["cell_id", "band", "anomaly_type", "anomaly", "root_cause", "recommended_fix", "ml_root_cause_class", "ml_confidence", "ml_steer_used"],
   "properties": {
     "cell_id": {
       "type": "integer",
@@ -29,6 +29,18 @@
     "recommended_fix": {
       "type": "string",
       "description": "LLM-recommended remediation action"
+    },
+    "ml_root_cause_class": {
+      "type": "string",
+      "description": "TelecomTS root-cause class predicted by the ML classify model (empty string when classify is disabled or unavailable)"
+    },
+    "ml_confidence": {
+      "type": "number",
+      "description": "Confidence score (0.0–1.0) of the ML classification (0.0 when classify is disabled or unavailable)"
+    },
+    "ml_steer_used": {
+      "type": "boolean",
+      "description": "Whether the ML classification was used to steer RAG retrieval and LLM analysis"
     }
   }
 }
