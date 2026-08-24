@@ -7,7 +7,7 @@ Derive the external route hostname.
 {{- define "kafka.externalHost" -}}
 {{- if .Values.kafka.externalRoute.host -}}
   {{- .Values.kafka.externalRoute.host -}}
-{{- else if .Capabilities.APIVersions.Has "config.openshift.io/v1" -}}
+{{- else if and .Values.kafka.externalRoute.enabled (.Capabilities.APIVersions.Has "config.openshift.io/v1") -}}
   {{- $ingress := (lookup "config.openshift.io/v1" "Ingress" "" "cluster") -}}
   {{- if $ingress -}}
     {{- printf "kafka-external-%s.%s" .Release.Namespace $ingress.spec.domain -}}

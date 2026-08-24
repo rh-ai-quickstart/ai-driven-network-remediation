@@ -1,0 +1,104 @@
+name: (nightly) Telco ORAN e2e on OpenShift
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+concurrency:
+  group: ocp-telco-oran-nightly
+  cancel-in-progress: false
+
+env:
+  NAMESPACE: ci-hub-telco-oran
+
+jobs:
+  telco-e2e-ocp:
+    name: Run Telco ORAN e2e tests on OpenShift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate OCP_TOKEN and OCP_SERVER secrets
+        shell: bash
+        env:
+          OCP_TOKEN: ${{ secrets.OCP_TOKEN }}
+          OCP_SERVER: ${{ secrets.OCP_SERVER }}
+        run: |
+          if [ -z "${OCP_TOKEN}" ]; then
+            echo "OCP_TOKEN secret is missing or empty. Set it in repository or organization secrets."
+            exit 1
+          fi
+          if [ -z "${OCP_SERVER}" ]; then
+            echo "OCP_SERVER secret is missing or empty. Set it in repository or organization secrets."
+            exit 1
+          fi
+
+      - name: Validate ADNR_LLM_ID, ADNR_LLM_URL and ADNR_LLM_TOKEN
+        shell: bash
+        env:
+          ADNR_LLM_ID: ${{ vars.ADNR_LLM_ID }}
+          ADNR_LLM_URL: ${{ vars.ADNR_LLM_URL }}
+          ADNR_LLM_TOKEN: ${{ secrets.ADNR_LLM_TOKEN }}
+        run: |
+          if [ -z "${ADNR_LLM_ID}" ]; then
+            echo "ADNR_LLM_ID variable is missing or empty. Set it in repository or organization variables."
+            exit 1
+          fi
+          if [ -z "${ADNR_LLM_URL}" ]; then
+            echo "ADNR_LLM_URL variable is missing or empty. Set it in repository or organization variables."
+            exit 1
+          fi
+          if [ -z "${ADNR_LLM_TOKEN}" ]; then
+            echo "ADNR_LLM_TOKEN secret is missing or empty. Set it in repository or organization secrets."
+            exit 1
+          fi
+
+      - name: Print run context
+        run: |
+          echo "workflow : ${{ github.workflow }}"
+          echo "ref      : ${{ github.ref }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install oc client
+        shell: bash
+        run: |
+          curl -sSLo oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/stable/openshift-client-linux.tar.gz
+          tar -xf oc.tar.gz -C /usr/local/bin oc
+          oc version --client
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Log into the cluster
+        shell: bash
+        run: |
+          oc login --token=$OCP_TOKEN --server=$OCP_SERVER
+        env:
+          OCP_TOKEN: ${{ secrets.OCP_TOKEN }}
+          OCP_SERVER: ${{ secrets.OCP_SERVER }}
+
+      - name: Pre-cleanup
+        continue-on-error: true
+        shell: bash
+        run: |
+          make helm-erase-hub
+
+      - name: Helm install
+        shell: bash
+        run: |
+          make helm-install \
+            ENABLE_TELCO_ORAN=true \
+            ENABLE_NETWORK_REMEDIATION=false \
+            EDGE_RBAC_ENABLED=false \
+            ROUTES_ENABLED=false \
+            AUTO_INGEST_ON_STARTUP=false
+        env:
+          ADNR_LLM_ID: ${{ vars.ADNR_LLM_ID }}
+          ADNR_LLM_URL: ${{ vars.ADNR_LLM_URL }}
+          ADNR_LLM_TOKEN: ${{ secrets.ADNR_LLM_TOKEN }}
+
+      - name: Run Telco ORAN integration tests
+        shell: bash
+        run: |
+          make telco-integration-tests
