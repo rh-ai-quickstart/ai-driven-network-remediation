@@ -1,0 +1,39 @@
+{{- if and .Values.global.telcoOran.enabled .Values.ranClassify.enabled }}
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ include "hub.fullname" . }}-ran-classify
+  labels:
+    {{- include "hub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-classify
+spec:
+  predictor:
+    containers:
+      - name: kserve-container
+        image: "{{ .Values.image.registry }}/{{ .Values.image.ranMlService }}:{{ .Values.ranClassify.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+          - containerPort: {{ .Values.ranClassify.port }}
+            protocol: TCP
+        env:
+          - name: TASK
+            value: "classify"
+          - name: PORT
+            value: {{ .Values.ranClassify.port | quote }}
+          {{- if .Values.ranClassify.modelPath }}
+          - name: MANTIS_MODEL_PATH
+            value: {{ .Values.ranClassify.modelPath | quote }}
+          {{- end }}
+          {{- if .Values.ranClassify.mlflowModelUri }}
+          - name: MLFLOW_MODEL_URI
+            value: {{ .Values.ranClassify.mlflowModelUri | quote }}
+          {{- end }}
+        livenessProbe:
+          {{- toYaml .Values.ranClassify.livenessProbe | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.ranClassify.readinessProbe | nindent 10 }}
+        {{- with .Values.ranClassify.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+{{- end }}

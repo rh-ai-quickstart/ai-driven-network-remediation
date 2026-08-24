@@ -7,6 +7,7 @@ image:
   ranAnomalyDetector: hub-ran-anomaly-detector
   ranRcaService: hub-ran-rca-service
   ranChatbotService: hub-ran-chatbot-service
+  ranMlService: hub-ran-ml-service
   ranFrontend: noc-ran-frontend
   frontend: noc-frontend
   pullPolicy: Always
@@ -525,6 +526,41 @@ ranAnomalyDetector:
     periodSeconds: 10
 
 # ══════════════════════════════════════════════════════════════════════
+# RAN Classify InferenceService (Telco/O-RAN) — KServe InferenceService
+# with a custom container running the ran-ml-service image. Provides the
+# /v1/classify endpoint consumed by ran-rca-service for ML-assisted root
+# cause classification. Same image as the detect InferenceService from
+# PR 149 but with TASK=classify.
+# Gated by global.telcoOran.enabled (the whole Telco/O-RAN use case).
+# ══════════════════════════════════════════════════════════════════════
+
+ranClassify:
+  enabled: true
+  image:
+    tag: ""
+  modelPath: ""
+  mlflowModelUri: ""
+  port: 8080
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 15
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ══════════════════════════════════════════════════════════════════════
 # RAN RCA Service (Telco/O-RAN) — LLM-based root cause analysis.
 # Consumes anomalies from ran-anomaly-detector, enriches them via
 # LangGraph (RAG + Granite LLM), publishes to ran-anomalies-enriched.
@@ -544,6 +580,9 @@ ranRcaService:
     kafkaGroupId: "ran-rca-service"
     kafkaConsumerEnabled: "true"
     recentAnomaliesLimit: "100"
+    mantisEnabled: "true"
+    classifyInferenceUrl: ""
+    mantisConfidenceThreshold: "0.6"
   service:
     type: ClusterIP
     port: 8003
