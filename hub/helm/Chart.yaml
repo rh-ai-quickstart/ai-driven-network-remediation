@@ -10,7 +10,6 @@ dependencies:
   - name: pgvector
     version: 0.5.5
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-    condition: pgvector.enabled
   - name: llama-stack
     version: 0.8.7
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts

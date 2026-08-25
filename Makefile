@@ -5,8 +5,9 @@ ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
 EDGE_NAMESPACE  ?= dark-noc-edge
 RELEASE         ?= hub
-# When false, hub chart does not deploy Llama Stack / pgvector; set SHARED_LLAMASTACK_URL
+# When false, hub chart does not deploy Llama Stack; set SHARED_LLAMASTACK_URL
 # to the cluster-wide base URL (e.g. http://llamastack.llama-stack.svc:8321).
+# pgvector stays in the hub umbrella chart and shared Llama Stack connects to it.
 LLAMA_STACK_ENABLED     ?= true
 SHARED_LLAMASTACK_URL   ?=
 SHARED_LLAMASTACK_NS    ?= llama-stack
@@ -211,8 +212,7 @@ helm_adnr_llm_args = \
 
 helm_llamastack_args = \
 	--set llama-stack.enabled=$(LLAMA_STACK_ENABLED) \
-	$(if $(SHARED_LLAMASTACK_URL),--set-string llama-stack.url='$(SHARED_LLAMASTACK_URL)',) \
-	$(if $(filter false,$(LLAMA_STACK_ENABLED)),--set pgvector.enabled=false,)
+	$(if $(SHARED_LLAMASTACK_URL),--set-string llama-stack.url='$(SHARED_LLAMASTACK_URL)',)
 
 helm_mcp_image_args = \
 	--set mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
@@ -594,11 +594,13 @@ helm-depend:
 .PHONY: deploy-shared-llamastack
 deploy-shared-llamastack: check-adnr-llm-config
 	@oc create namespace $(SHARED_LLAMASTACK_NS) 2>/dev/null ||:
-	helm upgrade --install pgvector hub/helm/charts/pgvector-0.5.5.tgz \
-		--namespace $(SHARED_LLAMASTACK_NS) \
-		--set resources.requests.cpu=100m \
-		--set resources.requests.memory=256Mi \
-		--set resources.limits.memory=512Mi
+	@oc create secret generic pgvector -n $(SHARED_LLAMASTACK_NS) \
+		--from-literal=user=postgres \
+		--from-literal=password=rag_password \
+		--from-literal=dbname=rag_blueprint \
+		--from-literal=host=pgvector.$(NAMESPACE).svc \
+		--from-literal=port=5432 \
+		--dry-run=client -o yaml | oc apply -f -
 	helm upgrade --install shared-llama-stack hub/helm/charts/llama-stack-0.8.7.tgz \
 		--namespace $(SHARED_LLAMASTACK_NS) \
 		--set managedByOperator=false \

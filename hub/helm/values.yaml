@@ -64,8 +64,6 @@ topology:
 # ══════════════════════════════════════════════════════════════════════
 
 pgvector:
-  # Set false when using a shared cluster Llama Stack that has its own pgvector.
-  enabled: true
   secret:
     user: postgres
     password: rag_password
