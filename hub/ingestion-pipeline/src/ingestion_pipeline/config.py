@@ -49,17 +49,6 @@ class Settings:
     def llamastack_base_url(self) -> str:
         return self.llamastack_url
 
-
-def _llamastack_url_from_env() -> str:
-    url = os.environ.get("LLAMASTACK_URL", "").strip()
-    if url:
-        return url.rstrip("/")
-
-    host = os.environ.get("LLAMASTACK_HOST", "llamastack-service").strip()
-    port = os.environ.get("LLAMASTACK_PORT", "8321").strip()
-    scheme = "https" if port == "443" else "http"
-    return f"{scheme}://{host}:{port}"
-
     @property
     def minio_is_configured(self) -> bool:
         return all(
@@ -70,6 +59,17 @@ def _llamastack_url_from_env() -> str:
                 self.minio_bucket,
             )
         )
+
+
+def _llamastack_url_from_env() -> str:
+    url = os.environ.get("LLAMASTACK_URL", "").strip()
+    if url:
+        return url.rstrip("/")
+
+    host = os.environ.get("LLAMASTACK_HOST", "llamastack-service").strip()
+    port = os.environ.get("LLAMASTACK_PORT", "8321").strip()
+    scheme = "https" if port == "443" else "http"
+    return f"{scheme}://{host}:{port}"
 
 
 settings = Settings.from_env()
