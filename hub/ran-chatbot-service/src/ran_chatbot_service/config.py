@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from shared.utils import llamastack_url_from_env
+
 APP_VERSION = "0.1.0"
 
 # ── Kafka ─────────────────────────────────────────────────────────
@@ -19,7 +21,8 @@ ENRICHED_ANOMALIES_MAX_MESSAGES = int(os.getenv("ENRICHED_ANOMALIES_MAX_MESSAGES
 DEMO_METRICS_TOPIC = os.getenv("DEMO_METRICS_TOPIC", "ran-combined-metrics")
 
 # ── LLM ───────────────────────────────────────────────────────────
-MODEL_API_URL = os.getenv("MODEL_API_URL", "http://llamastack-service:8321/v1/completions")
+LLAMASTACK_URL = llamastack_url_from_env()
+MODEL_API_URL = os.getenv("MODEL_API_URL", f"{LLAMASTACK_URL}/v1/completions")
 MODEL_NAME = os.getenv("MODEL_NAME", "granite-4-h-tiny")
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "20"))
 MODEL_MAX_TOKENS = int(os.getenv("MODEL_MAX_TOKENS", "280"))

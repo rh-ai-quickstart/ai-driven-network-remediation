@@ -20,5 +20,5 @@ dependencies:
 - name: lokistack
   repository: file://charts/lokistack
   version: 0.1.0
-digest: sha256:0ef43fa88c2c6365a83add508103d67cfd224ecc6916e5eb2fa5573fe0914339
-generated: "2026-07-28T17:32:19.650980208+03:00"
+digest: sha256:a4682746c97a77eadca955e0ee2a84b6ad1d66132dc0c4d83a40577d50c81436
+generated: "2026-08-25T13:26:58.867985091+03:00"

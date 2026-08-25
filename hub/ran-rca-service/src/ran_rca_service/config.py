@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 from langchain_openai import ChatOpenAI
+from shared.utils import llamastack_url_from_env
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -15,8 +16,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # LlamaStack
-LLAMASTACK_HOST = os.getenv("LLAMASTACK_HOST", "llamastack-service")
-LLAMASTACK_PORT = int(os.getenv("LLAMASTACK_PORT", "8321"))
+LLAMASTACK_URL = llamastack_url_from_env()
 VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "telco_oran_docs")
 GRANITE_MODEL = os.getenv("GRANITE_MODEL_NAME", "ibm-granite/granite-3.3-8b-instruct")
 
@@ -27,7 +27,7 @@ def get_llm() -> ChatOpenAI:
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(
-            base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}/v1",
+            base_url=f"{LLAMASTACK_URL}/v1",
             model=GRANITE_MODEL,
             api_key="unused",
         )

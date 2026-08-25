@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from shared.utils import llamastack_url_from_env
+
 APP_VERSION = "0.1.0"
 
 # ── Service URLs (quickstart in-cluster defaults) ─────────────────
@@ -17,7 +19,8 @@ SERVICENOW_URL = os.getenv("SERVICENOW_URL", "http://servicenow-mock:8080")
 SERVICENOW_USERNAME = os.getenv("SERVICENOW_USERNAME", "admin")
 SERVICENOW_PASSWORD = os.getenv("SERVICENOW_PASSWORD", "admin")
 
-MODEL_API_URL = os.getenv("MODEL_API_URL", "http://llamastack-service:8321/v1/completions")
+LLAMASTACK_URL = llamastack_url_from_env()
+MODEL_API_URL = os.getenv("MODEL_API_URL", f"{LLAMASTACK_URL}/v1/completions")
 MODEL_NAME = os.getenv("MODEL_NAME", "granite-4-h-tiny")
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "20"))
 MODEL_MAX_TOKENS = int(os.getenv("MODEL_MAX_TOKENS", "280"))

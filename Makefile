@@ -5,6 +5,11 @@ ARCH            ?= linux/amd64
 NAMESPACE       ?= hub
 EDGE_NAMESPACE  ?= dark-noc-edge
 RELEASE         ?= hub
+# When false, hub chart does not deploy Llama Stack / pgvector; set SHARED_LLAMASTACK_URL
+# to the cluster-wide base URL (e.g. http://llamastack.llama-stack.svc:8321).
+LLAMA_STACK_ENABLED     ?= true
+SHARED_LLAMASTACK_URL   ?=
+SHARED_LLAMASTACK_NS    ?= llama-stack
 PUSH_EXTRA_ARGS ?=
 ROUTES_ENABLED  ?= true
 # Gate an OpenShift oauth-proxy sidecar in front of hub-frontend and
@@ -204,6 +209,11 @@ helm_adnr_llm_args = \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',) \
 	$(if $(ADNR_LLM_ENABLED),--set-string agentService.granite.modelName='adnr-llm/$(ADNR_LLM_ID)',)
 
+helm_llamastack_args = \
+	--set llama-stack.enabled=$(LLAMA_STACK_ENABLED) \
+	$(if $(SHARED_LLAMASTACK_URL),--set-string llama-stack.url='$(SHARED_LLAMASTACK_URL)',) \
+	$(if $(filter false,$(LLAMA_STACK_ENABLED)),--set pgvector.enabled=false,)
+
 helm_mcp_image_args = \
 	--set mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
 	--set mcp-servers.mcp-servers.noc-openshift.image.tag=$(VERSION) \
@@ -334,6 +344,7 @@ helm_all_args = \
 	$(helm_mock_args) \
 	$(helm_gitea_args) \
 	$(helm_adnr_llm_args) \
+	$(helm_llamastack_args) \
 	$(helm_autorag_args) \
 	$(helm_lightspeed_args) \
 	$(helm_slack_args) \
@@ -579,6 +590,31 @@ namespace:
 .PHONY: helm-depend
 helm-depend:
 	cd hub/helm && helm dependency update
+
+.PHONY: deploy-shared-llamastack
+deploy-shared-llamastack: check-adnr-llm-config
+	@oc create namespace $(SHARED_LLAMASTACK_NS) 2>/dev/null ||:
+	helm upgrade --install pgvector hub/helm/charts/pgvector-0.5.5.tgz \
+		--namespace $(SHARED_LLAMASTACK_NS) \
+		--set resources.requests.cpu=100m \
+		--set resources.requests.memory=256Mi \
+		--set resources.limits.memory=512Mi
+	helm upgrade --install shared-llama-stack hub/helm/charts/llama-stack-0.8.7.tgz \
+		--namespace $(SHARED_LLAMASTACK_NS) \
+		--set managedByOperator=false \
+		--set pgvector.enabled=true \
+		--set resources.requests.cpu=250m \
+		--set resources.requests.memory=512Mi \
+		--set resources.limits.memory=2Gi \
+		--set models.adnr-llm.enabled=true \
+		--set-string models.adnr-llm.id='$(ADNR_LLM_ID)' \
+		--set-string models.adnr-llm.url='$(ADNR_LLM_URL)' \
+		--set-string models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)' \
+		--set-string mcp-servers.noc-openshift.uri='http://mcp-noc-openshift.$(NAMESPACE).svc:8000/mcp' \
+		--set-string mcp-servers.noc-kafka.uri='http://mcp-noc-kafka.$(NAMESPACE).svc:8000/mcp' \
+		--set-string mcp-servers.noc-aap.uri='http://mcp-noc-aap.$(NAMESPACE).svc:8000/mcp' \
+		--set-string mcp-servers.noc-servicenow.uri='http://mcp-noc-servicenow.$(NAMESPACE).svc:8000/mcp' \
+		--wait --timeout 10m
 
 .PHONY: check-adnr-llm-config
 check-adnr-llm-config:

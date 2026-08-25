@@ -9,6 +9,8 @@ from typing import get_args
 import httpx
 from langchain_openai import ChatOpenAI
 
+from shared.utils import llamastack_url_from_env
+
 from agent_service.kafka.alerts import ALERT_TOPICS
 from agent_service.models import FailureType
 
@@ -39,8 +41,7 @@ KAFKA_CONSUMER_ENABLED = _env_bool("KAFKA_CONSUMER_ENABLED", True)
 GRAPH_INVOKE_TIMEOUT_SECONDS = float(os.getenv("GRAPH_INVOKE_TIMEOUT_SECONDS", "300"))
 
 # LlamaStack
-LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
-LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
+LLAMASTACK_URL = llamastack_url_from_env(default="http://localhost:8321")
 VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "noc_runbooks")
 # Chunking params for vector store file ingestion (must match ingestion-pipeline defaults)
 VECTOR_STORE_CHUNK_SIZE_TOKENS = int(os.getenv("VECTOR_STORE_CHUNK_SIZE_TOKENS", "800"))
@@ -54,7 +55,7 @@ def get_llm() -> ChatOpenAI:
     global _llm
     if _llm is None:
         _llm = ChatOpenAI(
-            base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}/v1",
+            base_url=f"{LLAMASTACK_URL}/v1",
             model=GRANITE_MODEL,
             api_key="unused",
         )
@@ -232,7 +233,7 @@ def get_http_client() -> httpx.AsyncClient:
     global _http_client
     if _http_client is None:
         _http_client = httpx.AsyncClient(
-            base_url=f"http://{LLAMASTACK_HOST}:{LLAMASTACK_PORT}",
+            base_url=LLAMASTACK_URL,
             timeout=HTTP_TIMEOUT_SECONDS,
         )
     return _http_client

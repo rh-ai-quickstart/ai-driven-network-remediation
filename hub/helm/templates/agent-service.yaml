@@ -42,10 +42,8 @@ spec:
           image: "{{ .Values.image.registry }}/{{ .Values.image.agentService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: LLAMASTACK_HOST
-              value: {{ index .Values "llama-stack" "host" | quote }}
-            - name: LLAMASTACK_PORT
-              value: {{ index .Values "llama-stack" "port" | quote }}
+            - name: LLAMASTACK_URL
+              value: {{ include "hub.llamastackUrl" . | quote }}
             - name: GRANITE_MODEL_NAME
               value: {{ .Values.agentService.granite.modelName | quote }}
             - name: KAFKA_BOOTSTRAP

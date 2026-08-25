@@ -9,8 +9,7 @@ def _get_bool_env(name: str, default: str = "false") -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    llamastack_host: str
-    llamastack_port: int
+    llamastack_url: str
     vector_store_name: str
     embedding_model: str
     chunk_size_tokens: int
@@ -29,8 +28,7 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
-            llamastack_host=os.environ.get("LLAMASTACK_HOST", "llamastack-service"),
-            llamastack_port=int(os.environ.get("LLAMASTACK_PORT", "8321")),
+            llamastack_url=_llamastack_url_from_env(),
             vector_store_name=os.environ.get("VECTOR_STORE_NAME", ""),
             embedding_model=os.environ.get("EMBEDDING_MODEL", "sentence-transformers/nomic-ai/nomic-embed-text-v1.5"),
             chunk_size_tokens=int(os.environ.get("CHUNK_SIZE_TOKENS", "800")),
@@ -49,7 +47,18 @@ class Settings:
 
     @property
     def llamastack_base_url(self) -> str:
-        return f"http://{self.llamastack_host}:{self.llamastack_port}"
+        return self.llamastack_url
+
+
+def _llamastack_url_from_env() -> str:
+    url = os.environ.get("LLAMASTACK_URL", "").strip()
+    if url:
+        return url.rstrip("/")
+
+    host = os.environ.get("LLAMASTACK_HOST", "llamastack-service").strip()
+    port = os.environ.get("LLAMASTACK_PORT", "8321").strip()
+    scheme = "https" if port == "443" else "http"
+    return f"{scheme}://{host}:{port}"
 
     @property
     def minio_is_configured(self) -> bool:

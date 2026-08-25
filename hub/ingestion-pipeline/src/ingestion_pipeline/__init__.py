@@ -11,8 +11,7 @@ Endpoints:
     GET /vector-store/files/{file_id}/content  - Fetch ingested file content
 
 Environment Variables:
-    LLAMASTACK_HOST: Llama Stack hostname (default: llamastack-service)
-    LLAMASTACK_PORT: Llama Stack port (default: 8321)
+    LLAMASTACK_URL: Llama Stack base URL (default: http://llamastack-service:8321)
     EMBEDDING_MODEL: Embedding model id (default: sentence-transformers/nomic-ai/nomic-embed-text-v1.5)
     CHUNK_SIZE_TOKENS: Vector store chunk size in tokens (default: 800)
     CHUNK_OVERLAP_TOKENS: Vector store chunk overlap in tokens (default: 80)

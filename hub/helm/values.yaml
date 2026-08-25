@@ -64,6 +64,8 @@ topology:
 # ══════════════════════════════════════════════════════════════════════
 
 pgvector:
+  # Set false when using a shared cluster Llama Stack that has its own pgvector.
+  enabled: true
   secret:
     user: postgres
     password: rag_password
@@ -72,8 +74,10 @@ pgvector:
     port: "5432"
 
 llama-stack:
-  host: llamastack-service
-  port: "8321"
+  # Set false to skip the in-namespace Llama Stack subchart and point hub services at a
+  # shared instance via url (e.g. http://llamastack.llama-stack.svc:8321).
+  enabled: true
+  url: http://llamastack-service:8321
   replicaCount: 1
   managedByOperator: true
   network:
@@ -363,7 +367,6 @@ ingestionPipeline:
   waitForDeps: true
   vectorStoreName: noc_runbooks
   telcoVectorStoreName: telco_oran_docs
-  llamastackHost: llamastack-service
   embeddingModel: sentence-transformers/nomic-ai/nomic-embed-text-v1.5
   chunkSizeTokens: 800
   chunkOverlapTokens: 80
@@ -403,7 +406,6 @@ chatbotService:
     mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
     servicenowUrl: "http://servicenow-mock:8080"
     kafkaBootstrap: "kafka:9092"
-    modelApiUrl: "http://llamastack-service:8321/v1/completions"
     modelName: "granite-4-h-tiny"
     demoTopic: "system-alerts"
     auditTopic: "incident-audit"
@@ -535,8 +537,6 @@ ranRcaService:
   enabled: true
   replicaCount: 1
   env:
-    llamastackHost: "llamastack-service"
-    llamastackPort: "8321"
     vectorStoreName: "telco_oran_docs"
     graniteModelName: "ibm-granite/granite-3.3-8b-instruct"
     kafkaBootstrap: "kafka:9092"
@@ -578,7 +578,6 @@ ranChatbotService:
     kafkaBootstrap: "kafka:9092"
     enrichedAnomaliesTopic: "ran-anomalies-enriched"
     demoMetricsTopic: "ran-combined-metrics"
-    modelApiUrl: "http://llamastack-service:8321/v1/completions"
     modelName: "granite-4-h-tiny"
     corsOrigins: "http://localhost:3000"
   service:

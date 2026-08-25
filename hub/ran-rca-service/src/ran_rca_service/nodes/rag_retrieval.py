@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from loguru import logger
-from ran_rca_service.config import LLAMASTACK_HOST, LLAMASTACK_PORT, VECTOR_STORE_NAME
+from ran_rca_service.config import LLAMASTACK_URL, VECTOR_STORE_NAME
 from ran_rca_service.models import RCAState
 from shared.rag import RagClient
 
@@ -14,8 +14,7 @@ def _get_rag_client() -> RagClient:
     global _rag_client
     if _rag_client is None:
         _rag_client = RagClient(
-            host=LLAMASTACK_HOST,
-            port=LLAMASTACK_PORT,
+            base_url=LLAMASTACK_URL,
             vector_store_name=VECTOR_STORE_NAME,
         )
     return _rag_client

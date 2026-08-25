@@ -41,8 +41,8 @@ spec:
               value: {{ .Values.chatbotService.env.servicenowUrl | quote }}
             - name: KAFKA_BOOTSTRAP
               value: {{ .Values.chatbotService.env.kafkaBootstrap | quote }}
-            - name: MODEL_API_URL
-              value: {{ .Values.chatbotService.env.modelApiUrl | quote }}
+            - name: LLAMASTACK_URL
+              value: {{ include "hub.llamastackUrl" . | quote }}
             - name: MODEL_NAME
               value: {{ .Values.chatbotService.env.modelName | quote }}
             - name: DEMO_TOPIC

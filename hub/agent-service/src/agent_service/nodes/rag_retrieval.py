@@ -6,8 +6,7 @@ from loguru import logger
 from shared.rag import RagClient
 
 from agent_service.config import (
-    LLAMASTACK_HOST,
-    LLAMASTACK_PORT,
+    LLAMASTACK_URL,
     VECTOR_STORE_CHUNK_OVERLAP_TOKENS,
     VECTOR_STORE_CHUNK_SIZE_TOKENS,
     VECTOR_STORE_NAME,
@@ -20,8 +19,7 @@ def _get_rag_client() -> RagClient:
     global _rag_client
     if _rag_client is None:
         _rag_client = RagClient(
-            host=LLAMASTACK_HOST,
-            port=int(LLAMASTACK_PORT),
+            base_url=LLAMASTACK_URL,
             vector_store_name=VECTOR_STORE_NAME,
         )
     return _rag_client

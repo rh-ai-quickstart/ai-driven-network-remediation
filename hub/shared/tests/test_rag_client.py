@@ -18,7 +18,7 @@ def mock_llamastack():
 
 @pytest.fixture
 def rag_client(mock_llamastack):
-    client = RagClient(host="llamastack", port=8321, vector_store_name="test_docs")
+    client = RagClient(base_url="http://llamastack:8321", vector_store_name="test_docs")
     client._client = mock_llamastack
     return client
 

@@ -214,7 +214,8 @@ to be duplicated across services.
 | `KAFKA_BOOTSTRAP` | `kafka:9092` | Kafka broker address |
 | `DEMO_TOPIC` | `system-alerts` | Topic for demo trigger events |
 | `AUDIT_TOPIC` | `incident-audit` | Topic for agent audit records |
-| `MODEL_API_URL` | `http://llamastack-service:8321/v1/completions` | LLM endpoint |
+| `MODEL_API_URL` | `{LLAMASTACK_URL}/v1/completions` | LLM endpoint (derived from `LLAMASTACK_URL` when unset) |
+| `LLAMASTACK_URL` | `http://llamastack-service:8321` | Llama Stack base URL |
 | `SERVICENOW_URL` | `http://servicenow-mock:8080` | ServiceNow instance URL |
 | `SERVICENOW_USERNAME` | `admin` | ServiceNow Basic Auth username |
 | `SERVICENOW_PASSWORD` | `admin` | ServiceNow Basic Auth password |

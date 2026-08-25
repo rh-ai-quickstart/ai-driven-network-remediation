@@ -41,7 +41,7 @@ spec:
             - |
               retries=0
               max_retries=36
-              until curl -sf http://{{ .Values.ingestionPipeline.llamastackHost }}:{{ index .Values "llama-stack" "port" }}/v1/models; do
+              until curl -sf {{ include "hub.llamastackUrl" . }}/v1/models; do
                 retries=$((retries + 1))
                 if [ $retries -ge $max_retries ]; then
                   echo "LlamaStack not ready after $max_retries attempts — proceeding anyway (auto-ingest will retry)"
@@ -65,10 +65,8 @@ spec:
               # treats boolean `false` as an empty value, silently discarding explicit
               # `--set ingestionPipeline.autoIngestOnStartup=false` overrides.
               value: {{ .Values.ingestionPipeline.autoIngestOnStartup | quote }}
-            - name: LLAMASTACK_HOST
-              value: {{ .Values.ingestionPipeline.llamastackHost | default (index .Values "llama-stack" "host") | quote }}
-            - name: LLAMASTACK_PORT
-              value: {{ index .Values "llama-stack" "port" | quote }}
+            - name: LLAMASTACK_URL
+              value: {{ include "hub.llamastackUrl" . | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
             - name: TELCO_VECTOR_STORE_NAME

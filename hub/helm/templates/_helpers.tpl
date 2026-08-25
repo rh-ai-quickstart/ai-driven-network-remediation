@@ -42,6 +42,13 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Llama Stack base URL for hub services (in-namespace subchart or shared instance).
+*/}}
+{{- define "hub.llamastackUrl" -}}
+{{- index .Values "llama-stack" "url" }}
+{{- end }}
+
+{{/*
 AAP controller URL from the noc-aap MCP server config.
 */}}
 {{- define "hub.aapUrl" -}}

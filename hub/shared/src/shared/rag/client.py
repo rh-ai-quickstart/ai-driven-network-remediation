@@ -13,8 +13,8 @@ _NEGATIVE_CACHE_TTL_SECONDS = 300.0
 class RagClient:
     """Query a LlamaStack vector store by name, with lazy resolution and negative caching."""
 
-    def __init__(self, *, host: str, port: int, vector_store_name: str) -> None:
-        self._client = AsyncLlamaStackClient(base_url=f"http://{host}:{port}")
+    def __init__(self, *, base_url: str, vector_store_name: str) -> None:
+        self._client = AsyncLlamaStackClient(base_url=base_url.rstrip("/"))
         self._vector_store_name = vector_store_name
         self._vector_store_id: str | None = None
         self._negative_cache_until: float = 0.0
