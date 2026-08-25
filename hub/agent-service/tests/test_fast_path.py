@@ -28,9 +28,21 @@ def test_should_check_fast_path_for_oom():
     assert should_check_fast_path("DNSFailure") is False
 
 
-def test_target_deployment_name_always_uses_configured_deployment():
-    assert target_deployment_name("edge-nginx-abc123-xyz") == "edge-nginx"
-    assert target_deployment_name("other-pod") == "edge-nginx"
+def test_target_deployment_name_derives_from_replicaset_pod():
+    assert target_deployment_name("edge-nginx-6b7f8c9d4-x2k9z") == "edge-nginx"
+    assert target_deployment_name("payments-api-7d8f9c6b5-abcde") == "payments-api"
+
+
+def test_target_deployment_name_returns_none_when_unparseable():
+    assert target_deployment_name("other-pod") is None
+    assert target_deployment_name("edge-nginx-abc123") is None
+    assert target_deployment_name("edge-nginx-6b7f8c9d4-x2k") is None
+    assert target_deployment_name("") is None
+
+
+def test_target_deployment_name_honors_override():
+    with patch("agent_service.fast_path.FAST_PATH_DEPLOYMENT", "forced-deploy"):
+        assert target_deployment_name("payments-api-7d8f9c6b5-abcde") == "forced-deploy"
 
 
 @pytest.mark.asyncio

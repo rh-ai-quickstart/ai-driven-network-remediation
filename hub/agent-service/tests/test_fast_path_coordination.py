@@ -14,7 +14,7 @@ class TestFastPathSkip:
         config = GraphConfig()
         node = make_remediate_node(config)
         state = make_state(
-            log_event=make_log_event(pod_name="edge-nginx-abc123", namespace="dark-noc-edge"),
+            log_event=make_log_event(pod_name="edge-nginx-6b7f8c9d4-x2k9z", namespace="dark-noc-edge"),
             root_cause_analysis=make_rca(failure_type="OOMKilled", recommended_actions=["scale memory"]),
         )
         recent = {"annotations": {FAST_PATH_LAST_HEAL_ANNOTATION: "2026-08-18T12:00:00Z"}}
@@ -23,12 +23,13 @@ class TestFastPathSkip:
             patch(
                 "agent_service.nodes.remediate.spoke_fast_path_recent",
                 AsyncMock(return_value=True),
-            ),
+            ) as recent_mock,
             patch("agent_service.nodes.remediate._invoke_tool", AsyncMock()) as launch_mock,
         ):
             result = await node(state)
 
         launch_mock.assert_not_called()
+        assert recent_mock.await_args.kwargs["deployment"] == "edge-nginx"
         assert result["fast_path_actuation"] == "spoke"
         assert result["remediation_result"].action_taken == "fast_path_skip"
         assert result["remediation_result"].success is True
@@ -38,7 +39,7 @@ class TestFastPathSkip:
         config = GraphConfig()
         node = make_remediate_node(config)
         state = make_state(
-            log_event=make_log_event(pod_name="edge-nginx-abc123", namespace="dark-noc-edge"),
+            log_event=make_log_event(pod_name="edge-nginx-6b7f8c9d4-x2k9z", namespace="dark-noc-edge"),
             root_cause_analysis=make_rca(failure_type="OOMKilled", recommended_actions=["scale memory"]),
         )
 

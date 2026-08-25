@@ -155,8 +155,7 @@ SHARED_IMAGES := \
 	$(MCP_LOKISTACK_IMG) \
 	$(MCP_KAFKA_IMG) \
 	$(MCP_AAP_IMG) \
-	$(MCP_SERVICENOW_IMG) \
-	$(EDGE_FAST_PATH_HEALER_IMG)
+	$(MCP_SERVICENOW_IMG)
 
 NETWORK_IMAGES := \
 	$(CHATBOT_IMG) \
@@ -169,9 +168,13 @@ TELCO_IMAGES := \
 	$(RAN_CHATBOT_IMG) \
 	$(RAN_FRONTEND_IMG)
 
+# Spoke-only. Built with network remediation, not hub shared services.
+EDGE_IMAGES := \
+	$(EDGE_FAST_PATH_HEALER_IMG)
+
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
-	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(NETWORK_IMAGES)) \
+	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(NETWORK_IMAGES) $(EDGE_IMAGES)) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES))
 
 EXTRA_BUILD_PUSH_IMAGES := \
@@ -610,8 +613,8 @@ edge-rbac-teardown:
 # ══════════════════════════════════════════════════════════════════════
 
 .PHONY: build-all-images
-build-all-images: build-ingestion-image build-mcp-images build-edge-fast-path-healer-image \
-	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-chatbot-image build-agent-image build-frontend-image) \
+build-all-images: build-ingestion-image build-mcp-images \
+	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image)
 
 .PHONY: build-ingestion-image
