@@ -44,6 +44,10 @@ spec:
           env:
             - name: LLAMASTACK_URL
               value: {{ include "hub.llamastackUrl" . | quote }}
+            - name: LLAMASTACK_HOST
+              value: {{ include "hub.llamastackHost" . | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ include "hub.llamastackPort" . | quote }}
             - name: GRANITE_MODEL_NAME
               value: {{ .Values.agentService.granite.modelName | quote }}
             - name: KAFKA_BOOTSTRAP

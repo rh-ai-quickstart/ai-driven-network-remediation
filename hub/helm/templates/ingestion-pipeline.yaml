@@ -67,6 +67,10 @@ spec:
               value: {{ .Values.ingestionPipeline.autoIngestOnStartup | quote }}
             - name: LLAMASTACK_URL
               value: {{ include "hub.llamastackUrl" . | quote }}
+            - name: LLAMASTACK_HOST
+              value: {{ include "hub.llamastackHost" . | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ include "hub.llamastackPort" . | quote }}
             - name: VECTOR_STORE_NAME
               value: {{ .Values.ingestionPipeline.vectorStoreName | quote }}
             - name: TELCO_VECTOR_STORE_NAME

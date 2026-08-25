@@ -49,6 +49,19 @@ Llama Stack base URL for hub services (in-namespace subchart or shared instance)
 {{- end }}
 
 {{/*
+Legacy host/port env vars for service images built before LLAMASTACK_URL.
+*/}}
+{{- define "hub.llamastackHost" -}}
+{{- $hostPort := trimPrefix "https://" (trimPrefix "http://" (include "hub.llamastackUrl" .)) }}
+{{- (splitList ":" $hostPort | first) }}
+{{- end }}
+
+{{- define "hub.llamastackPort" -}}
+{{- $hostPort := trimPrefix "https://" (trimPrefix "http://" (include "hub.llamastackUrl" .)) }}
+{{- (splitList ":" $hostPort | last) }}
+{{- end }}
+
+{{/*
 AAP controller URL from the noc-aap MCP server config.
 */}}
 {{- define "hub.aapUrl" -}}
