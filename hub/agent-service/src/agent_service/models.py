@@ -34,25 +34,16 @@ class LogEvent(BaseModel):
 
 class RootCauseAnalysis(BaseModel):
     failure_type: FailureType = Field(description="Category of the failure")
-    confidence: float = Field(default=0.5, description="Confidence score between 0.0 and 1.0")
-    summary: str = Field(
-        default="Unable to determine root cause",
-        description="One-sentence human-readable summary of the root cause",
-    )
-    evidence: list[str] = Field(
-        default_factory=list,
-        description="List of evidence strings supporting the diagnosis",
-    )
+    confidence: float = Field(ge=0, le=1, description="Confidence score between 0.0 and 1.0")
+    summary: str = Field(description="One-sentence human-readable summary of the root cause")
+    evidence: list[str] = Field(description="List of evidence strings supporting the diagnosis")
     recommended_actions: list[str] = Field(
         description="Short executable remediation action names (not shell commands)"
     )
     estimated_severity: Literal["critical", "high", "medium", "low"] = Field(
         description="Severity level"
     )
-    runbook_reference: str = Field(
-        default="n/a",
-        description="Runbook name or URL, or 'n/a' if none applies",
-    )
+    runbook_reference: str = Field(description="Runbook name or URL, or 'n/a' if none applies")
 
     @field_validator("evidence", "recommended_actions", mode="before")
     @classmethod

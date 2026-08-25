@@ -25,9 +25,9 @@ from agent_service.playbook_sanitize import (
     _fix_patch_tasks,
     _is_dangerous_header,
     _iter_uri_tasks,
-    _quote_jinja,
     _strip_dangerous_headers,
     fix_ansible_facts,
+    quote_jinja,
     sanitize_playbook,
 )
 
@@ -344,11 +344,19 @@ class TestLightspeedNodeSuccess:
         name = result["remediation_result"].generated_playbook_name
         assert "cluster" in name
 
-    async def test_empty_als_response(self):
-        result, _, _ = await _run_node(als_return={"response": ""})
+    async def test_empty_als_response_fails_closed(self):
+        result, _, invoke_mock = await _run_node(als_return={"response": ""})
         rr = result["remediation_result"]
-        assert rr.success is True
-        assert rr.generated_playbook_preview == ""
+        assert rr.success is False
+        assert "YAML validation" in rr.output_summary
+        invoke_mock.assert_not_called()
+
+    async def test_unparseable_yaml_fails_closed(self):
+        result, _, invoke_mock = await _run_node(als_return={"response": "not: [valid: yaml: {{"})
+        rr = result["remediation_result"]
+        assert rr.success is False
+        assert "YAML validation" in rr.output_summary
+        invoke_mock.assert_not_called()
 
 
 # -- AAP execution (commit + sync + upsert + launch) --
@@ -387,7 +395,7 @@ class TestAAPExecution:
         assert extra_vars["namespace"] == "prod"
         assert extra_vars["pod_name"] == "nginx-abc123"
         assert extra_vars["edge_site_id"] == "edge-1"
-        assert "deployment_name" not in extra_vars
+        assert extra_vars["deployment_name"] == "nginx-abc123"
         assert "generated_playbook_yaml" not in extra_vars
         assert "generated_from_model" not in extra_vars
 
@@ -617,6 +625,27 @@ class TestPreLaunchVerification:
         assert "launch_job" in tool_names
         assert result["remediation_result"].success is True
 
+    async def test_site_only_retarget_triggers_verify(self):
+        verified = []
+
+        async def track_verify(tool_name, kwargs):
+            if tool_name == "get_pod_spec":
+                verified.append(kwargs)
+                return {"success": True, "name": "nginx-abc123", "namespace": "ns", "spec": {}}
+            return await _default_invoke(tool_name, kwargs)
+
+        _, _, invoke_mock = await _run_node(
+            als_return=_ALS_RESPONSE,
+            invoke_fn=track_verify,
+            llm_summary={"edge_site_id": "edge-site-02"},
+            resource_specs="Edge site: edge-site-02\nPod: nginx",
+        )
+
+        assert len(verified) == 1
+        assert verified[0]["edge_site_id"] == "edge-site-02"
+        launch_call = [c for c in invoke_mock.call_args_list if c[0][0] == "launch_job"][0]
+        assert launch_call[0][1]["extra_vars"]["edge_site_id"] == "edge-site-02"
+
 
 # -- Multicluster credential --
 
@@ -630,12 +659,12 @@ class TestClusterName:
 
 
 class TestDeploymentNameExtraVar:
-    async def test_default_launch_does_not_invent_deployment_name(self):
+    async def test_default_launch_derives_deployment_name_from_pod(self):
         _, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
         launch_call = [c for c in invoke_mock.call_args_list if c[0][0] == "launch_job"][0]
         extra_vars = launch_call[0][1]["extra_vars"]
         assert extra_vars["pod_name"] == "nginx-abc123"
-        assert "deployment_name" not in extra_vars
+        assert extra_vars["deployment_name"] == "nginx-abc123"
 
     async def test_grounded_component_sets_deployment_name_as_is(self):
         _, _, invoke_mock = await _run_node(
@@ -647,7 +676,9 @@ class TestDeploymentNameExtraVar:
         extra_vars = launch_call[0][1]["extra_vars"]
         assert extra_vars["deployment_name"] == "nginx-ingress-controller"
 
-    async def test_ungrounded_component_and_site_not_overlaid(self):
+    async def test_ungrounded_site_not_overlaid(self):
+        # The component is confirmed live by the default get_pod_spec mock, so
+        # _resolve_target retargets to it; the ungrounded site stays as-is.
         _, _, invoke_mock = await _run_node(
             als_return=_ALS_RESPONSE,
             llm_summary={
@@ -658,7 +689,7 @@ class TestDeploymentNameExtraVar:
         )
         launch_call = [c for c in invoke_mock.call_args_list if c[0][0] == "launch_job"][0]
         extra_vars = launch_call[0][1]["extra_vars"]
-        assert "deployment_name" not in extra_vars
+        assert extra_vars["deployment_name"] == "totally-made-up"
         assert extra_vars["edge_site_id"] == "edge-1"
 
     async def test_grounded_edge_site_id_overlay(self):
@@ -1185,24 +1216,24 @@ class TestFixClusterProxyAuth:
 
 class TestQuoteJinja:
     def test_bare_value_quoted(self):
-        result = _quote_jinja("  name: {{ foo }}\n")
+        result = quote_jinja("  name: {{ foo }}\n")
         assert '"{{ foo }}"' in result
 
     def test_list_item_quoted(self):
-        result = _quote_jinja("  - name: {{ bar }}\n")
+        result = quote_jinja("  - name: {{ bar }}\n")
         assert '"{{ bar }}"' in result
 
     def test_already_quoted_unchanged(self):
         line = '  name: "{{ foo }}"\n'
-        assert _quote_jinja(line) == line
+        assert quote_jinja(line) == line
 
     def test_inline_value_quoted(self):
         line = "  Authorization: Bearer {{ token_acm }}\n"
-        assert _quote_jinja(line) == '  Authorization: "Bearer {{ token_acm }}"\n'
+        assert quote_jinja(line) == '  Authorization: "Bearer {{ token_acm }}"\n'
 
     def test_multiline(self):
         text = "  url: {{ hub_url }}\n  name: {{ x }}\n  ok: already\n"
-        result = _quote_jinja(text)
+        result = quote_jinja(text)
         assert '  url: "{{ hub_url }}"' in result
         assert '  name: "{{ x }}"' in result
         assert "  ok: already" in result
@@ -1226,21 +1257,21 @@ class TestFixAnsibleFacts:
 class TestQuoteJinjaRegex:
     def test_mixed_jinja_and_literal(self):
         """URL with Jinja and trailing literal text must be quoted."""
-        from agent_service.playbook_sanitize import _quote_jinja
+        from agent_service.playbook_sanitize import quote_jinja
         text = "    url: {{ hub_url }}/{{ edge_site_id }}/apis/v1/namespaces"
-        result = _quote_jinja(text)
+        result = quote_jinja(text)
         assert result == '    url: "{{ hub_url }}/{{ edge_site_id }}/apis/v1/namespaces"'
 
     def test_hyphenated_key(self):
-        from agent_service.playbook_sanitize import _quote_jinja
+        from agent_service.playbook_sanitize import quote_jinja
         text = "    Content-Type: {{ content_type }}"
-        result = _quote_jinja(text)
+        result = quote_jinja(text)
         assert result == '    Content-Type: "{{ content_type }}"'
 
     def test_already_quoted_not_double_quoted(self):
-        from agent_service.playbook_sanitize import _quote_jinja
+        from agent_service.playbook_sanitize import quote_jinja
         text = '    url: "{{ already_quoted }}"'
-        result = _quote_jinja(text)
+        result = quote_jinja(text)
         assert result == '    url: "{{ already_quoted }}"'
 
 

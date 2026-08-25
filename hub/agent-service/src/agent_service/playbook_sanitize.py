@@ -37,7 +37,7 @@ def fix_ansible_facts(yaml_text: str) -> str:
     return _ANSIBLE_DATETIME_ISO_RE.sub(_NOW_UTC_EXPR, yaml_text)
 
 
-def _quote_jinja(yaml_text: str) -> str:
+def quote_jinja(yaml_text: str) -> str:
     """Quote bare Jinja2 expressions so the YAML is valid for Ansible."""
     def _replacer(m):
         prefix, value = m.group(1), m.group(2)

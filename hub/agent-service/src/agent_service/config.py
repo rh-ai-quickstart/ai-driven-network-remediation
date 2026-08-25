@@ -79,15 +79,15 @@ LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "The cluster uses self-signed certificates.\n\n"
     "2. Kubernetes API path -- use the correct API group for each resource kind "
     "(e.g. /apis/apps/v1/ for Deployments, /api/v1/ for Pods and ConfigMaps).\n\n"
-    "3. Deployment name -- when patching a pod's parent Deployment, derive the "
-    "deployment name by stripping the last TWO dash-separated segments "
-    "(replicaset hash + pod hash) from the pod name "
-    '(e.g. pod "myapp-6b7f8c9d4-x2k9z" -> deployment "myapp").\n\n'
+    "3. Deployment name -- when patching a pod's parent Deployment, use the "
+    "injected variable directly as {{ deployment_name }}. Do NOT derive it from "
+    "the pod name; the pod name may already be a bare workload name.\n\n"
     "4. Authentication -- target the spoke cluster through the ACM cluster-proxy. "
     "AAP injects these variables at launch:\n"
-    "   hub_url:       cluster-proxy base URL\n"
-    "   edge_site_id:  target spoke cluster id\n"
-    "   token_acm:     cluster-proxy bearer token\n"
+    "   hub_url:         cluster-proxy base URL\n"
+    "   edge_site_id:    target spoke cluster id\n"
+    "   token_acm:       cluster-proxy bearer token\n"
+    "   deployment_name: the workload to patch\n"
     "   Build every Kubernetes API URL from the base "
     '"{{ hub_url }}/{{ edge_site_id }}" and authenticate with the header '
     'Authorization: "Bearer {{ token_acm }}".\n'
@@ -99,11 +99,12 @@ LIGHTSPEED_PROMPT_TEMPLATE = os.getenv(
     "6. Use ansible.builtin.uri for all Kubernetes API calls "
     "(kubernetes.core is not available).\n\n"
     "7. PATCH body -- when updating an EXISTING resource, use a YAML dict and set "
-    "body_format: json, Content-Type application/strategic-merge-patch+json and status_code: 200.\n\n"
-    "8. Creating resources -- a strategic-merge PATCH to a named resource returns 404 "
-    "if it does not exist yet (e.g. a new HorizontalPodAutoscaler). To create-or-update "
-    "idempotently, use server-side apply: method PATCH on the named-resource URL with "
-    "query ?fieldManager=ansible&force=true, Content-Type application/apply-patch+yaml, "
+    "body_format: json, Content-Type application/strategic-merge-patch+json and "
+    "status_code: 200.\n\n"
+    "8. Creating resources -- a strategic-merge PATCH to a named resource returns "
+    "404 if it does not exist yet. To create-or-update idempotently, use "
+    "server-side apply: method PATCH on the named-resource URL with query "
+    "?fieldManager=ansible&force=true, Content-Type application/apply-patch+yaml, "
     "the FULL object (apiVersion, kind, metadata.name, complete spec) as the body, "
     "body_format: json, and status_code: [200, 201].\n\n"
     "Return ONLY valid Ansible YAML, no explanation or markdown fences.",
@@ -173,7 +174,9 @@ LIGHTSPEED_SYSTEM_PROMPT = os.getenv(
     "IMPORTANT: Before generating a playbook, consider using available tools "
     "to gather relevant context -- such as searching documentation, checking logs, "
     "or querying metrics -- if they would help produce a better remediation. "
-    "Use your judgement on which tools are useful for the specific failure.",
+    "Use your judgement on which tools are useful for the specific failure. "
+    "Make the minimal change that resolves the issue: modify only the specific "
+    "fields that are misconfigured and leave the rest of the resource unchanged.",
 )
 
 LIGHTSPEED_SUMMARIZE_PROMPT = os.getenv(

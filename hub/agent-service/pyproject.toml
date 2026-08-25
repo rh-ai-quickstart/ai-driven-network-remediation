@@ -11,6 +11,7 @@ dependencies = [
     "shared[rag]",
     "click>=8.1.0",
     "fastapi>=0.115",
+    "json-repair>=0.63",
     "kafka-python-ng>=2.2",
     "langchain-openai>=0.3",
     "langgraph>=1.0.0",

@@ -17,6 +17,7 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "fastapi" },
+    { name = "json-repair" },
     { name = "kafka-python-ng" },
     { name = "langchain-openai" },
     { name = "langgraph" },
@@ -42,6 +43,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "json-repair", specifier = ">=0.63" },
     { name = "kafka-python-ng", specifier = ">=2.2" },
     { name = "langchain-openai", specifier = ">=0.3" },
     { name = "langgraph", specifier = ">=1.0.0" },
@@ -415,6 +417,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/60/e3/935b8034fd143f21125c87d51404a9e0e1449186a494405721ff5d1d695e/jiter-0.15.0-cp314-cp314t-win32.whl", hash = "sha256:7f6163c0f10b055245f814dcc59f4818da60dfe72f3e72ab89fc24b6bd5e9c52", size = 207950, upload-time = "2026-05-19T10:09:09.616Z" },
     { url = "https://files.pythonhosted.org/packages/93/59/984fd9ece895953dad3e0880a650e766f5a2da2c5514f0eafdaaabbeb5f9/jiter-0.15.0-cp314-cp314t-win_amd64.whl", hash = "sha256:980c256edb05b78a111b99c4de3b1d32e31634b867fd1fc2cf726e7b7bba9854", size = 200055, upload-time = "2026-05-19T10:09:11.367Z" },
     { url = "https://files.pythonhosted.org/packages/0e/a4/cf8d779feb133a27a2e3bc833bccb9e13aa332cdf820497ebf72c10ce8c3/jiter-0.15.0-cp314-cp314t-win_arm64.whl", hash = "sha256:66b1880df2d01e206e8339769d1c7c1753bcb653efd6289e203f6f24ebada0c0", size = 191244, upload-time = "2026-05-19T10:09:12.74Z" },
+]
+
+[[package]]
+name = "json-repair"
+version = "0.63.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/fe/708f83b5d42f0dc687fc720b0eba1217d9632539a5ccac432c4cfc4794ee/json_repair-0.63.3.tar.gz", hash = "sha256:87747d2d136124961a56392687c84558f5609244301df5ce641b84dac52f3b92", size = 52739, upload-time = "2026-08-19T17:51:27.829Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/63/7d171e5fb75ec70e714ec119df1052af5a7224fc19c5668f0e99faf50e6a/json_repair-0.63.3-py3-none-any.whl", hash = "sha256:3681cc25e44f17749d6d440ae69d7c4275609a75092bcde03c6bacc3f3c8475e", size = 51170, upload-time = "2026-08-19T17:51:26.362Z" },
 ]
 
 [[package]]
