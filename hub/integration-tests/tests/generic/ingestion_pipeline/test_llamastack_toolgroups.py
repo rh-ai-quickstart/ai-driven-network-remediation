@@ -25,7 +25,6 @@ def _assert_mcp_toolgroup(toolgroups, identifier: str, service_name: str):
 @pytest.mark.parametrize(
     ("identifier", "service_name"),
     [
-        ("mcp::noc-openshift", "mcp-noc-openshift"),
         ("mcp::noc-kafka", "mcp-noc-kafka"),
         ("mcp::noc-aap", "mcp-noc-aap"),
         ("mcp::noc-servicenow", "mcp-noc-servicenow"),
@@ -39,6 +38,20 @@ def test_llamastack_registers_default_mcp_toolgroups(llamastack_client, identifi
     toolgroups = data.get("data", data)
 
     _assert_mcp_toolgroup(toolgroups, identifier, service_name)
+
+
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_NETWORK_REMEDIATION", "true").lower() != "true",
+    reason="OpenShift MCP server is only deployed when network remediation is enabled",
+)
+def test_llamastack_registers_openshift_mcp_toolgroup(llamastack_client):
+    response = llamastack_client.get("/v1/toolgroups")
+    assert response.status_code == 200
+
+    data = response.json()
+    toolgroups = data.get("data", data)
+
+    _assert_mcp_toolgroup(toolgroups, "mcp::noc-openshift", "mcp-noc-openshift")
 
 
 @pytest.mark.skipif(

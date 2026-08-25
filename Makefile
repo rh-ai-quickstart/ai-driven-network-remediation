@@ -320,6 +320,7 @@ helm_all_args = \
 	--set edgeRbac.enabled=$(EDGE_RBAC_ENABLED) \
 	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	$(if $(filter false,$(ENABLE_NETWORK_REMEDIATION)),--set mcp-servers.mcp-servers.noc-openshift.enabled=false,) \
+	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),--set-string llama-stack.mcp-servers.noc-openshift.uri=http://mcp-noc-openshift:8000/mcp,) \
 	--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
 	$(helm_infra_args) \
@@ -861,7 +862,7 @@ telco-integration-tests:
 	PF_RAN_CHATBOT_PID=$$!; \
 	trap "kill $(SHARED_PF_PIDS) $$PF_RAN_CHATBOT_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
+	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:

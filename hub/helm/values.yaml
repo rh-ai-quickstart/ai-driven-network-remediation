@@ -105,8 +105,6 @@ llama-stack:
   pgvector:
     enabled: true
   mcp-servers:
-    noc-openshift:
-      uri: http://mcp-noc-openshift:8000/mcp
     noc-kafka:
       uri: http://mcp-noc-kafka:8000/mcp
     noc-aap:

@@ -15,6 +15,7 @@ env:
 jobs:
   telco-e2e-ocp:
     name: Run Telco ORAN e2e tests on OpenShift
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
     runs-on: ubuntu-latest
     steps:
       - name: Validate OCP_TOKEN and OCP_SERVER secrets
