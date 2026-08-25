@@ -72,8 +72,9 @@ pgvector:
     port: "5432"
 
 llama-stack:
-  # Set false to skip the in-namespace Llama Stack subchart and point hub services at a
-  # shared instance via url (e.g. http://llamastack.llama-stack.svc:8321).
+  # Set false to skip the in-namespace Llama Stack subchart and point hub services at an
+  # external instance via url (e.g. http://llamastack.llama-stack.svc:8321). pgvector
+  # stays in this chart; configure the external Llama Stack to use pgvector.<hub-ns>.svc.
   enabled: true
   url: http://llamastack-service:8321
   replicaCount: 1

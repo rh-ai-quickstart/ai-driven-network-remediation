@@ -60,6 +60,43 @@ make integration-tests
 make helm-uninstall
 ```
 
+## Shared external Llama Stack (resource-constrained ACM hubs)
+
+On ACM hub clusters with limited CPU/memory, you may run one cluster-wide Llama Stack
+(alongside MLflow and other OpenShift AI components) instead of a copy inside every hub
+namespace. The hub umbrella chart still deploys **pgvector**; only the in-namespace
+Llama Stack subchart is skipped.
+
+1. Deploy the hub (pgvector + all services, no in-namespace Llama Stack):
+
+```bash
+LLAMA_STACK_ENABLED=false \
+SHARED_LLAMASTACK_URL=http://llamastack.llama-stack.svc:8321 \
+make helm-install
+```
+
+2. Deploy the external Llama Stack separately (RHOAI, platform team, or your own helm
+   release). It must reach the hub pgvector service at `pgvector.<hub-namespace>.svc`
+   (default `pgvector.hub.svc`) and register the same MCP toolgroups/models as the
+   bundled subchart. Example reference install using the upstream llama-stack chart:
+
+```bash
+# Platform / cluster-admin — not part of make helm-install
+helm upgrade --install shared-llama-stack hub/helm/charts/llama-stack-0.8.7.tgz \
+  --namespace llama-stack \
+  --create-namespace \
+  --set managedByOperator=false \
+  --set pgvector.enabled=true \
+  --set-string models.adnr-llm.id="$ADNR_LLM_ID" \
+  --set-string models.adnr-llm.url="$ADNR_LLM_URL" \
+  --set-string models.adnr-llm.apiToken="$ADNR_LLM_TOKEN"
+```
+
+Create a `pgvector` secret in the Llama Stack namespace pointing at the hub Postgres
+(`host: pgvector.hub.svc`, credentials matching `hub/helm/values.yaml`) before starting
+the release. MCP server URIs must use cross-namespace DNS, e.g.
+`http://mcp-noc-openshift.hub.svc:8000/mcp`.
+
 # Build (custom image from the codebase)
 
 In the following example we assume that we want to use `quay.io/fercoli` as repo,
