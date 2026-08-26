@@ -75,6 +75,7 @@ runs:
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
+            --set waitImage=curlimages/curl:8.14.1 \
             --set mcpSecrets.openshift.create=true \
             --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
@@ -97,10 +98,14 @@ runs:
 
     - name: Wait for MCP pods to be ready
       run: |
-        for label in noc-kafka noc-openshift noc-aap noc-servicenow; do
+        for label in noc-kafka noc-aap noc-servicenow; do
           echo "Waiting for ${label}..."
           oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=${label}" -n hub --timeout=120s
         done
+        if [ "${ENABLE_NETWORK_REMEDIATION}" != "false" ]; then
+          echo "Waiting for noc-openshift..."
+          oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=noc-openshift" -n hub --timeout=120s
+        fi
       shell: bash
 
 

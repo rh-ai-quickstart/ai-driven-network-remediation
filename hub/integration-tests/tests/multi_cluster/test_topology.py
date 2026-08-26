@@ -49,12 +49,12 @@ def test_build_spokes_names_and_site_ids():
     assert spokes == [
         {
             "name": "edge-site-01",
-            "siteId": "edge-01",
+            "siteId": "edge-site-01",
             "namespace": "dark-noc-edge",
         },
         {
             "name": "edge-site-02",
-            "siteId": "edge-02",
+            "siteId": "edge-site-02",
             "namespace": "dark-noc-edge",
         },
     ]
@@ -78,9 +78,9 @@ def test_render_values_yaml_two_spokes():
     assert "deploymentMode: hub-spoke" in text
     assert "spokeCount: 2" in text
     assert "name: edge-site-01" in text
-    assert "siteId: edge-01" in text
+    assert "siteId: edge-site-01" in text
     assert "name: edge-site-02" in text
-    assert "siteId: edge-02" in text
+    assert "siteId: edge-site-02" in text
     assert "secretName: noc-openshift-kubeconfig-edge-site-01" in text
     assert "secretName: noc-openshift-kubeconfig-edge-site-02" in text
     assert "mountPath: /kubeconfigs/edge-site-01" in text

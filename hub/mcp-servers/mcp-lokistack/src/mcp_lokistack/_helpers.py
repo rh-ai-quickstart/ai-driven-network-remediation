@@ -45,7 +45,7 @@ def _build_logql(
         validate_namespace(namespace)
         selectors.append(f'kubernetes_namespace_name="{namespace}"')
     if pod:
-        escaped = re.escape(pod)
+        escaped = _escape_logql_string(re.escape(pod))
         selectors.append(f'kubernetes_pod_name=~".*{escaped}.*"')
     if container:
         selectors.append(f'kubernetes_container_name="{_escape_logql_string(container)}"')

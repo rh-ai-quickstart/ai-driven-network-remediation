@@ -12,6 +12,8 @@ image:
   pullPolicy: Always
   tag: "0.0.1"
 
+waitImage: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+
 global:
   routes:
     enabled: true
@@ -105,8 +107,6 @@ llama-stack:
   pgvector:
     enabled: true
   mcp-servers:
-    noc-openshift:
-      uri: http://mcp-noc-openshift:8000/mcp
     noc-kafka:
       uri: http://mcp-noc-kafka:8000/mcp
     noc-aap:
@@ -444,6 +444,7 @@ frontend:
 
 agentService:
   enabled: true
+  waitForDeps: true
   prompts:
     analyzeSystem: ""
     investigateSystem: ""

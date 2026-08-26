@@ -41,7 +41,17 @@ class TestSearchLogs:
             return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
         )
         result = search_logs(namespace="default", pod="my.pod(name")
-        assert r"my\.pod\(name" in result["query"]
+        assert r"my\\.pod\\(name" in result["query"]
+
+    @respx.mock
+    def test_pod_hyphen_double_escaped(self):
+        respx.get(f"{BASE}/application/loki/api/v1/query_range").mock(
+            return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
+        )
+        # re.escape turns "-" into "\-"; that backslash must be doubled so LogQL's
+        # string layer unquotes to a valid regex instead of an invalid Go escape.
+        result = search_logs(namespace="dark-noc-edge", pod="microservice-b")
+        assert r".*microservice\\-b.*" in result["query"]
 
     @respx.mock
     def test_container_quote_escaped(self):
@@ -97,7 +107,7 @@ class TestSearchLogs:
             return_value=httpx.Response(200, json=SAMPLE_STREAMS_RESPONSE)
         )
         result = search_logs(namespace="test", text="foo.bar(baz)")
-        assert r"foo\.bar\(baz\)" in result["query"]
+        assert r"foo\\.bar\\(baz\\)" in result["query"]
 
     @respx.mock
     def test_container_filter(self):

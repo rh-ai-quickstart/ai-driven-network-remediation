@@ -86,7 +86,6 @@ class _ServiceCfg:
 
 
 _SERVICES: dict[str, _ServiceCfg] = {
-    "openshift": _ServiceCfg(port=8001, timeout=30),
     "lokistack": _ServiceCfg(port=8002, timeout=30),
     "kafka": _ServiceCfg(port=8003, timeout=60),
     "aap": _ServiceCfg(port=8004, timeout=30),
@@ -124,12 +123,6 @@ def _wait_for_all_services():
 def _make_client(name: str) -> httpx.Client:
     svc = _SERVICES[name]
     return httpx.Client(base_url=svc.base_url, timeout=svc.timeout)
-
-
-@pytest.fixture(scope="session")
-def mcp_openshift_client():
-    with _make_client("openshift") as client:
-        yield client
 
 
 @pytest.fixture(scope="session")

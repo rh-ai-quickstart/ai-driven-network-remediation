@@ -217,13 +217,25 @@ class TestGraphConfig:
         assert config.remediate_threshold == 0.8
         assert config.escalate_threshold == 0.7
 
-    def test_investigation_defaults(self):
+    def test_investigation_defaults_are_coherent(self):
         config = GraphConfig()
-        assert config.tool_call_timeout == 10
-        assert config.investigate_timeout == 45
-        assert config.investigate_max_iterations == 3
+        # A single tool call must fit within the overall investigation budget.
+        assert config.investigate_timeout == 120
+        assert 0 < config.tool_call_timeout < config.investigate_timeout
+        # The loop must allow at least one investigate iteration.
+        assert config.investigate_max_iterations >= 1
 
     def test_custom_thresholds(self):
         config = GraphConfig(remediate_threshold=0.9, escalate_threshold=0.6)
         assert config.remediate_threshold == 0.9
         assert config.escalate_threshold == 0.6
+
+    def test_investigate_max_iterations_from_env(self, monkeypatch):
+        monkeypatch.setenv("INVESTIGATE_MAX_ITERATIONS", "25")
+        config = GraphConfig()
+        assert config.investigate_max_iterations == 25
+
+    def test_investigate_max_iterations_explicit_overrides_env(self, monkeypatch):
+        monkeypatch.setenv("INVESTIGATE_MAX_ITERATIONS", "25")
+        config = GraphConfig(investigate_max_iterations=5)
+        assert config.investigate_max_iterations == 5

@@ -6,7 +6,7 @@ import re
 import httpx
 
 from . import config
-from ._helpers import _build_logql, _query_logs
+from ._helpers import _build_logql, _escape_logql_string, _query_logs
 from .client import get_label_values
 from .errors import raise_tool_error, suggest_did_you_mean
 from .validators import validate_logql
@@ -91,7 +91,7 @@ def search_logs(
     try:
         query = _build_logql(namespace, pod, container, labels)
         if text:
-            escaped_text = re.escape(text).replace('"', '\\"')
+            escaped_text = _escape_logql_string(re.escape(text))
             query += f' |~ "(?i){escaped_text}"'
 
         result = _query_logs(query, tenant, duration, limit)

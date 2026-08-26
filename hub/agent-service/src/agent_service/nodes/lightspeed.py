@@ -3,27 +3,36 @@ import re
 import time
 
 import httpx
+import json_repair
 import yaml
+from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from agent_service.config import (
     AAP_LIGHTSPEED_TEMPLATE,
     GITEA_PROJECT_NAME,
+    LIGHTSPEED_MAX_SUMMARIZE_CHARS,
     LIGHTSPEED_PROMPT_TEMPLATE,
     LIGHTSPEED_SKIP_AAP,
+    LIGHTSPEED_SUMMARIZE_PROMPT,
+    LIGHTSPEED_SYSTEM_PROMPT,
     LIGHTSPEED_TIMEOUT_SECONDS,
     LIGHTSPEED_TOKEN,
     LIGHTSPEED_URL,
     LIGHTSPEED_VERIFY_SSL,
+    get_llm,
     now_iso,
 )
+from agent_service.evidence import build_evidence_prompt, build_grounding_text, get_pod_logs_for_attachment, get_structured_attachments
 from agent_service.models import RemediationResult
 from agent_service.nodes.rag_retrieval import store_generated_playbook
-from agent_service.utils import build_launch_extra_vars
+from agent_service.playbook_sanitize import fix_ansible_facts, quote_jinja, sanitize_playbook
+from agent_service.utils import build_launch_extra_vars, derive_deployment_name, normalize_component_name
 from agent_service.utils import invoke_tool as _invoke_tool
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
+_SUMMARY_KEYS = ("affected_component", "root_cause", "remediation_steps", "edge_site_id")
 
 
 _als_client: httpx.AsyncClient | None = None
@@ -64,6 +73,8 @@ def _build_playbook_name(rca, log_event) -> str:
 def _extract_yaml(text: str) -> tuple[str, list | dict | None]:
     """Strip markdown fences and parse YAML once. Returns (cleaned_text, parsed)."""
     cleaned = _FENCE_RE.sub("", text).strip()
+    cleaned = quote_jinja(cleaned)
+    cleaned = fix_ansible_facts(cleaned)
     try:
         parsed = yaml.safe_load(cleaned)
         return cleaned, parsed
@@ -82,36 +93,126 @@ def _playbook_name_from_parsed(parsed, rca, log_event) -> str:
     return _build_playbook_name(rca, log_event)
 
 
-def _build_prompt(rca, log_event) -> str:
-    """Fill the ALS prompt template with RCA + log context."""
-    return LIGHTSPEED_PROMPT_TEMPLATE.format(
-        failure_type=rca.failure_type if rca else "Unknown",
-        severity=rca.estimated_severity if rca else "unknown",
-        namespace=log_event.namespace if log_event else "unknown",
-        pod_name=log_event.pod_name if log_event else "unknown",
-        summary=rca.summary if rca else "",
-        evidence="\n".join(rca.evidence) if rca and rca.evidence else "N/A",
-        recommended_actions=(", ".join(rca.recommended_actions) if rca else ""),
+def _parse_summary_json(text: str) -> dict:
+    """Parse a summarizer response into the overlay keys we accept."""
+    parsed = json_repair.loads(text)
+    candidates = parsed if isinstance(parsed, list) else [parsed]
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        overlay = {
+            key: candidate[key]
+            for key in _SUMMARY_KEYS
+            if isinstance(candidate.get(key), str) and candidate[key]
+        }
+        if overlay:
+            return overlay
+    return {}
+
+
+async def _summarize_evidence(rca, investigation_evidence: str) -> dict:
+    """Use the LLM to synthesize RCA + evidence into targeted remediation fields."""
+    prompt = LIGHTSPEED_SUMMARIZE_PROMPT.format(
+        rca_summary=rca.summary if rca else "",
+        rca_evidence="\n".join(rca.evidence) if rca and rca.evidence else "",
+        recommended_actions=", ".join(rca.recommended_actions) if rca else "",
+        investigation_evidence=investigation_evidence[:LIGHTSPEED_MAX_SUMMARIZE_CHARS],
     )
+    messages = [
+        SystemMessage(content="Respond ONLY with valid JSON, no extra text."),
+        HumanMessage(content=prompt),
+    ]
+    response = await get_llm().ainvoke(messages)
+    text = response.content.strip()
+    parsed = _parse_summary_json(text)
+    if not parsed and text:
+        logger.warning(f"Summarize response was not valid JSON: {text[:200]}")
+    return parsed
 
 
-def _build_attachments(rca, log_event) -> list[dict]:
-    return [
+def _build_prompt(
+    rca,
+    log_event,
+    llm_summary: dict | None = None,
+    extra_evidence: str = "",
+) -> str:
+    """Build the ALS prompt, omitting fields that have no useful value."""
+    summary = rca.summary if rca else ""
+    target_component = log_event.pod_name if log_event else "unknown"
+    evidence_str = "\n".join(rca.evidence) if rca and rca.evidence else ""
+    actions = ", ".join(rca.recommended_actions) if rca else ""
+
+    if llm_summary:
+        if llm_summary.get("affected_component"):
+            target_component = llm_summary["affected_component"]
+        if llm_summary.get("root_cause"):
+            summary = llm_summary["root_cause"]
+        if llm_summary.get("remediation_steps"):
+            actions = llm_summary["remediation_steps"]
+
+    if extra_evidence:
+        evidence_str = (evidence_str + "\n\n" + extra_evidence) if evidence_str else extra_evidence
+
+    fields = [
+        ("Failure type", rca.failure_type if rca else "Unknown"),
+        ("Severity", rca.estimated_severity if rca else "unknown"),
+        ("Edge site cluster", log_event.edge_site_id if log_event else ""),
+        ("Namespace", log_event.namespace if log_event else "unknown"),
+        ("Target component", target_component),
+        ("Summary", summary),
+    ]
+
+    lines = ["Generate an Ansible playbook to remediate this OpenShift cluster issue.\n"]
+    for label, value in fields:
+        if value:
+            lines.append(f"{label}: {value}")
+
+    if evidence_str:
+        lines.append(f"\nEvidence:\n{evidence_str}")
+
+    if actions:
+        lines.append(f"\nRecommended actions: {actions}")
+
+    lines.append("")
+    lines.append(LIGHTSPEED_PROMPT_TEMPLATE)
+
+    return "\n".join(lines)
+
+
+_MAX_RAW_LOG_CHARS = 2000
+_MAX_EVIDENCE_ITEMS = 5
+_MAX_EVIDENCE_CHARS = 4000
+_MAX_ATTACHMENT_CHARS = 6000
+
+
+def _build_attachments(rca, log_event, pod_logs: str = "", extra_attachments: list[dict] | None = None) -> list[dict]:
+    result = [
         a
         for a in (
             (
-                {"attachment_type": "log", "content_type": "text/plain", "content": log_event.raw}
+                {"attachment_type": "log", "content_type": "text/plain", "content": log_event.raw[-_MAX_RAW_LOG_CHARS:]}
                 if log_event and log_event.raw
                 else None
             ),
             (
-                {"attachment_type": "configuration", "content_type": "text/plain", "content": "\n".join(rca.evidence)}
+                {"attachment_type": "log", "content_type": "text/plain", "content": pod_logs}
+                if pod_logs
+                else None
+            ),
+            (
+                {"attachment_type": "configuration", "content_type": "text/plain", "content": "\n".join(rca.evidence[:_MAX_EVIDENCE_ITEMS])[:_MAX_EVIDENCE_CHARS]}
                 if rca and rca.evidence
                 else None
             ),
         )
         if a
     ]
+    if extra_attachments:
+        for att in extra_attachments:
+            if len(att.get("content", "")) > _MAX_ATTACHMENT_CHARS:
+                att = {**att, "content": att["content"][:_MAX_ATTACHMENT_CHARS]}
+            result.append(att)
+    return result
 
 
 def _log_task_exception(task: asyncio.Task) -> None:
@@ -131,10 +232,9 @@ async def drain_background_tasks(timeout_seconds: float = 10.0) -> None:
 
 
 async def _call_als(prompt: str, attachments: list[dict]) -> dict:
-    resp = await _get_als_client().post(
-        "/v1/query",
-        json={"query": prompt, "attachments": attachments},
-    )
+    query = f"{LIGHTSPEED_SYSTEM_PROMPT}\n\n{prompt}" if LIGHTSPEED_SYSTEM_PROMPT else prompt
+    payload = {"query": query, "attachments": attachments}
+    resp = await _get_als_client().post("/v1/query", json=payload)
     resp.raise_for_status()
     return resp.json()
 
@@ -182,8 +282,20 @@ async def lightspeed_node(state) -> dict:
 
     t0 = time.monotonic()
     try:
-        prompt = _build_prompt(rca, log_event)
-        attachments = _build_attachments(rca, log_event)
+        investigation_evidence = build_evidence_prompt(state)
+        grounding_text = build_grounding_text(state)
+        llm_summary = None
+        if grounding_text:
+            try:
+                llm_summary = await _summarize_evidence(rca, grounding_text)
+                logger.info(f"LLM remediation summary: {llm_summary}")
+            except Exception:
+                logger.opt(exception=True).warning("LLM summarization failed, falling back to template-only prompt")
+
+        prompt = _build_prompt(rca, log_event, llm_summary, investigation_evidence)
+        pod_logs = get_pod_logs_for_attachment(state)
+        structured = get_structured_attachments(state)
+        attachments = _build_attachments(rca, log_event, pod_logs=pod_logs, extra_attachments=structured)
         logger.debug(f"ALS prompt: {prompt}")
         logger.info(f"ALS attachments count: {len(attachments)}")
 
@@ -192,6 +304,22 @@ async def lightspeed_node(state) -> dict:
         logger.debug(f"Raw ALS response: {data}")
 
         playbook_yaml, parsed = _extract_yaml(data.get("response", ""))
+        parsed = sanitize_playbook(parsed)
+        # TODO: validate playbook ops before AAP submission (block delete, shell, command modules)
+        if not isinstance(parsed, list):
+            duration = time.monotonic() - t0
+            logger.warning(f"Playbook YAML parse/sanitize failed, refusing to launch raw playbook (type={type(parsed).__name__})")
+            result = RemediationResult(
+                action_taken="generate-playbook",
+                tool_used="lightspeed",
+                success=False,
+                job_id=data.get("conversation_id", ""),
+                duration_seconds=round(duration, 2),
+                output_summary="Generated playbook failed YAML validation, skipping AAP execution",
+                timestamp=now_iso(),
+            )
+            return {"decision": "lightspeed", "remediation_result": result}
+        playbook_yaml = yaml.dump(parsed, default_flow_style=False, sort_keys=False)
         playbook_name = _playbook_name_from_parsed(parsed, rca, log_event)
 
         logger.info(f"ALS responded in {duration:.2f}s, conversation_id={data.get('conversation_id', '')}")
@@ -233,6 +361,9 @@ async def lightspeed_node(state) -> dict:
                 playbook_name,
                 playbook_yaml,
                 log_event,
+                llm_summary=llm_summary,
+                evidence_text=grounding_text,
+                resource_specs=state.resource_specs,
             )
     except Exception as exc:
         logger.exception(f"AAP execution failed for playbook '{playbook_name}'")
@@ -291,12 +422,46 @@ async def _await_project_sync(update_id: int) -> bool:
     return False
 
 
+async def _resolve_target(extra_vars: dict, llm_summary: dict | None, original_edge_site_id: str = "") -> tuple[dict, str]:
+    """Confirm the remediation target exists on the resolved spoke before launching.
+
+    Fails closed: the LLM is free to name the affected component, but we mutate only a
+    pod the cluster confirms. On success pod_name is retargeted to the live pod so the
+    playbook derives the right deployment; on failure the caller blocks the launch.
+    """
+    if not extra_vars:
+        return extra_vars, ""
+    candidate = ""
+    if llm_summary:
+        candidate = normalize_component_name(llm_summary.get("affected_component", ""))
+    original = extra_vars.get("pod_name", "")
+    candidate = candidate or original
+    site_changed = original_edge_site_id and extra_vars.get("edge_site_id", "") != original_edge_site_id
+    if not candidate or (candidate == original and not site_changed):
+        return extra_vars, ""
+    edge_site_id = extra_vars.get("edge_site_id", "")
+    spec = await _invoke_tool(
+        "get_pod_spec",
+        {"name": candidate, "namespace": extra_vars.get("namespace", ""), "edge_site_id": edge_site_id},
+    )
+    if not spec.get("success"):
+        site = edge_site_id or "default cluster"
+        return extra_vars, f"target '{candidate}' not found on {site}: {spec.get('error', '')}"
+    resolved_pod = spec.get("name") or candidate
+    return {**extra_vars, "pod_name": resolved_pod, "deployment_name": derive_deployment_name(resolved_pod)}, ""
+
+
 async def _execute_in_aap(
     result: RemediationResult,
     name: str,
     yaml_content: str,
     log_event,
+    llm_summary=None,
+    evidence_text="",
+    resource_specs="",
 ) -> RemediationResult:
+    logger.info(f"AAP execution pipeline started for playbook '{name}'")
+
     # Push playbook to Gitea
     commit = await _invoke_tool(
         "commit_playbook",
@@ -304,6 +469,7 @@ async def _execute_in_aap(
     )
     if not commit.get("success"):
         return _aap_step_failed(result, commit, "commit_playbook")
+    logger.info(f"Playbook committed to Gitea: file_path={commit.get('file_path', '')}")
 
     # Sync AAP project to pick up the new commit
     sync = await _invoke_tool("sync_project", {"project_name": GITEA_PROJECT_NAME})
@@ -324,9 +490,15 @@ async def _execute_in_aap(
     upsert = await _upsert_template(name, playbook_path=commit.get("file_path", ""))
     if not upsert.get("success"):
         return _aap_step_failed(result, upsert, "upsert_job_template")
+    logger.info(f"Job template upserted: '{name}'")
 
     # Launch the job with target-specific variables
-    extra_vars = build_launch_extra_vars(log_event)
+    extra_vars = build_launch_extra_vars(
+        log_event, llm_summary=llm_summary, evidence_text=evidence_text, resource_specs=resource_specs
+    )
+    extra_vars, verify_error = await _resolve_target(extra_vars, llm_summary, log_event.edge_site_id if log_event else "")
+    if verify_error:
+        return _aap_step_failed(result, {"error": verify_error}, "verify_target")
     launch = await _invoke_tool(
         "launch_job",
         {"job_template_name": name, "extra_vars": extra_vars},
@@ -335,6 +507,7 @@ async def _execute_in_aap(
         return _aap_step_failed(result, launch, "launch_job")
 
     job_id = str(launch.get("job_id", ""))
+    logger.info(f"AAP job launched: job_id={job_id} template='{name}'")
     return result.model_copy(
         update={
             "job_id": job_id,
