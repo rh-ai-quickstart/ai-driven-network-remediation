@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   telco-e2e-tests:
+    if: github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
     uses: ./.github/workflows/pr-check-common.yml
     with:
       suite_name: Telco ORAN

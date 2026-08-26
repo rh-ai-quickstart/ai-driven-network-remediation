@@ -10,6 +10,7 @@ concurrency:
 
 jobs:
   unit-tests:
+    if: github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
     name: Run unit tests
     runs-on: ubuntu-latest
     steps:
@@ -23,6 +24,7 @@ jobs:
         run: make unit-tests
 
   multi-cluster-template-tests:
+    if: github.repository == 'rh-ai-quickstart/ai-driven-network-remediation'
     name: Multi-cluster template tests
     runs-on: ubuntu-latest
     steps:
