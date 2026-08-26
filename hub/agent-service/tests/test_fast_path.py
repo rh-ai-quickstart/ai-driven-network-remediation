@@ -40,11 +40,6 @@ def test_target_deployment_name_returns_none_when_unparseable():
     assert target_deployment_name("") is None
 
 
-def test_target_deployment_name_honors_override():
-    with patch("agent_service.fast_path.FAST_PATH_DEPLOYMENT", "forced-deploy"):
-        assert target_deployment_name("payments-api-7d8f9c6b5-abcde") == "forced-deploy"
-
-
 @pytest.mark.asyncio
 async def test_spoke_fast_path_recent_true_when_annotation_fresh():
     now = datetime.now(timezone.utc).isoformat()

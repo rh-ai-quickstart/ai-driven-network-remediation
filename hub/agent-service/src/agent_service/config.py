@@ -250,5 +250,3 @@ def now_iso() -> str:
 # Spoke edge fast-path healer coordination
 FAST_PATH_LAST_HEAL_ANNOTATION = "adnr.io/fast-path-last-heal"
 FAST_PATH_COOLDOWN_SECONDS = int(os.getenv("FAST_PATH_COOLDOWN_SECONDS", "300"))
-# Optional pin. Empty means derive the Deployment from the failing pod name.
-FAST_PATH_DEPLOYMENT = os.getenv("FAST_PATH_DEPLOYMENT", "")
