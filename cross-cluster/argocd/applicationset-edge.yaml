@@ -65,10 +65,8 @@ spec:
         name: "{{.name}}"
         namespace: "{{.namespace}}"
       syncPolicy:
-        # selfHeal off so AI remediation patches (e.g. raising CPU limits) persist
-        # instead of being reverted to the chart-declared values on drift detection.
         automated:
           prune: true
-          selfHeal: false
+          selfHeal: __EDGE_SELF_HEAL__
         syncOptions:
           - CreateNamespace=true

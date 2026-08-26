@@ -157,6 +157,7 @@ make acm-prereq-check CLUSTER_COUNT=2
 | `GITOPS_REVISION` | `main` | Branch/tag/commit for ArgoCD (use your feature branch before merge) |
 | `KAFKA_EXTERNAL_HOST` | auto from route | Hub Kafka route host for spoke CLF; `acm-deploy` detects `kafka-external` if unset |
 | `REGISTRY` / `VERSION` | Quay published images | Override for custom builds |
+| `EDGE_SELF_HEAL` | `true` | ArgoCD selfHeal for edge apps; set `false` so AI remediation patches persist |
 | `ENABLE_MULTICLUSTER` | `false` | AAP ACM proxy credential (not topology) |
 | `multiClusterCreds.insecureSkipTlsVerify` | `true` (Helm) | Lab default for cluster-proxy kubeconfigs; set `false` to pin CA |
 
@@ -373,6 +374,9 @@ oc exec -n hub "$MCP_POD" -- \
   env KUBECONFIG=/kubeconfigs/edge-site-01/kubeconfig \
   oc --request-timeout=15s get ns dark-noc-edge
 ```
+
+**Stale remediation patch persists after demo**  
+Edge ArgoCD apps deploy with `selfHeal: true` by default. To let AI remediation patches (e.g. raised CPU limits) persist, redeploy with `EDGE_SELF_HEAL=false make argocd-apply`. To reset a spoke to its chart-declared state, redeploy with the default (`EDGE_SELF_HEAL=true`) or toggle it on the Application directly: `oc patch application adnr-edge-edge-site-01 -n openshift-gitops --type merge -p '{"spec":{"syncPolicy":{"automated":{"selfHeal":true}}}}'`.
 
 **Cluster-proxy TLS skip**  
 Per-spoke proxy kubeconfigs default to `insecure-skip-tls-verify: true` (`multiClusterCreds.insecureSkipTlsVerify`). That is a lab convenience. For non-lab hubs, set it to `false` and pin the cluster-proxy CA.

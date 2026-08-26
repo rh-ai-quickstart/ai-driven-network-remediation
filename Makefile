@@ -424,6 +424,7 @@ acm-apply-placement: validate-topology
 # ArgoCD edge fan-out (CLUSTER_COUNT>=2). Dry-run: ARGOCD_APPLY_ARGS=--dry-run
 KAFKA_EXTERNAL_HOST ?=
 ARGOCD_NAMESPACE    ?=
+EDGE_SELF_HEAL      ?= true
 ARGOCD_APPLY_ARGS   ?=
 ACM_APPLY_ARGS      ?=
 ACM_CREATE_ARGS     ?=
@@ -443,6 +444,7 @@ argocd-apply: validate-topology
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	KAFKA_EXTERNAL_HOST='$(KAFKA_EXTERNAL_HOST)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	EDGE_SELF_HEAL='$(EDGE_SELF_HEAL)' \
 	bash scripts/acm/argocd-apply.sh $(ARGOCD_APPLY_ARGS)
 
 .PHONY: argocd-wait-spokes

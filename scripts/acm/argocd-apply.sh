@@ -27,6 +27,7 @@ EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
 KAFKA_EXTERNAL_HOST="${KAFKA_EXTERNAL_HOST:-}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-}"
 ARGOCD_DIR="${ARGOCD_DIR:-cross-cluster/argocd}"
+EDGE_SELF_HEAL="${EDGE_SELF_HEAL:-true}"
 PROJECT_TEMPLATE="${ARGOCD_DIR}/project.yaml"
 APPSET_TEMPLATE="${ARGOCD_DIR}/applicationset-edge.yaml"
 
@@ -158,7 +159,8 @@ substitute_common() {
     -e "s|targetRevision: ${sample_rev_esc}|targetRevision: ${rev_esc}|g" \
     -e "s|namespace: ${sample_ns_esc}|namespace: ${ns_esc}|g" \
     -e "s|namespace: ${sample_edge_esc}|namespace: ${edge_ns_esc}|g" \
-    -e "s|${sample_kafka_esc}|${kafka_esc}|g"
+    -e "s|${sample_kafka_esc}|${kafka_esc}|g" \
+    -e "s|__EDGE_SELF_HEAL__|${EDGE_SELF_HEAL}|g"
 }
 
 render_project() {
