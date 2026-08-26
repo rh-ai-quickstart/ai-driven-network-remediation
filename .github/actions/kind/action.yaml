@@ -88,7 +88,8 @@ runs:
             --set kafka.kafka.resources.requests.memory=256Mi \
             --set kafka.kafka.resources.limits.cpu=500m \
             --set kafka.kafka.resources.limits.memory=512Mi \
-            --set-string kafka.kafka.jvmHeapOpts='-Xmx384m -Xms256m'"
+            --set-string kafka.kafka.jvmHeapOpts='-Xmx384m -Xms256m' \
+            --set agentService.waitForDeps=false"
       shell: bash
 
     - name: Wait for Kafka topics to be created
