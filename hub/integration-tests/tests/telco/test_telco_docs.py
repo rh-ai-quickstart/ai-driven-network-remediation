@@ -8,7 +8,7 @@ _INGEST_TIMEOUT_SECONDS = 1200.0
 
 
 def _sync_telco_docs(ingestion_client) -> dict:
-    response = ingestion_client.post("/telco-docs/sync", timeout=60.0)
+    response = ingestion_client.post("/telco-docs/sync", timeout=_INGEST_TIMEOUT_SECONDS)
     assert response.status_code == 200
     return response.json()
 
