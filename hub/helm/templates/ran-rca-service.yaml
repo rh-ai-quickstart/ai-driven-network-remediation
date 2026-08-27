@@ -43,6 +43,12 @@ spec:
               value: {{ .Values.ranRcaService.env.kafkaConsumerEnabled | quote }}
             - name: RECENT_ANOMALIES_LIMIT
               value: {{ .Values.ranRcaService.env.recentAnomaliesLimit | quote }}
+            - name: MANTIS_ENABLED
+              value: {{ .Values.ranRcaService.env.mantisEnabled | quote }}
+            - name: CLASSIFY_INFERENCE_URL
+              value: {{ .Values.ranRcaService.env.classifyInferenceUrl | default (printf "http://%s-ran-classify-predictor/v1/classify" (include "hub.fullname" .)) | quote }}
+            - name: MANTIS_CONFIDENCE_THRESHOLD
+              value: {{ .Values.ranRcaService.env.mantisConfidenceThreshold | quote }}
           ports:
             - name: http
               containerPort: 8003
