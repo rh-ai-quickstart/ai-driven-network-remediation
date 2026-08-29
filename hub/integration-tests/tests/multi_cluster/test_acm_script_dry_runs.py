@@ -129,6 +129,7 @@ def test_apply_placement_dry_run_substitutes_namespace_and_hub():
     assert "__NAMESPACE__" not in out
     assert "__EDGE_NAMESPACE__" not in out
     assert "__ACM_HUB_CLUSTER__" not in out
+    assert "gitops-argo-namespace=true" in out
     assert "OK: apply-placement dry-run" in out
 
 

@@ -97,6 +97,15 @@ oc get crd applicationsets.argoproj.io
 
 Enable ACM GitOps integration so imported spokes appear as ArgoCD cluster destinations. If Applications stay Pending, check ArgoCD cluster secrets for each `edge-site-NN`.
 
+When the hub chart lives in `hub` but Argo CD runs in `openshift-gitops`, ACM requires a cross namespace label on the Argo CD namespace:
+
+```bash
+oc label namespace openshift-gitops \
+  apps.open-cluster-management.io/gitops-argo-namespace=true --overwrite
+```
+
+`make acm-deploy` applies this automatically during `acm-apply-placement` (before `GitOpsCluster` is created). Without it, `GitOpsCluster/adnr-edge` stays `ArgoServerVerified=False` and edge Applications remain `Unknown`.
+
 #### 3. RHOAI 3.4 (Llama Stack)
 
 Install Red Hat OpenShift AI **3.4** (or newer in the 3.x line that supports Llama Stack). Configure the `DataScienceCluster` so the Llama Stack operator is Managed:
@@ -351,6 +360,17 @@ Confirm MultiClusterHub Ready and `local-cluster` Available, GitOps Application 
 
 **`acm-prereq-check` fails on ManagedClusters**  
 Names must match rendered spokes (`edge-site-01`, …). Status must be Available. Labeling happens during deploy; prereq only checks presence and availability.
+
+**GitOpsCluster `ArgoServerVerified=False` / Applications `Unknown`**  
+Check `GitOpsCluster/adnr-edge` in `hub`. A common cause is a missing label on the Argo CD namespace:
+
+```bash
+oc get gitopscluster adnr-edge -n hub -o jsonpath='{.status.conditions[?(@.type=="ArgoServerVerified")].message}{"\n"}'
+oc label namespace openshift-gitops \
+  apps.open-cluster-management.io/gitops-argo-namespace=true --overwrite
+```
+
+Fresh installs via `make acm-deploy` label the namespace during `acm-apply-placement`. Re-run `make acm-apply-placement CLUSTER_COUNT=2` if you applied GitOpsCluster manually.
 
 **ArgoCD Applications stuck / not created**  
 Confirm spokes are registered as ArgoCD cluster secrets (ACM GitOps). Confirm `GITOPS_REVISION` contains `edge/helm`. Re-run:

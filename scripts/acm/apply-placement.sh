@@ -156,6 +156,10 @@ if [[ -z "${oc_bin}" ]]; then
   oc_bin="$(adnr_resolve_oc)"
 fi
 
+if [[ "${STEP}" == "remaining" || "${STEP}" == "all" ]]; then
+  adnr_ensure_gitops_argo_namespace_label "${oc_bin}" "${argocd_ns}" "${NAMESPACE}" "${DRY_RUN}"
+fi
+
 log "Applying ACM manifests (step=${STEP}, namespace=${NAMESPACE})..."
 while IFS= read -r f; do
   [[ -n "${f}" ]] || continue

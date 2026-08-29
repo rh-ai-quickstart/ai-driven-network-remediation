@@ -104,3 +104,49 @@ adnr_require_hub_login() {
     adnr_fail "not logged into hub cluster (${oc_bin} whoami failed)"
   fi
 }
+
+# ACM GitOpsCluster requires this label when argoNamespace differs from the hub
+# install namespace (typical: GitOpsCluster in hub, Argo CD in openshift-gitops).
+ADNR_GITOPS_ARGO_NS_LABEL="apps.open-cluster-management.io/gitops-argo-namespace"
+
+adnr_gitops_argo_namespace_label_present() {
+  local oc_bin="$1"
+  local argocd_ns="$2"
+  local present
+
+  present="$("${oc_bin}" get namespace "${argocd_ns}" \
+    -o jsonpath='{.metadata.labels.apps\.open-cluster-management\.io/gitops-argo-namespace}' \
+    2>/dev/null || true)"
+  [[ "${present}" == "true" ]]
+}
+
+# Label openshift-gitops (or ARGOCD_NAMESPACE) before applying GitOpsCluster.
+adnr_ensure_gitops_argo_namespace_label() {
+  local oc_bin="$1"
+  local argocd_ns="$2"
+  local hub_ns="${3:-hub}"
+  local dry_run="${4:-0}"
+
+  [[ -n "${argocd_ns}" ]] || return 0
+  if [[ "${argocd_ns}" == "${hub_ns}" ]]; then
+    return 0
+  fi
+
+  if [[ "${dry_run}" -eq 1 ]]; then
+    adnr_log "dry-run: would label namespace/${argocd_ns} ${ADNR_GITOPS_ARGO_NS_LABEL}=true"
+    return 0
+  fi
+
+  [[ -n "${oc_bin}" ]] || oc_bin="$(adnr_resolve_oc)"
+  if ! "${oc_bin}" get namespace "${argocd_ns}" >/dev/null 2>&1; then
+    adnr_fail "Argo CD namespace ${argocd_ns} not found; install OpenShift GitOps before acm-deploy"
+  fi
+
+  if adnr_gitops_argo_namespace_label_present "${oc_bin}" "${argocd_ns}"; then
+    adnr_log "Argo CD namespace ${argocd_ns}: ${ADNR_GITOPS_ARGO_NS_LABEL}=true (OK)"
+    return 0
+  fi
+
+  adnr_log "Labeling namespace/${argocd_ns} ${ADNR_GITOPS_ARGO_NS_LABEL}=true (required for ACM GitOpsCluster)..."
+  "${oc_bin}" label namespace "${argocd_ns}" "${ADNR_GITOPS_ARGO_NS_LABEL}=true" --overwrite
+}
