@@ -227,11 +227,31 @@ ensure_app_prune_finalizer() {
   fi
 }
 
+strip_app_finalizers() {
+  local app="$1" ns="$2"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "dry-run: would strip finalizers from ${ARGOCD_APP_RESOURCE}/${app}"
+    return 0
+  fi
+  if ! "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" >/dev/null 2>&1; then
+    return 0
+  fi
+  log "WARN: stripping finalizers from ${app} (prune did not finish within ${APP_TIMEOUT_SECONDS}s)"
+  "${oc_bin}" patch "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" --type=merge \
+    -p '{"metadata":{"finalizers":null}}' \
+    >/dev/null 2>&1 || true
+}
+
 wait_for_applications_gone() {
   local ns="$1"
-  local deadline remaining app
+  local deadline remaining app name stripped_deadline
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "dry-run: would wait for adnr-edge Applications to finish pruning"
+    if [[ "${#ADNR_SPOKE_NAMES[@]}" -gt 0 ]]; then
+      for name in "${ADNR_SPOKE_NAMES[@]}"; do
+        strip_app_finalizers "adnr-edge-${name}" "${ns}"
+      done
+    fi
     return 0
   fi
   if [[ "${#ADNR_SPOKE_NAMES[@]}" -eq 0 ]]; then
@@ -252,7 +272,29 @@ wait_for_applications_gone() {
       return 0
     fi
     if [[ "${SECONDS}" -ge "${deadline}" ]]; then
-      log "WARN: ${remaining} ArgoCD Application(s) still present after ${APP_TIMEOUT_SECONDS}s; continuing"
+      log "WARN: ${remaining} ArgoCD Application(s) still present after ${APP_TIMEOUT_SECONDS}s"
+      for name in "${ADNR_SPOKE_NAMES[@]}"; do
+        app="adnr-edge-${name}"
+        if "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" >/dev/null 2>&1; then
+          strip_app_finalizers "${app}" "${ns}"
+        fi
+      done
+      stripped_deadline=$((SECONDS + 30))
+      while [[ "${SECONDS}" -lt "${stripped_deadline}" ]]; do
+        remaining=0
+        for name in "${ADNR_SPOKE_NAMES[@]}"; do
+          app="adnr-edge-${name}"
+          if "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" "${app}" -n "${ns}" >/dev/null 2>&1; then
+            remaining=$((remaining + 1))
+          fi
+        done
+        if [[ "${remaining}" -eq 0 ]]; then
+          log "ArgoCD edge Applications gone after finalizer strip"
+          return 0
+        fi
+        sleep 5
+      done
+      log "WARN: ${remaining} ArgoCD Application(s) still present after finalizer strip; continuing"
       return 0
     fi
     sleep 5

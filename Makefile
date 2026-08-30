@@ -437,6 +437,8 @@ ACM_DISTRIBUTE_ARGS ?=
 ACM_TEARDOWN_ARGS   ?=
 ACM_WAIT_TIMEOUT_SECONDS  ?=
 ACM_WAIT_INTERVAL_SECONDS ?=
+GITOPSCLUSTER_WAIT_TIMEOUT_SECONDS  ?=
+GITOPSCLUSTER_WAIT_INTERVAL_SECONDS ?=
 ACM_MANIFESTWORK_TIMEOUT_SECONDS  ?=
 ACM_MANIFESTWORK_INTERVAL_SECONDS ?=
 
@@ -458,6 +460,15 @@ argocd-wait-spokes: validate-topology
 	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
 	bash scripts/acm/argocd-wait-spokes.sh
+
+.PHONY: acm-wait-gitopscluster
+acm-wait-gitopscluster: validate-topology
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	NAMESPACE='$(NAMESPACE)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	GITOPSCLUSTER_WAIT_TIMEOUT_SECONDS='$(GITOPSCLUSTER_WAIT_TIMEOUT_SECONDS)' \
+	GITOPSCLUSTER_WAIT_INTERVAL_SECONDS='$(GITOPSCLUSTER_WAIT_INTERVAL_SECONDS)' \
+	bash scripts/acm/wait-gitopscluster.sh
 
 # ── acm-deploy / acm-teardown (C7 orchestration) ─────────────────
 # CLUSTER_COUNT=1  → helm-install + simulated edge workload
@@ -482,6 +493,7 @@ endif
 	# distribute-kafka-certs reads hub secret kafka-client-tls directly (no cwd cert files).
 	$(MAKE) acm-distribute-kafka-certs
 	$(MAKE) acm-apply-placement
+	$(MAKE) acm-wait-gitopscluster
 	@if [ -z "$(KAFKA_EXTERNAL_HOST)" ]; then \
 		_host=$$(oc get route kafka-external -n $(NAMESPACE) -o jsonpath='{.spec.host}' 2>/dev/null || true); \
 		if [ -z "$$_host" ]; then \

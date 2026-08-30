@@ -139,3 +139,28 @@ def test_apply_placement_skips_single_cluster():
     assert result.returncode == 0, out
     assert "SKIP:" in out
     assert "single-cluster" in out
+
+
+def test_wait_gitopscluster_skips_single_cluster():
+    result = _run_script("wait-gitopscluster.sh", cluster_count=1)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "SKIP:" in out
+    assert "single-cluster" in out
+
+
+def test_wait_gitopscluster_skips_with_skip_oc_check():
+    result = _run_script("wait-gitopscluster.sh", cluster_count=2, NAMESPACE="hub")
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "SKIP_OC_CHECK" in out or "skipped live oc" in out
+    assert "GitOpsCluster/adnr-edge" in out
+
+
+def test_acm_teardown_dry_run_logs_finalizer_strip():
+    _render_spokes(2)
+    result = _run_script("acm-teardown.sh", "--dry-run", cluster_count=2, NAMESPACE="hub")
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "dry-run: would strip finalizers" in out
+    assert "OK: acm-teardown dry-run" in out

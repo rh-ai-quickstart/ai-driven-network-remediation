@@ -235,7 +235,8 @@ Orchestration order when `CLUSTER_COUNT>=2`:
 5. Hub `helm-install` (`deploymentMode=hub-spoke`, `edgeRbac.enabled=false`)
 6. `acm-distribute-kafka-certs` (`kafka-client-certs` in `dark-noc-edge` on each spoke)
 7. ACM placement / namespace policy (`apply-placement.sh` substitutes `NAMESPACE` / `EDGE_NAMESPACE`)
-8. `argocd-apply` + `argocd-wait-spokes` (edge chart Synced/Healthy)
+8. `acm-wait-gitopscluster` (`GitOpsCluster/adnr-edge` `ArgoServerVerified=True` and `Ready=True`)
+9. `argocd-apply` + `argocd-wait-spokes` (edge chart Synced/Healthy)
 
 ### Verify spokes and GitOps
 
@@ -318,6 +319,7 @@ Notes:
 - When `CLUSTER_CREATE=false`, ManagedClusters themselves are **not** deleted. Only ADNR resources on them are torn down.
 - When `CLUSTER_CREATE=true`, teardown also targets Hive ClusterDeployments for the rendered spokes.
 - Single-cluster teardown skips ACM/ArgoCD steps and uninstalls the hub chart only.
+- If ArgoCD Applications linger in `Terminating` during teardown, `acm-teardown` strips finalizers after `ACM_TEARDOWN_APP_TIMEOUT_SECONDS` (default 300s) and continues. Dry-run only logs the strip step.
 - If you accidentally run teardown with `CLUSTER_COUNT=1` after a hub-spoke deploy, the script fails with a clear error instead of orphaning ArgoCD/ACM objects.
 
 Confirm:
@@ -370,7 +372,21 @@ oc label namespace openshift-gitops \
   apps.open-cluster-management.io/gitops-argo-namespace=true --overwrite
 ```
 
-Fresh installs via `make acm-deploy` label the namespace during `acm-apply-placement`. Re-run `make acm-apply-placement CLUSTER_COUNT=2` if you applied GitOpsCluster manually.
+Fresh installs via `make acm-deploy` label the namespace during `acm-apply-placement`, then wait for `GitOpsCluster` readiness before `argocd-apply`. Re-run `make acm-apply-placement CLUSTER_COUNT=2` and `make acm-wait-gitopscluster CLUSTER_COUNT=2` if you applied GitOpsCluster manually.
+
+**ArgoCD Applications stuck `Terminating` during teardown**  
+`acm-teardown` patches the prune finalizer before delete, then waits up to `ACM_TEARDOWN_APP_TIMEOUT_SECONDS` (default 300). If Applications still exist, it strips finalizers and continues so teardown does not hang. Dry-run logs the strip step without patching. To wait longer before the strip:
+
+```bash
+CLUSTER_COUNT=2 make acm-teardown ACM_TEARDOWN_APP_TIMEOUT_SECONDS=600
+```
+
+Manual unblock (last resort):
+
+```bash
+oc patch application adnr-edge-edge-site-01 -n openshift-gitops --type=merge \
+  -p '{"metadata":{"finalizers":null}}'
+```
 
 **ArgoCD Applications `Synced` but `Degraded` (fast-path healer)**  
 Check spoke pod status for `edge-fast-path-runner` and `edge-fast-path-watcher`. `ImagePullBackOff` with `manifest unknown` for tag `0.1.5` usually means the image was not pushed to Quay. CI builds `quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:$(VERSION)` (same tag as the edge chart `appVersion`). Confirm the tag exists and re-run the [Build and push images](https://github.com/rh-ai-quickstart/ai-driven-network-remediation/actions/workflows/build-and-push.yaml) workflow if the first push failed (for example Quay unauthorized on a new repository).
