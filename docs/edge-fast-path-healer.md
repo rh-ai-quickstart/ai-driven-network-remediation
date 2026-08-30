@@ -20,7 +20,7 @@ Enable or disable with `fastPathHealer.enabled` in `edge/helm/values.yaml`:
 | Value | Default | Purpose |
 |-------|---------|---------|
 | `fastPathHealer.image.repository` | `quay.io/rh-ai-quickstart/noc-edge-fast-path-healer` | Container image |
-| `fastPathHealer.image.tag` | chart `appVersion` | Image tag |
+| `fastPathHealer.image.tag` | chart `appVersion` | Image tag (`Makefile` `VERSION`, e.g. `0.1.5`) |
 | `fastPathHealer.remediation.memoryRequest` | `64Mi` | Patched request after heal |
 | `fastPathHealer.remediation.memoryLimit` | `128Mi` | Patched limit after heal |
 | `fastPathHealer.remediation.unsafeMemoryLimitMi` | `32` | Trigger heal when limit is at or below this |
@@ -31,7 +31,7 @@ Enable or disable with `fastPathHealer.enabled` in `edge/helm/values.yaml`:
 
 `siteId` and `nginx.name` are required chart values. They are injected as `EDGE_SITE_ID` and `EDGE_DEPLOYMENT` on both pods.
 
-For a lab image that is not `appVersion`, set `fastPathHealer.image.tag` on the ArgoCD Application (for example `0.1.6-fast-path`). Do not commit that tag into `values.yaml`.
+For a local image that is not yet on Quay, set `fastPathHealer.image.tag` on the ArgoCD Application. Do not commit ad hoc tags into `values.yaml`.
 
 ## Lab validation
 

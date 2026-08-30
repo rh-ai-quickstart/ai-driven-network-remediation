@@ -45,7 +45,7 @@ fastPathHealer:
   enabled: true
   image:
     repository: quay.io/rh-ai-quickstart/noc-edge-fast-path-healer
-    # Empty uses Chart.appVersion. Override for lab tags, do not commit them here.
+    # Empty uses Chart.appVersion (same as Makefile VERSION). Override only for local lab builds.
     tag: ""
     pullPolicy: IfNotPresent
   runner:

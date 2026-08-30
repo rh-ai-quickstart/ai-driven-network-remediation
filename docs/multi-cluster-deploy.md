@@ -372,6 +372,16 @@ oc label namespace openshift-gitops \
 
 Fresh installs via `make acm-deploy` label the namespace during `acm-apply-placement`. Re-run `make acm-apply-placement CLUSTER_COUNT=2` if you applied GitOpsCluster manually.
 
+**ArgoCD Applications `Synced` but `Degraded` (fast-path healer)**  
+Check spoke pod status for `edge-fast-path-runner` and `edge-fast-path-watcher`. `ImagePullBackOff` with `manifest unknown` for tag `0.1.5` usually means the image was not pushed to Quay. CI builds `quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:$(VERSION)` (same tag as the edge chart `appVersion`). Confirm the tag exists and re-run the [Build and push images](https://github.com/rh-ai-quickstart/ai-driven-network-remediation/actions/workflows/build-and-push.yaml) workflow if the first push failed (for example Quay unauthorized on a new repository).
+
+```bash
+curl -sL https://quay.io/v2/rh-ai-quickstart/noc-edge-fast-path-healer/tags/list
+oc get applications.argoproj.io adnr-edge-edge-site-01 -n openshift-gitops \
+  -o jsonpath='{range .status.resources[*]}{.kind}/{.name}: {.health.status}{"\n"}{end}' \
+  | rg fast-path
+```
+
 **ArgoCD Applications stuck / not created**  
 Confirm spokes are registered as ArgoCD cluster secrets (ACM GitOps). Confirm `GITOPS_REVISION` contains `edge/helm`. Re-run:
 

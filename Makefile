@@ -679,9 +679,14 @@ push-edge-fast-path-healer-image:
 
 .PHONY: push-all-images
 push-all-images:
-	@for image in $(CORE_BUILD_PUSH_IMAGES); do \
-		$(CONTAINER_TOOL) push $$image $(PUSH_EXTRA_ARGS); \
-	done
+	@failed=0; \
+	for image in $(CORE_BUILD_PUSH_IMAGES); do \
+		if ! $(CONTAINER_TOOL) push $$image $(PUSH_EXTRA_ARGS); then \
+			printf 'ERROR: push failed for %s\n' "$$image" >&2; \
+			failed=1; \
+		fi; \
+	done; \
+	exit $$failed
 
 .PHONY: print-all-images
 print-all-images:
