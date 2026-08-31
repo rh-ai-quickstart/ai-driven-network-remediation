@@ -337,6 +337,12 @@ aapCredential:
   saNamespace: ""
   credentialName: "hub-remediation"
   organizationId: 1
+  # Pre-created AAP job templates that run playbooks/restart-nginx.yaml (or similar)
+  # and need the same Kubernetes / RHACM credential as lightspeed-runner.
+  remediationTemplateNames:
+    - restart-nginx
+    - scale-up-workers
+    - clear-disk-space
   # RHACM multicluster: route cluster access through ACM hub proxy.
   # Creates an AAP Custom Credential Type + credential instead of a per-cluster SA.
   # Prerequisites (user-managed): RHACM 2.9+, ManagedServiceAccount addon,

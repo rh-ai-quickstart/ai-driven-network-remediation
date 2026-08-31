@@ -6,19 +6,49 @@
 
   vars:
     namespace: "{{ namespace | default(edge_namespace | default('dark-noc-edge')) }}"
-    deployment: "{{ deployment | default('nginx') }}"
+    deployment: "{{ deployment | default(deployment_name | default('nginx')) }}"
     edge_cluster: "{{ edge_cluster | default('edge-01') }}"
     edge_api_url_from_env: "{{ lookup('env', 'K8S_AUTH_HOST') | default('', true) }}"
     edge_token_from_env: "{{ lookup('env', 'K8S_AUTH_API_KEY') | default('', true) }}"
     edge_verify_ssl_from_env: "{{ lookup('env', 'K8S_AUTH_VERIFY_SSL') | default('false', true) }}"
 
   tasks:
+    - name: Resolve managed cluster name for ACM proxy routing
+      ansible.builtin.set_fact:
+        managed_cluster: >-
+          {{ edge_site_id
+             | default(edge_cluster)
+             | regex_replace('^edge-01$', 'edge-site-01')
+             | regex_replace('^edge-02$', 'edge-site-02') }}
+
     - name: Resolve effective edge API auth values
       ansible.builtin.set_fact:
-        edge_api_url_effective: "{{ edge_api_url | default(edge_api_url_from_env, true) }}"
-        edge_token_effective: "{{ edge_token | default(edge_token_from_env, true) }}"
+        edge_api_url_effective: >-
+          {{
+            (hub_url | default('', true) | string | trim)
+            if (hub_url | default('', true) | string | trim | length) > 0
+            else (edge_api_url | default(edge_api_url_from_env, true))
+          }}
+        edge_token_effective: >-
+          {{
+            (token_acm | default('', true) | string | trim)
+            if (token_acm | default('', true) | string | trim | length) > 0
+            else (edge_token | default(edge_token_from_env, true))
+          }}
         edge_verify_ssl_effective: "{{ edge_verify_ssl | default(edge_verify_ssl_from_env, true) }}"
         edge_verify_ssl_bool: "{{ (edge_verify_ssl | default(edge_verify_ssl_from_env, true) | string | lower) in ['1', 'true', 'yes', 'on'] }}"
+
+    - name: Build ACM cluster-proxy API base URL
+      ansible.builtin.set_fact:
+        edge_api_base: >-
+          {{
+            (edge_api_url_effective | string | trim | regex_replace('/$', ''))
+            ~ '/'
+            ~ managed_cluster
+            if (hub_url | default('', true) | string | trim | length) > 0
+            else (edge_api_url_effective | string | trim | regex_replace('/$', ''))
+          }}
+      when: edge_api_url_effective | length > 0
 
     - name: Ensure edge API auth is available
       ansible.builtin.assert:
@@ -26,12 +56,12 @@
           - edge_api_url_effective | length > 0
           - edge_token_effective | length > 20
         fail_msg: >-
-          Missing edge API credentials. Attach Kubernetes bearer-token credential
-          (edge-01-k8s) or pass edge_api_url and edge_token at launch.
+          Missing edge API credentials. Attach the rhacm-hub credential
+          (multicluster) or a Kubernetes bearer-token credential, or pass
+          edge_api_url and edge_token at launch.
 
-    - name: Normalize edge API URL
+    - name: Stamp restart timestamp
       ansible.builtin.set_fact:
-        edge_api_base: "{{ edge_api_url_effective.rstrip('/') }}"
         restart_ts: "{{ lookup('pipe', 'date -u +%FT%TZ') }}"
 
     - name: Read deployment before restart
