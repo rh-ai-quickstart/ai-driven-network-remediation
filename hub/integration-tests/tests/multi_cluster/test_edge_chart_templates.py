@@ -166,6 +166,8 @@ def test_fast_path_healer_enabled_renders_runner_and_watcher():
     assert "EDGE_SITE_ID" in rendered
     assert 'value: "edge-site-01"' in rendered
     assert "kind: NetworkPolicy" in rendered
+    assert 'image: "quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:0.1.5"' in rendered
+    # runner + watcher each declare the same image ref
     assert rendered.count(
         'image: "quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:0.1.5"'
     ) == 2
