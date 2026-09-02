@@ -45,6 +45,7 @@ endif
 CHATBOT_IMG        := $(REGISTRY)/noc-chatbot-service:$(VERSION)
 INGESTION_IMG      := $(REGISTRY)/noc-ingestion-pipeline:$(VERSION)
 AGENT_IMG          := $(REGISTRY)/noc-agent-service:$(VERSION)
+RAN_ML_SERVICE_IMG := $(REGISTRY)/noc-ran-ml-service:$(VERSION)
 RAN_ANOMALY_IMG    := $(REGISTRY)/noc-ran-anomaly-detector:$(VERSION)
 RAN_RCA_IMG        := $(REGISTRY)/noc-ran-rca-service:$(VERSION)
 RAN_CHATBOT_IMG    := $(REGISTRY)/noc-ran-chatbot-service:$(VERSION)
@@ -67,6 +68,10 @@ RAN_ANOMALY_CONTEXT         := hub
 
 RAN_RCA_CONTAINERFILE       := hub/ran-rca-service/Containerfile
 RAN_RCA_CONTEXT             := hub
+
+# ran-ml-service is self-contained (no shared dep); context is its own dir.
+RAN_ML_SERVICE_CONTAINERFILE := model-serving/ran-ml-service/Containerfile
+RAN_ML_SERVICE_CONTEXT       := model-serving/ran-ml-service
 
 # agent-service, chatbot-service, and ran-chatbot-service all depend on the
 # sibling shared package via a local uv path source, so their build context
@@ -652,6 +657,14 @@ build-chatbot-image:
 .PHONY: build-agent-image
 build-agent-image:
 	$(CONTAINER_TOOL) build -t $(AGENT_IMG) --platform=$(ARCH) -f $(AGENT_CONTAINERFILE) $(AGENT_CONTEXT)
+
+.PHONY: build-ran-ml-service-image
+build-ran-ml-service-image:
+	$(CONTAINER_TOOL) build -t $(RAN_ML_SERVICE_IMG) --platform=$(ARCH) -f $(RAN_ML_SERVICE_CONTAINERFILE) $(RAN_ML_SERVICE_CONTEXT)
+
+.PHONY: build-push-ran-ml-service
+build-push-ran-ml-service: build-ran-ml-service-image
+	$(CONTAINER_TOOL) push $(RAN_ML_SERVICE_IMG) $(PUSH_EXTRA_ARGS)
 
 .PHONY: build-ran-anomaly-image
 build-ran-anomaly-image:

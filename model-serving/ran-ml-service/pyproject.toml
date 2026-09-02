@@ -1,0 +1,57 @@
+[project]
+name = "ran-ml-service"
+version = "0.1.0"
+description = "Mantis time-series ML predictor for TelecomTS anomaly detection and root cause analysis"
+readme = "README.md"
+authors = [
+    { name = "rh-ai-quickstart" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    "torch>=2.4",
+    "numpy>=2.0",
+    "loguru>=0.7.0",
+    "pydantic>=2.0.0",
+    "huggingface-hub>=0.20",
+    "mantis-tsfm",
+]
+
+[tool.uv.sources]
+mantis-tsfm = { git = "https://github.com/vfeofanov/mantis.git", rev = "9018b98b" }
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[project.scripts]
+ran-ml-service = "ran_ml_service:main"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "httpx2>=0.1",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.0",
+]
+
+[tool.coverage.run]
+source = ["ran_ml_service"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_empty = true

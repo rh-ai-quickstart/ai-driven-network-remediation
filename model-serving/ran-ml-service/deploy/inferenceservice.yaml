@@ -1,0 +1,75 @@
+# KServe InferenceService for ran-ml-service (Mantis AD predictor).
+#
+# Prerequisites:
+#   1. Weights published to HuggingFace: rh-ai-quickstart/mantis-ad-telecomts
+#   2. Predictor image pushed: quay.io/rh-ai-quickstart/noc-ran-ml-service:<tag>
+#
+# Deploy:
+#   oc apply -f model-serving/ran-ml-service/deploy/inferenceservice.yaml
+#
+# Then wire the endpoint into the hub chart:
+#   ISVC_URL=$(oc get inferenceservice ran-ml-service -n model-serving \
+#     -o jsonpath='{.status.url}')
+#   helm upgrade hub ./hub/helm \
+#     --set-string ranAnomalyDetector.env.detectInferenceUrl=${ISVC_URL}/v1/detect
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ran-ml-service
+  namespace: model-serving
+  labels:
+    app.kubernetes.io/name: ran-ml-service
+    app.kubernetes.io/part-of: ai-driven-network-remediation
+  annotations:
+    # Disable Istio sidecar — ran-ml-service manages its own HTTP server.
+    sidecar.istio.io/inject: "false"
+spec:
+  predictor:
+    # predictor.storageUri is not in this cluster's CRD (it gets pruned).
+    # storageUris is rejected here because the default storage-initializer
+    # has supportsMultiModelDownload: false. Custom predictors use STORAGE_URI
+    # so KServe injects a single-URI init container that mounts /mnt/models.
+    # TODO: replace with rh-ai-quickstart/mantis-ad-telecomts once the org is set up
+    containers:
+      - name: kserve-container
+        # Default matches Makefile REGISTRY/VERSION. publish-and-deploy.sh
+        # substitutes the image ref from those env vars before `oc apply`.
+        image: quay.io/rh-ai-quickstart/noc-ran-ml-service:0.1.5
+        imagePullPolicy: Always
+        env:
+          - name: TASK
+            value: detect
+          - name: MANTIS_MODEL_PATH
+            value: /mnt/models/mantis_pretrained_ad.pt
+          - name: STORAGE_URI
+            value: hf://TomerG2/mantis-ad-telecomts
+          # OpenShift restricted-v2 runs as a random UID. Keep HF caches
+          # writable if STORAGE_URI needs to fetch task weights at runtime.
+          - name: HF_HUB_OFFLINE
+            value: "0"
+          - name: HF_HOME
+            value: /tmp/huggingface
+          - name: HF_HUB_CACHE
+            value: /tmp/huggingface/hub
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10

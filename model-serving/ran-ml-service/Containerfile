@@ -1,0 +1,44 @@
+# Build context: model-serving/ran-ml-service/ (self-contained, no shared dep).
+FROM python:3.13-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0 \
+    UV_NO_EDITABLE=1
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable --no-dev
+
+COPY . /app/
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable --no-dev
+
+# Pre-download the HuggingFace backbone so the image works air-gapped.
+RUN uv run python -c "from huggingface_hub import snapshot_download; snapshot_download('paris-noah/Mantis-8M')"
+
+FROM python:3.13-slim
+
+# Copy the full app tree, not just .venv. uv 0.12 may still install the
+# project as editable (ran_ml_service.pth -> /app/src) even with
+# --no-editable; without src the entrypoint crashes with ModuleNotFoundError.
+COPY --from=builder /app /app
+# OpenShift restricted-v2 runs as a random UID that cannot traverse /root (700).
+COPY --from=builder /root/.cache/huggingface /opt/huggingface
+
+RUN chmod -R a+rX /app /opt/huggingface
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    HF_HOME=/opt/huggingface \
+    HF_HUB_CACHE=/opt/huggingface/hub \
+    HF_HUB_OFFLINE=1
+
+EXPOSE 8080
+CMD ["ran-ml-service"]
