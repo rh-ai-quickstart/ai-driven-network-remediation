@@ -155,7 +155,9 @@ SERVICENOW_MOCK_IMG    := $(REGISTRY)/noc-servicenow-mock:$(VERSION)
 EDGE_FAST_PATH_HEALER_IMG := $(REGISTRY)/noc-edge-fast-path-healer:$(VERSION)
 
 SHARED_IMAGES := \
-	$(INGESTION_IMG) \
+	$(INGESTION_IMG)
+
+MCP_IMAGES := \
 	$(MCP_OPENSHIFT_IMG) \
 	$(MCP_LOKISTACK_IMG) \
 	$(MCP_KAFKA_IMG) \
@@ -179,7 +181,7 @@ EDGE_IMAGES := \
 
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
-	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(NETWORK_IMAGES) $(EDGE_IMAGES)) \
+	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(MCP_IMAGES) $(NETWORK_IMAGES) $(EDGE_IMAGES)) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES))
 
 EXTRA_BUILD_PUSH_IMAGES := \
@@ -207,19 +209,19 @@ helm_adnr_llm_args = \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.id='$(ADNR_LLM_ID)',) \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.url='$(ADNR_LLM_URL)',) \
 	$(if $(ADNR_LLM_ENABLED),--set-string llama-stack.models.adnr-llm.apiToken='$(ADNR_LLM_TOKEN)',) \
-	$(if $(ADNR_LLM_ENABLED),--set-string agentService.granite.modelName='adnr-llm/$(ADNR_LLM_ID)',)
+	$(if $(ADNR_LLM_ENABLED),--set-string network.agentService.granite.modelName='adnr-llm/$(ADNR_LLM_ID)',)
 
 helm_mcp_image_args = \
-	--set mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
-	--set mcp-servers.mcp-servers.noc-openshift.image.tag=$(VERSION) \
-	--set mcp-servers.mcp-servers.noc-lokistack.image.repository=$(REGISTRY)/noc-mcp-lokistack \
-	--set mcp-servers.mcp-servers.noc-lokistack.image.tag=$(VERSION) \
-	--set mcp-servers.mcp-servers.noc-kafka.image.repository=$(REGISTRY)/noc-mcp-kafka \
-	--set mcp-servers.mcp-servers.noc-kafka.image.tag=$(VERSION) \
-	--set mcp-servers.mcp-servers.noc-aap.image.repository=$(REGISTRY)/noc-mcp-aap \
-	--set mcp-servers.mcp-servers.noc-aap.image.tag=$(VERSION) \
-	--set mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
-	--set mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION)
+	--set network.mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
+	--set network.mcp-servers.mcp-servers.noc-openshift.image.tag=$(VERSION) \
+	--set network.mcp-servers.mcp-servers.noc-lokistack.image.repository=$(REGISTRY)/noc-mcp-lokistack \
+	--set network.mcp-servers.mcp-servers.noc-lokistack.image.tag=$(VERSION) \
+	--set network.mcp-servers.mcp-servers.noc-kafka.image.repository=$(REGISTRY)/noc-mcp-kafka \
+	--set network.mcp-servers.mcp-servers.noc-kafka.image.tag=$(VERSION) \
+	--set network.mcp-servers.mcp-servers.noc-aap.image.repository=$(REGISTRY)/noc-mcp-aap \
+	--set network.mcp-servers.mcp-servers.noc-aap.image.tag=$(VERSION) \
+	--set network.mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
+	--set network.mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION)
 
 ifeq ($(ENABLE_MULTICLUSTER),true)
 ifndef CLUSTER_PROXY_URL
@@ -233,42 +235,42 @@ endif
 endif
 
 helm_mock_args = \
-	--set aapMock.enabled=$(ENABLE_AAP_MOCK) \
-	--set aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
-	--set aapMock.image.tag=$(VERSION) \
-	--set servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
-	--set servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
-	--set servicenowMock.image.tag=$(VERSION) \
-	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
-	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
-	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
-	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string mcpSecrets.aap.token=mock,) \
-	$(if $(AAP_SECRET_NAME),--set mcpSecrets.aap.create=false,) \
-	$(if $(AAP_SECRET_NAME),--set-string mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
-	$(if $(AAP_SECRET_NAME),--set-string mcp-servers.mcp-servers.noc-aap.envSecrets.AAP_TOKEN.name='$(AAP_SECRET_NAME)',) \
-	$(if $(_aap_set_token),--set-string mcpSecrets.aap.token='$(AAP_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string mcpSecrets.servicenow.apiKey=demo-api-key-2026,) \
-	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set aapCredential.enabled=true,) \
-	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set-string aapCredential.saNamespace='$(EDGE_NAMESPACE)',)
+	--set network.aapMock.enabled=$(ENABLE_AAP_MOCK) \
+	--set network.aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
+	--set network.aapMock.image.tag=$(VERSION) \
+	--set network.servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
+	--set network.servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
+	--set network.servicenowMock.image.tag=$(VERSION) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string network.mcpSecrets.aap.token=mock,) \
+	$(if $(AAP_SECRET_NAME),--set network.mcpSecrets.aap.create=false,) \
+	$(if $(AAP_SECRET_NAME),--set-string network.mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
+	$(if $(AAP_SECRET_NAME),--set-string network.mcp-servers.mcp-servers.noc-aap.envSecrets.AAP_TOKEN.name='$(AAP_SECRET_NAME)',) \
+	$(if $(_aap_set_token),--set-string network.mcpSecrets.aap.token='$(AAP_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.mcpSecrets.servicenow.apiKey=demo-api-key-2026,) \
+	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set network.aapCredential.enabled=true,) \
+	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set-string network.aapCredential.saNamespace='$(EDGE_NAMESPACE)',)
 
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
-	$(if $(GITEA_ADMIN_USER),--set-string gitea.gitea.adminUser='$(GITEA_ADMIN_USER)' --set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_OWNER='$(GITEA_ADMIN_USER)',) \
-	$(if $(GITEA_ADMIN_PASSWORD),--set-string gitea.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)',) \
+	$(if $(GITEA_ADMIN_USER),--set-string gitea.gitea.adminUser='$(GITEA_ADMIN_USER)' --set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_OWNER='$(GITEA_ADMIN_USER)' --set-string network.gitea.adminUser='$(GITEA_ADMIN_USER)',) \
+	$(if $(GITEA_ADMIN_PASSWORD),--set-string gitea.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)' --set-string network.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)',) \
 	$(if $(GITEA_ADMIN_EMAIL),--set-string gitea.gitea.adminEmail='$(GITEA_ADMIN_EMAIL)',) \
-	$(if $(GITEA_URL),--set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_URL='$(GITEA_URL)',) \
-	$(if $(GITEA_REPO),--set-string mcp-servers.mcp-servers.noc-aap.env.GITEA_REPO='$(GITEA_REPO)',) \
-	$(if $(filter true,$(GITEA_EXTERNAL)),$(if $(GITEA_TOKEN),--set mcpSecrets.gitea.create=true,),) \
-	$(if $(GITEA_TOKEN),--set-string mcpSecrets.gitea.token='$(GITEA_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,)
+	$(if $(GITEA_URL),--set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL='$(GITEA_URL)',) \
+	$(if $(GITEA_REPO),--set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_REPO='$(GITEA_REPO)',) \
+	$(if $(filter true,$(GITEA_EXTERNAL)),$(if $(GITEA_TOKEN),--set network.mcpSecrets.gitea.create=true,),) \
+	$(if $(GITEA_TOKEN),--set-string network.mcpSecrets.gitea.token='$(GITEA_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,)
 
 helm_lokistack_args = \
-	--set lokistack.enabled=$(ENABLE_LOKISTACK) \
-	--set mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
-	--set-string lokistack.name='$(LOKISTACK_NAME)' \
-	--set-string lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
+	--set network.lokistack.enabled=$(ENABLE_LOKISTACK) \
+	--set network.mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
+	--set-string network.lokistack.name='$(LOKISTACK_NAME)' \
+	--set-string network.lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
 	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
 
 ifeq ($(ENABLE_LIGHTSPEED),true)
@@ -285,21 +287,21 @@ endif
 endif
 
 helm_lightspeed_args = \
-	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.url='$(LIGHTSPEED_URL)',) \
-	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.token='$(LIGHTSPEED_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',)
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.url='$(LIGHTSPEED_URL)',) \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.token='$(LIGHTSPEED_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',)
 
 helm_slack_args = \
-	--set agentService.slack.enabled=$(ENABLE_SLACK) \
-	$(if $(SLACK_BOT_TOKEN),--set-string agentService.slack.botToken='$(SLACK_BOT_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SLACK)),--set-string agentService.slack.channel='$(SLACK_CHANNEL)',) \
-	$(if $(SERVICENOW_INSTANCE_URL),--set-string agentService.servicenowInstanceUrl='$(SERVICENOW_INSTANCE_URL)',) \
-	--set-string agentService.servicenowCreateResolved='$(SERVICENOW_CREATE_RESOLVED)'
+	--set network.agentService.slack.enabled=$(ENABLE_SLACK) \
+	$(if $(SLACK_BOT_TOKEN),--set-string network.agentService.slack.botToken='$(SLACK_BOT_TOKEN)',) \
+	$(if $(filter true,$(ENABLE_SLACK)),--set-string network.agentService.slack.channel='$(SLACK_CHANNEL)',) \
+	$(if $(SERVICENOW_INSTANCE_URL),--set-string network.agentService.servicenowInstanceUrl='$(SERVICENOW_INSTANCE_URL)',) \
+	--set-string network.agentService.servicenowCreateResolved='$(SERVICENOW_CREATE_RESOLVED)'
 
 helm_multicluster_args = \
-	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set aapCredential.multicluster.enabled=true,) \
-	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string aapCredential.multicluster.clusterProxyUrl='$(CLUSTER_PROXY_URL)',) \
-	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string aapCredential.multicluster.hubToken='$(RHACM_HUB_TOKEN)',)
+	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set network.aapCredential.multicluster.enabled=true,) \
+	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string network.aapCredential.multicluster.clusterProxyUrl='$(CLUSTER_PROXY_URL)',) \
+	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string network.aapCredential.multicluster.hubToken='$(RHACM_HUB_TOKEN)',)
 
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
@@ -309,29 +311,38 @@ helm_infra_args = \
 	--set minio.route.enabled=$(ROUTES_ENABLED) \
 	--set gitea.enabled=$(ENABLE_GITEA)
 
-# topology.* comes solely from -f $(SPOKES_GENERATED) (see helm-install).
+# network.topology.* comes solely from -f $(SPOKES_GENERATED) (see helm-install).
 # Do not also --set those fields here; duplicated sources drift.
+
+helm_network_remediation_mcp_args = \
+	--set-string llama-stack.mcp-servers.noc-openshift.uri=http://mcp-noc-openshift:8000/mcp \
+	--set-string llama-stack.mcp-servers.noc-aap.uri=http://mcp-noc-aap:8000/mcp \
+	--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp \
+	--set-string llama-stack.mcp-servers.noc-servicenow.uri=http://mcp-noc-servicenow:8000/mcp
 
 helm_all_args = \
 	--set image.registry=$(REGISTRY) \
-	--set image.chatbotService=noc-chatbot-service \
 	--set image.ingestionPipeline=noc-ingestion-pipeline \
-	--set image.agentService=noc-agent-service \
-	--set image.ranAnomalyDetector=noc-ran-anomaly-detector \
-	--set image.ranRcaService=noc-ran-rca-service \
-	--set image.ranChatbotService=noc-ran-chatbot-service \
-	--set image.ranFrontend=noc-ran-frontend \
-	--set image.frontend=noc-frontend \
 	--set image.tag=$(VERSION) \
-	--set global.telcoOran.enabled=$(ENABLE_TELCO_ORAN) \
-	--set global.networkRemediation.enabled=$(ENABLE_NETWORK_REMEDIATION) \
+	--set telco.enabled=$(ENABLE_TELCO_ORAN) \
+	--set telco.image.registry=$(REGISTRY) \
+	--set telco.image.ranAnomalyDetector=noc-ran-anomaly-detector \
+	--set telco.image.ranRcaService=noc-ran-rca-service \
+	--set telco.image.ranChatbotService=noc-ran-chatbot-service \
+	--set telco.image.ranFrontend=noc-ran-frontend \
+	--set telco.image.tag=$(VERSION) \
+	--set network.enabled=$(ENABLE_NETWORK_REMEDIATION) \
+	--set network.image.registry=$(REGISTRY) \
+	--set network.image.chatbotService=noc-chatbot-service \
+	--set network.image.agentService=noc-agent-service \
+	--set network.image.frontend=noc-frontend \
+	--set network.image.tag=$(VERSION) \
 	--set global.routes.enabled=$(ROUTES_ENABLED) \
 	--set global.frontendAuth.enabled=$(FRONTEND_AUTH_ENABLED) \
-	--set edgeRbac.enabled=$(EDGE_RBAC_ENABLED) \
-	--set-string edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
-	$(if $(filter false,$(ENABLE_NETWORK_REMEDIATION)),--set mcp-servers.mcp-servers.noc-openshift.enabled=false,) \
-	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),--set-string llama-stack.mcp-servers.noc-openshift.uri=http://mcp-noc-openshift:8000/mcp,) \
-	--set-string mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
+	--set network.edgeRbac.enabled=$(EDGE_RBAC_ENABLED) \
+	--set-string network.edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
+	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(helm_network_remediation_mcp_args),) \
+	--set-string network.mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
 	$(helm_infra_args) \
 	$(helm_lokistack_args) \
@@ -595,6 +606,7 @@ namespace:
 
 .PHONY: helm-depend
 helm-depend:
+	cd hub/helm/charts/network && helm dependency update
 	cd hub/helm && helm dependency update
 
 .PHONY: check-adnr-llm-config
@@ -642,8 +654,8 @@ edge-rbac-teardown:
 # ══════════════════════════════════════════════════════════════════════
 
 .PHONY: build-all-images
-build-all-images: build-ingestion-image build-mcp-images \
-	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
+build-all-images: build-ingestion-image \
+	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image)
 
 .PHONY: build-ingestion-image

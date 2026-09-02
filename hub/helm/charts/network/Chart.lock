@@ -1,0 +1,9 @@
+dependencies:
+- name: mcp-servers
+  repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+  version: 0.5.17
+- name: lokistack
+  repository: file://../../lib-charts/lokistack
+  version: 0.1.0
+digest: sha256:63feabac546595090966ccbf5b233b92cdf8ec80dedd7f7a537dc79090f01297
+generated: "2026-09-07T17:12:03.613109+02:00"

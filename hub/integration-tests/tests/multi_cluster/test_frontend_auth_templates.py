@@ -1,20 +1,20 @@
 """Helm template tests for the global.frontendAuth.enabled oauth-proxy gate.
 
 Covers what `--set global.frontendAuth.enabled=true` emits for hub-frontend
-and hub-ran-frontend (both deployed by default -- see global.networkRemediation
-/ global.telcoOran): the oauth-proxy sidecar, the ServiceAccount
-redirect-reference annotation, the Service targetPort switch, the
-per-frontend cookie Secrets, the NGINX_LISTEN_ADDRESS env override that binds
-nginx to loopback-only (so the pod IP can't be hit directly on 8080 to skip
-OAuth), and the exec-based liveness/readiness probes that replace the httpGet
-ones once nginx stops listening on the pod's routable interface -- and
+and hub-ran-frontend (both deployed by default -- see network.enabled /
+telco.enabled subchart conditions): the oauth-proxy sidecar, the
+ServiceAccount redirect-reference annotation, the Service targetPort switch,
+the per-frontend cookie Secrets, the NGINX_LISTEN_ADDRESS env override that
+binds nginx to loopback-only (so the pod IP can't be hit directly on 8080 to
+skip OAuth), and the exec-based liveness/readiness probes that replace the
+httpGet ones once nginx stops listening on the pod's routable interface -- and
 confirms the default (disabled) render emits none of that, with Services
 still pointed at nginx's own port and the original httpGet probes intact.
 
 Also covers that each frontend's oauth cookie Secret is gated on that same
-frontend's own top-level toggle (global.networkRemediation / global.telcoOran)
-in addition to global.frontendAuth.enabled, so disabling a whole use case
-doesn't leave an orphaned Secret behind for a frontend that isn't deployed.
+frontend's own subchart toggle (network.enabled / telco.enabled) in addition
+to global.frontendAuth.enabled, so disabling a whole use case doesn't leave
+an orphaned Secret behind for a frontend that isn't deployed.
 
 These are static `helm template` assertions (no live cluster/OpenShift OAuth
 server involved), so they catch a broken `if`/helper include immediately
@@ -75,7 +75,7 @@ def _assert_template_renders_nothing(show_only: str, extra_sets: list[str]) -> N
     # `helm template --show-only` errors with "could not find template" when the
     # requested template's guarded content produces no output at all -- exactly
     # what we want to assert here (e.g. the oauth secret template when the gate
-    # is off, or ran-frontend.yaml when global.telcoOran is disabled).
+    # is off, or ran-frontend.yaml when the telco subchart is disabled).
     result = _run_helm_template([show_only], extra_sets)
     assert result.returncode != 0, f"expected {show_only} to render nothing, but it produced:\n{result.stdout}"
     assert "could not find template" in result.stderr
@@ -83,8 +83,8 @@ def _assert_template_renders_nothing(show_only: str, extra_sets: list[str]) -> N
 
 def test_frontend_auth_disabled_by_default_emits_no_oauth_resources():
     # Default values: global.frontendAuth.enabled=false; both frontends are
-    # deployed by default (global.networkRemediation / global.telcoOran).
-    rendered = _helm_template(["templates/frontend.yaml", "templates/ran-frontend.yaml"])
+    # deployed by default (network.enabled / telco.enabled).
+    rendered = _helm_template(["charts/network/templates/frontend.yaml", "charts/telco/templates/ran-frontend.yaml"])
 
     assert "kind: ServiceAccount" not in rendered
     assert "oauth-redirectreference" not in rendered
@@ -99,14 +99,20 @@ def test_frontend_auth_disabled_by_default_emits_no_oauth_resources():
     assert "wget" not in rendered
     assert rendered.count("httpGet:") == 4
 
-    # The oauth cookie-secret template must render nothing when the gate is off.
-    _assert_template_renders_nothing("templates/frontend-oauth-secret.yaml", [])
+    # The oauth cookie-secret templates must render nothing when the gate is off.
+    _assert_template_renders_nothing("charts/network/templates/frontend-oauth-secret.yaml", [])
+    _assert_template_renders_nothing("charts/telco/templates/ran-frontend-oauth-secret.yaml", [])
 
 
 def test_frontend_auth_enabled_adds_oauth_proxy_sidecar_and_service_account():
     extra_sets = ["global.frontendAuth.enabled=true"]
     rendered = _helm_template(
-        ["templates/frontend.yaml", "templates/ran-frontend.yaml", "templates/frontend-oauth-secret.yaml"],
+        [
+            "charts/network/templates/frontend.yaml",
+            "charts/telco/templates/ran-frontend.yaml",
+            "charts/network/templates/frontend-oauth-secret.yaml",
+            "charts/telco/templates/ran-frontend-oauth-secret.yaml",
+        ],
         *extra_sets,
     )
 
@@ -150,15 +156,12 @@ def test_frontend_auth_enabled_adds_oauth_proxy_sidecar_and_service_account():
 
 
 def test_frontend_auth_enabled_with_telco_oran_disabled_only_covers_frontend():
-    # Disabling the whole Telco/O-RAN use case must take ran-frontend (and its
-    # would-be oauth secret) out of the picture entirely, even though
-    # ranFrontend.enabled itself still defaults to true -- the real gate is
-    # `and global.telcoOran.enabled ranFrontend.enabled` in ran-frontend.yaml,
-    # and frontend-oauth-secret.yaml's ran-frontend block must mirror it
-    # exactly or it would create an orphaned Secret for an undeployed frontend.
-    extra_sets = ["global.frontendAuth.enabled=true", "global.telcoOran.enabled=false"]
+    # Disabling the whole Telco/O-RAN use case (telco.enabled=false) must take
+    # ran-frontend out of the picture entirely, even though ranFrontend.enabled
+    # still defaults to true inside the telco subchart.
+    extra_sets = ["global.frontendAuth.enabled=true", "telco.enabled=false"]
     rendered = _helm_template(
-        ["templates/frontend.yaml", "templates/frontend-oauth-secret.yaml"],
+        ["charts/network/templates/frontend.yaml", "charts/network/templates/frontend-oauth-secret.yaml"],
         *extra_sets,
     )
 
@@ -176,16 +179,16 @@ def test_frontend_auth_enabled_with_telco_oran_disabled_only_covers_frontend():
     assert rendered.count("exec:") == 2
     assert rendered.count("wget") == 2
 
-    _assert_template_renders_nothing("templates/ran-frontend.yaml", extra_sets)
+    _assert_template_renders_nothing("charts/telco/templates/ran-frontend.yaml", extra_sets)
 
 
 def test_frontend_auth_enabled_with_network_remediation_disabled_only_covers_ran_frontend():
-    # Mirror of the telcoOran test above, for the other frontend: disabling
-    # global.networkRemediation must take hub-frontend (and its oauth secret)
-    # out of the picture, without touching hub-ran-frontend.
-    extra_sets = ["global.frontendAuth.enabled=true", "global.networkRemediation.enabled=false"]
+    # Mirror of the telco test above, for the other frontend: disabling
+    # network.enabled must take hub-frontend (and its oauth secret) out of
+    # the picture, without touching hub-ran-frontend.
+    extra_sets = ["global.frontendAuth.enabled=true", "network.enabled=false"]
     rendered = _helm_template(
-        ["templates/ran-frontend.yaml", "templates/frontend-oauth-secret.yaml"],
+        ["charts/telco/templates/ran-frontend.yaml", "charts/telco/templates/ran-frontend-oauth-secret.yaml"],
         *extra_sets,
     )
 
@@ -196,4 +199,4 @@ def test_frontend_auth_enabled_with_network_remediation_disabled_only_covers_ran
     assert "name: hub-ran-frontend-oauth" in rendered
     assert "hub-frontend-oauth" not in rendered
 
-    _assert_template_renders_nothing("templates/frontend.yaml", extra_sets)
+    _assert_template_renders_nothing("charts/network/templates/frontend.yaml", extra_sets)

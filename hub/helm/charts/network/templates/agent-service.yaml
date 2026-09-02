@@ -1,0 +1,137 @@
+{{- if .Values.agentService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "network.fullname" . }}-agent-service
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-service
+spec:
+  replicas: {{ .Values.agentService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "network.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: agent-service
+  template:
+    metadata:
+      labels:
+        {{- include "network.labels" . | nindent 8 }}
+        app.kubernetes.io/component: agent-service
+    spec:
+      {{- if .Values.agentService.waitForDeps }}
+      initContainers:
+        - name: wait-for-llamastack
+          image: {{ .Values.waitImage | quote }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              retries=0
+              max_retries=36
+              until curl -sf http://{{ .Values.llamastack.host }}:{{ .Values.llamastack.port }}/v1/models; do
+                retries=$((retries + 1))
+                if [ $retries -ge $max_retries ]; then
+                  echo "LlamaStack not ready after $max_retries attempts — giving up"
+                  exit 1
+                fi
+                echo "Waiting for LlamaStack... ($retries/$max_retries)"
+                sleep 5
+              done
+      {{- end }}
+      containers:
+        - name: agent-service
+          image: "{{ .Values.image.registry }}/{{ .Values.image.agentService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LLAMASTACK_HOST
+              value: {{ .Values.llamastack.host | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ .Values.llamastack.port | quote }}
+            - name: GRANITE_MODEL_NAME
+              value: {{ .Values.agentService.granite.modelName | quote }}
+            - name: KAFKA_BOOTSTRAP
+              value: {{ .Values.agentService.env.kafkaBootstrap | quote }}
+            {{- if .Values.agentService.env.kafkaConsumeTopics }}
+            - name: KAFKA_CONSUME_TOPICS
+              value: {{ .Values.agentService.env.kafkaConsumeTopics | quote }}
+            {{- end }}
+            - name: KAFKA_GROUP_ID
+              value: {{ .Values.agentService.env.kafkaGroupId | quote }}
+            - name: KAFKA_AUDIT_TOPIC
+              value: {{ .Values.agentService.env.kafkaAuditTopic | quote }}
+            - name: KAFKA_CONSUMER_ENABLED
+              value: {{ .Values.agentService.env.kafkaConsumerEnabled | quote }}
+            - name: LIGHTSPEED_URL
+              value: {{ .Values.agentService.lightspeed.url | quote }}
+            {{- if .Values.agentService.lightspeed.tokenSecretName }}
+            - name: LIGHTSPEED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentService.lightspeed.tokenSecretName }}
+                  key: {{ .Values.agentService.lightspeed.tokenSecretKey | default "api_key" }}
+            {{- else if .Values.agentService.lightspeed.token }}
+            - name: LIGHTSPEED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: noc-lightspeed-secret
+                  key: LIGHTSPEED_TOKEN
+            {{- end }}
+            {{- if .Values.agentService.lightspeed.url }}
+            - name: LIGHTSPEED_VERIFY_SSL
+              value: {{ .Values.agentService.lightspeed.verifySSL | quote }}
+            {{- end }}
+            - name: AAP_LIGHTSPEED_TEMPLATE
+              value: {{ .Values.agentService.lightspeed.baseTemplateName | quote }}
+            - name: SLACK_ENABLED
+              value: {{ .Values.agentService.slack.enabled | quote }}
+            - name: SLACK_CHANNEL
+              value: {{ .Values.agentService.slack.channel | quote }}
+            {{- if or .Values.agentService.slack.botToken .Values.agentService.slack.existingSecret }}
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentService.slack.existingSecret | default "noc-slack-secret" }}
+                  key: SLACK_BOT_TOKEN
+            {{- end }}
+            {{- if .Values.agentService.servicenowInstanceUrl }}
+            - name: SERVICENOW_INSTANCE_URL
+              value: {{ .Values.agentService.servicenowInstanceUrl | quote }}
+            {{- end }}
+            - name: SERVICENOW_CREATE_RESOLVED
+              value: {{ .Values.agentService.servicenowCreateResolved | quote }}
+            {{- if .Values.agentService.prompts.analyzeSystem }}
+            - name: ANALYZE_SYSTEM_PROMPT
+              value: {{ .Values.agentService.prompts.analyzeSystem | quote }}
+            {{- end }}
+            {{- if .Values.agentService.prompts.investigateSystem }}
+            - name: INVESTIGATE_SYSTEM_PROMPT
+              value: {{ .Values.agentService.prompts.investigateSystem | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8001
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.agentService.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.agentService.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.agentService.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "network.fullname" . }}-agent-service
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-service
+spec:
+  type: {{ .Values.agentService.service.type }}
+  ports:
+    - port: {{ .Values.agentService.service.port }}
+      targetPort: {{ .Values.agentService.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "network.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-service
+{{- end }}

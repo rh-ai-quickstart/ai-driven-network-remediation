@@ -13,10 +13,15 @@ dependencies:
   - name: llama-stack
     version: 0.8.7
     repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  - name: mcp-servers
-    version: 0.5.17
-    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-    condition: mcp-servers.enabled
+  # Use-case subcharts
+  - name: telco
+    version: 0.0.1
+    repository: "file://charts/telco"
+    condition: telco.enabled
+  - name: network
+    version: 0.0.1
+    repository: "file://charts/network"
+    condition: network.enabled
   # Local infrastructure subcharts
   - name: kafka
     version: 0.1.0
@@ -30,7 +35,3 @@ dependencies:
     version: 0.1.0
     repository: "file://charts/gitea"
     condition: gitea.enabled
-  - name: lokistack
-    version: 0.1.0
-    repository: "file://charts/lokistack"
-    condition: lokistack.enabled

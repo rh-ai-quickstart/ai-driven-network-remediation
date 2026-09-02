@@ -1,0 +1,480 @@
+# https://kubernetes.io/docs/concepts/containers/images/
+image:
+  registry: quay.io/rh-ai-quickstart
+  chatbotService: hub-chatbot-service
+  agentService: hub-agent-service
+  frontend: noc-frontend
+  pullPolicy: Always
+  tag: "0.0.1"
+
+waitImage: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+
+topology:
+  clusterCount: 1
+  deploymentMode: single-cluster
+  spokeCount: 0
+  edgeNamespace: dark-noc-edge
+  spokeNamePrefix: edge-site
+  spokes: []
+
+llamastack:
+  host: llamastack-service
+  port: "8321"
+
+gitea:
+  enabled: true
+  adminUser: "noc"
+  adminPassword: ""
+
+# ══════════════════════════════════════════════════════════════════════
+# Mock services
+# ══════════════════════════════════════════════════════════════════════
+
+aapMock:
+  enabled: true
+  image:
+    repository: quay.io/rh-ai-quickstart/noc-aap-mock
+    tag: "0.1.0"
+
+servicenowMock:
+  enabled: true
+  image:
+    repository: quay.io/rh-ai-quickstart/noc-servicenow-mock
+    tag: "0.1.0"
+
+# ══════════════════════════════════════════════════════════════════════
+# Edge RBAC hook (pre-install Job) — single-cluster only
+# ══════════════════════════════════════════════════════════════════════
+
+edgeRbac:
+  enabled: false
+  edgeNamespace: "hub"
+  edgeApiServer: "https://kubernetes.default.svc"
+  image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+
+# ══════════════════════════════════════════════════════════════════════
+# Multi-cluster MCP kubeconfig Job (hub-spoke only)
+# ══════════════════════════════════════════════════════════════════════
+
+multiClusterCreds:
+  image: "image-registry.openshift-image-registry.svc:5000/openshift/cli:latest"
+  serviceAccountName: mcp-noc-openshift
+  insecureSkipTlsVerify: true
+
+# ══════════════════════════════════════════════════════════════════════
+# AAP Credential hook (post-install Job)
+# ══════════════════════════════════════════════════════════════════════
+
+aapCredential:
+  enabled: false
+  apiServer: "https://kubernetes.default.svc"
+  saNamespace: ""
+  credentialName: "hub-remediation"
+  organizationId: 1
+  remediationTemplateNames:
+    - restart-nginx
+    - scale-up-workers
+    - clear-disk-space
+  multicluster:
+    enabled: false
+    clusterProxyUrl: ""
+    hubToken: ""
+    credentialTypeName: "RHACM Cluster Proxy"
+    credentialName: "rhacm-hub"
+    hubServiceAccountNamespace: "aap"
+    hubServiceAccountName: "aap-integration-serviceaccount"
+
+# ══════════════════════════════════════════════════════════════════════
+# Application services
+# ══════════════════════════════════════════════════════════════════════
+
+chatbotService:
+  enabled: true
+  prompts:
+    chatSystem: ""
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  env:
+    mcpOpenshiftUrl: "http://mcp-noc-openshift:8000"
+    mcpLokistackUrl: "http://mcp-noc-lokistack:8000"
+    mcpKafkaUrl: "http://mcp-noc-kafka:8000"
+    mcpAapUrl: "http://mcp-noc-aap:8000"
+    mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
+    servicenowUrl: "http://servicenow-mock:8080"
+    kafkaBootstrap: "kafka:9092"
+    modelApiUrl: "http://llamastack-service:8321/v1/completions"
+    modelName: "granite-4-h-tiny"
+    demoTopic: "system-alerts"
+    auditTopic: "incident-audit"
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8080
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+agentService:
+  enabled: true
+  waitForDeps: true
+  prompts:
+    analyzeSystem: ""
+    investigateSystem: ""
+  replicaCount: 1
+  granite:
+    modelName: "granite-4.0-8b"
+  lightspeed:
+    url: ""
+    token: ""
+    tokenSecretName: ""
+    tokenSecretKey: "api_key"
+    verifySSL: "false"
+    namespace: "aap"
+    baseTemplateName: "lightspeed-runner"
+  slack:
+    enabled: "false"
+    botToken: ""
+    existingSecret: ""
+    channel: "#ai-driven-network"
+  servicenowInstanceUrl: ""
+  servicenowCreateResolved: "false"
+  env:
+    kafkaBootstrap: "kafka:9092"
+    kafkaGroupId: "dark-noc-agent"
+    kafkaAuditTopic: "incident-audit"
+    kafkaConsumerEnabled: "true"
+  service:
+    type: ClusterIP
+    port: 8001
+    targetPort: 8001
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8001
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8001
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+# ══════════════════════════════════════════════════════════════════════
+# MCP Secrets
+# ══════════════════════════════════════════════════════════════════════
+
+mcpSecrets:
+  openshift:
+    create: false
+    kubeconfig: ""
+  aap:
+    create: true
+    token: ""
+  gitea:
+    create: false
+    token: ""
+  servicenow:
+    create: true
+    username: ""
+    password: ""
+
+# ══════════════════════════════════════════════════════════════════════
+# MCP Servers (subchart: mcp-servers from ai-architecture-charts)
+# ══════════════════════════════════════════════════════════════════════
+
+mcp-servers:
+  enabled: true
+  mcp-servers:
+    noc-openshift:
+      enabled: true
+      deploymentMode: deployment
+      image:
+        repository: quay.io/rh-ai-quickstart/noc-mcp-openshift
+        tag: "0.1.0"
+      port: 8000
+      targetPort: 8000
+      transport: streamable-http
+      imagePullPolicy: Always
+      env:
+        MCP_TRANSPORT: "streamable-http"
+        MCP_PORT: "8000"
+        DEFAULT_NAMESPACE: "dark-noc-edge"
+        EDGE_KUBECONFIG: "/kubeconfig/kubeconfig"
+      volumes:
+        - name: edge-kubeconfig
+          secret:
+            secretName: noc-openshift-edge-kubeconfig
+      volumeMounts:
+        - name: edge-kubeconfig
+          mountPath: /kubeconfig
+          readOnly: true
+
+    noc-lokistack:
+      enabled: true
+      deploymentMode: deployment
+      image:
+        repository: quay.io/rh-ai-quickstart/noc-mcp-lokistack
+        tag: "0.1.0"
+      port: 8000
+      targetPort: 8000
+      transport: streamable-http
+      imagePullPolicy: Always
+      env:
+        MCP_TRANSPORT: "streamable-http"
+        MCP_PORT: "8000"
+        LOKI_TLS_VERIFY: "false"
+        LOKI_DEFAULT_TENANT: "application"
+        LOKI_MAX_LINES: "100"
+        LOKI_MAX_LINES_CEILING: "500"
+        LOKI_MAX_DURATION: "24h"
+        LOKI_QUERY_TIMEOUT: "30"
+        LOKI_RETRY_ATTEMPTS: "3"
+        LOKI_CA_CERT_PATH: ""
+      envSecrets:
+        LOKI_URL:
+          name: lokistack-config
+          key: LOKI_URL
+        LOKI_TOKEN:
+          name: mcp-lokistack-token
+          key: token
+
+    noc-kafka:
+      enabled: true
+      deploymentMode: deployment
+      image:
+        repository: quay.io/rh-ai-quickstart/noc-mcp-kafka
+        tag: "0.1.0"
+      port: 8000
+      targetPort: 8000
+      transport: streamable-http
+      imagePullPolicy: Always
+      env:
+        MCP_TRANSPORT: "streamable-http"
+        MCP_PORT: "8000"
+        KAFKA_CONSUME_TOPICS: "system-alerts,noc-alerts,remediation-jobs"
+        KAFKA_PRODUCE_TOPICS: "remediation-jobs,agent-events,incident-audit"
+        KAFKA_BOOTSTRAP: "kafka:9092"
+
+    noc-aap:
+      enabled: true
+      deploymentMode: deployment
+      image:
+        repository: quay.io/rh-ai-quickstart/noc-mcp-aap
+        tag: "0.1.0"
+      port: 8000
+      targetPort: 8000
+      transport: streamable-http
+      imagePullPolicy: Always
+      env:
+        MCP_TRANSPORT: "streamable-http"
+        MCP_PORT: "8000"
+        AAP_URL: "http://aap.aap.svc"
+        AAP_API_PREFIX: "/api/controller/v2"
+        AAP_VERIFY_SSL: "false"
+        AAP_CA_BUNDLE: ""
+        GITEA_URL: "http://gitea:3000"
+        GITEA_OWNER: "noc"
+        GITEA_REPO: "generated-playbooks"
+      envSecrets:
+        AAP_TOKEN:
+          name: noc-aap-secret
+          key: AAP_TOKEN
+      secretMounts:
+        mountPath: /secrets
+        secrets:
+          - noc-gitea-secret
+
+    noc-servicenow:
+      enabled: true
+      deploymentMode: deployment
+      image:
+        repository: quay.io/rh-ai-quickstart/noc-mcp-servicenow
+        tag: "0.1.0"
+      port: 8000
+      targetPort: 8000
+      transport: streamable-http
+      imagePullPolicy: Always
+      env:
+        MCP_TRANSPORT: "streamable-http"
+        MCP_PORT: "8000"
+        SERVICENOW_URL: "http://servicenow-mock.hub.svc:8080"
+      envSecrets:
+        SERVICENOW_USERNAME:
+          name: noc-servicenow-secret
+          key: SERVICENOW_USERNAME
+        SERVICENOW_PASSWORD:
+          name: noc-servicenow-secret
+          key: SERVICENOW_PASSWORD
+
+    # Disable default servers from the shared chart
+    weather:
+      enabled: false
+    oracle-sqlcl:
+      enabled: false
+    github-mcp:
+      enabled: false
+    openshift-mcp:
+      enabled: false
+
+# ══════════════════════════════════════════════════════════════════════
+# LokiStack (subchart: charts/lokistack)
+# ══════════════════════════════════════════════════════════════════════
+
+lokistack:
+  enabled: false
+  name: logging-loki
+  namespace: ""
+  clusterDomain: ""
+  minio:
+    endpoint: "http://minio:9000"
+    bucketName: loki
+    existingSecret:
+      name: minio
+      userKey: user
+      passwordKey: password
+    bucketJobImage:
+      repository: quay.io/minio/minio
+      tag: latest
+      pullPolicy: IfNotPresent
+  lokistack:
+    name: logging-loki
+    size: 1x.extra-small
+    replication:
+      factor: 1
+    template:
+      distributor:
+        replicas: 1
+      gateway:
+        replicas: 1
+      indexGateway:
+        replicas: 1
+      ingester:
+        replicas: 1
+      querier:
+        replicas: 1
+      queryFrontend:
+        replicas: 1
+    storage:
+      secret:
+        name: minio
+        type: s3
+      schemas:
+        - version: v13
+          effectiveDate: "2024-01-01"
+      storageClassName: gp3-csi
+    tenants:
+      mode: openshift-logging
+    limits:
+      global:
+        ingestion:
+          ingestionRate: 50
+          ingestionBurstSize: 50
+        queries:
+          queryTimeout: 3m
+          maxVolumeSeries: 1000
+  grafana:
+    enabled: true
+    replicas: 1
+    image:
+      repository: grafana/grafana
+      tag: latest
+      pullPolicy: IfNotPresent
+    adminUser: admin
+    adminPassword: admin
+    auth:
+      anonymous:
+        enabled: false
+        orgRole: Viewer
+    datasources:
+      loki:
+        application:
+          enabled: true
+          name: Loki-Application
+          isDefault: true
+          tlsSkipVerify: true
+        infrastructure:
+          enabled: true
+          name: Loki-Infrastructure
+          isDefault: false
+          tlsSkipVerify: true
+        audit:
+          enabled: false
+          name: Loki-Audit
+          isDefault: false
+          tlsSkipVerify: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    service:
+      type: ClusterIP
+      port: 3000
+      annotations:
+        service.alpha.openshift.io/serving-cert-secret-name: grafana-tls
+    route:
+      enabled: true
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+    rbac:
+      serviceAccount:
+        name: grafana
+      lokiReader:
+        serviceAccountName: grafana-loki-reader
+  mcpLokistack:
+    enabled: true
+    rbac:
+      serviceAccountName: mcp-lokistack-reader
+  clusterLogForwarder:
+    enabled: true
+    name: instance
+    namespace: openshift-logging
+    serviceAccountName: logcollector
+    tls:
+      insecureSkipVerify: true
+    pipelines:
+      application: true
+      infrastructure: true
+      audit: false
+  testLogGenerator:
+    enabled: false
+    replicas: 1
+    image:
+      repository: curlimages/curl
+      tag: latest
+    interval: 5

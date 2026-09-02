@@ -1,0 +1,98 @@
+{{- if .Values.ranFrontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-frontend
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-frontend
+spec:
+  replicas: {{ .Values.ranFrontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "telco.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ran-frontend
+  template:
+    metadata:
+      labels:
+        {{- include "telco.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ran-frontend
+    spec:
+      {{- if .Values.global.frontendAuth.enabled }}
+      serviceAccountName: {{ include "telco.fullname" . }}-ran-frontend
+      {{- end }}
+      containers:
+        - name: ran-frontend
+          image: "{{ .Values.image.registry }}/{{ .Values.image.ranFrontend }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.global.frontendAuth.enabled }}
+          env:
+            - name: NGINX_LISTEN_ADDRESS
+              value: "127.0.0.1"
+          {{- end }}
+          {{- if .Values.global.frontendAuth.enabled }}
+          livenessProbe:
+            {{- include "telco.nginxLoopbackProbe" . | nindent 12 }}
+          readinessProbe:
+            {{- include "telco.nginxLoopbackProbe" . | nindent 12 }}
+          {{- else }}
+          livenessProbe:
+            {{- toYaml .Values.ranFrontend.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.ranFrontend.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.ranFrontend.resources | nindent 12 }}
+        {{- if .Values.global.frontendAuth.enabled }}
+        {{- include "telco.oauthProxyContainer" (dict "component" "ran-frontend" "context" $) | nindent 8 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-frontend
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-frontend
+spec:
+  type: {{ .Values.ranFrontend.service.type }}
+  ports:
+    - port: {{ .Values.ranFrontend.service.port }}
+      {{- if .Values.global.frontendAuth.enabled }}
+      targetPort: 8888
+      {{- else }}
+      targetPort: {{ .Values.ranFrontend.service.targetPort }}
+      {{- end }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "telco.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-frontend
+{{- if .Values.global.frontendAuth.enabled }}
+---
+{{ include "telco.oauthProxyServiceAccount" (dict "component" "ran-frontend" "context" $) }}
+{{- end }}
+{{- if .Values.global.routes.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-frontend
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-frontend
+spec:
+  to:
+    kind: Service
+    name: {{ include "telco.fullname" . }}-ran-frontend
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }}

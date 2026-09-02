@@ -115,8 +115,8 @@ def test_aap_multicluster_rbac_renders_per_spoke():
     try:
         rendered = _helm_template(
             values,
-            "aapCredential.enabled=true",
-            "aapCredential.multicluster.enabled=true",
+            "network.aapCredential.enabled=true",
+            "network.aapCredential.multicluster.enabled=true",
         )
     finally:
         values.unlink(missing_ok=True)
@@ -134,8 +134,8 @@ def test_aap_multicluster_rbac_skipped_without_hub_spoke():
     try:
         rendered = _helm_template(
             values,
-            "aapCredential.enabled=true",
-            "aapCredential.multicluster.enabled=true",
+            "network.aapCredential.enabled=true",
+            "network.aapCredential.multicluster.enabled=true",
         )
     finally:
         values.unlink(missing_ok=True)
@@ -146,7 +146,7 @@ def test_aap_multicluster_rbac_skipped_without_hub_spoke():
 def test_lokistack_logcollector_rbac():
     values = _render_spokes_values(1)
     try:
-        rendered = _helm_template(values, "lokistack.enabled=true")
+        rendered = _helm_template(values, "network.lokistack.enabled=true")
     finally:
         values.unlink(missing_ok=True)
 
@@ -172,7 +172,7 @@ def test_single_cluster_omits_multi_cluster_creds_job():
 def test_hub_spoke_disables_edge_rbac_job_even_when_enabled():
     values = _render_spokes_values(2)
     try:
-        rendered = _helm_template(values, "edgeRbac.enabled=true")
+        rendered = _helm_template(values, "network.edgeRbac.enabled=true")
     finally:
         values.unlink(missing_ok=True)
 

@@ -3,7 +3,7 @@
 import os
 import subprocess
 
-from tests.generic.mcp_servers.conftest import mcp_call, mcp_list_tools
+from tests.network.mcp_servers.conftest import mcp_call, mcp_list_tools
 
 EDGE_NAMESPACE = os.environ.get("EDGE_NAMESPACE", "dark-noc-edge")
 

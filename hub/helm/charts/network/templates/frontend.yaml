@@ -1,0 +1,98 @@
+{{- if .Values.frontend.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "network.fullname" . }}-frontend
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "network.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "network.labels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+    spec:
+      {{- if .Values.global.frontendAuth.enabled }}
+      serviceAccountName: {{ include "network.fullname" . }}-frontend
+      {{- end }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.image.registry }}/{{ .Values.image.frontend }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.global.frontendAuth.enabled }}
+          env:
+            - name: NGINX_LISTEN_ADDRESS
+              value: "127.0.0.1"
+          {{- end }}
+          {{- if .Values.global.frontendAuth.enabled }}
+          livenessProbe:
+            {{- include "network.nginxLoopbackProbe" . | nindent 12 }}
+          readinessProbe:
+            {{- include "network.nginxLoopbackProbe" . | nindent 12 }}
+          {{- else }}
+          livenessProbe:
+            {{- toYaml .Values.frontend.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.frontend.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+        {{- if .Values.global.frontendAuth.enabled }}
+        {{- include "network.oauthProxyContainer" (dict "component" "frontend" "context" $) | nindent 8 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "network.fullname" . }}-frontend
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.frontend.service.type }}
+  ports:
+    - port: {{ .Values.frontend.service.port }}
+      {{- if .Values.global.frontendAuth.enabled }}
+      targetPort: 8888
+      {{- else }}
+      targetPort: {{ .Values.frontend.service.targetPort }}
+      {{- end }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "network.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+{{- if .Values.global.frontendAuth.enabled }}
+---
+{{ include "network.oauthProxyServiceAccount" (dict "component" "frontend" "context" $) }}
+{{- end }}
+{{- if .Values.global.routes.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "network.fullname" . }}-frontend
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  to:
+    kind: Service
+    name: {{ include "network.fullname" . }}-frontend
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }}

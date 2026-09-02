@@ -22,8 +22,16 @@ adnr_spoke_names() {
   local path="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
   awk '
     /^[[:space:]]*spokes:[[:space:]]*\[\][[:space:]]*$/ { exit }
-    /^[[:space:]]*spokes:[[:space:]]*$/ { in_spokes = 1; next }
-    in_spokes && /^[^[:space:]#]/ { exit }
+    /^[[:space:]]*spokes:[[:space:]]*$/ {
+      in_spokes = 1
+      match($0, /^[[:space:]]*/)
+      spoke_indent = RLENGTH
+      next
+    }
+    in_spokes && /^[[:space:]]*[^[:space:]#]/ {
+      match($0, /^[[:space:]]*/);
+      if (RLENGTH <= spoke_indent) exit
+    }
     in_spokes && /^[[:space:]]*- name:[[:space:]]+/ {
       name = $0
       sub(/^[[:space:]]*- name:[[:space:]]+/, "", name)
@@ -49,8 +57,16 @@ adnr_spoke_triples() {
       }
     }
     /^[[:space:]]*spokes:[[:space:]]*\[\][[:space:]]*$/ { exit }
-    /^[[:space:]]*spokes:[[:space:]]*$/ { in_spokes = 1; next }
-    in_spokes && /^[^[:space:]#]/ { flush(); exit }
+    /^[[:space:]]*spokes:[[:space:]]*$/ {
+      in_spokes = 1
+      match($0, /^[[:space:]]*/)
+      spoke_indent = RLENGTH
+      next
+    }
+    in_spokes && /^[[:space:]]*[^[:space:]#]/ {
+      match($0, /^[[:space:]]*/);
+      if (RLENGTH <= spoke_indent) { flush(); exit }
+    }
     in_spokes && /^[[:space:]]*- name:[[:space:]]+/ {
       flush()
       name = $0

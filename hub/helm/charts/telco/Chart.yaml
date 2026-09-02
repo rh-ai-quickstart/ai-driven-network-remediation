@@ -1,0 +1,6 @@
+apiVersion: v2
+name: telco
+description: Telco O-RAN use case — RAN anomaly detection, root cause analysis, chatbot and dashboard
+type: application
+version: 0.0.1
+appVersion: 0.0.1

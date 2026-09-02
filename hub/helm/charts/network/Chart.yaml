@@ -1,0 +1,16 @@
+apiVersion: v2
+name: network
+description: Network remediation use case — NOC chatbot, agent service, MCP integration, AAP/ServiceNow automation
+type: application
+version: 0.0.1
+appVersion: 0.0.1
+
+dependencies:
+  - name: mcp-servers
+    version: 0.5.17
+    repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
+    condition: mcp-servers.enabled
+  - name: lokistack
+    version: 0.1.0
+    repository: "file://../../lib-charts/lokistack"
+    condition: lokistack.enabled

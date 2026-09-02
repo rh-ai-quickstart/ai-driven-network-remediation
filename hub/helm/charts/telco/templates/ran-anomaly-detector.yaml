@@ -1,0 +1,70 @@
+{{- if .Values.ranAnomalyDetector.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-anomaly-detector
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-anomaly-detector
+spec:
+  replicas: {{ .Values.ranAnomalyDetector.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "telco.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ran-anomaly-detector
+  template:
+    metadata:
+      labels:
+        {{- include "telco.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ran-anomaly-detector
+    spec:
+      containers:
+        - name: ran-anomaly-detector
+          image: "{{ .Values.image.registry }}/{{ .Values.image.ranAnomalyDetector }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: KAFKA_BOOTSTRAP
+              value: {{ .Values.ranAnomalyDetector.env.kafkaBootstrap | quote }}
+            - name: KAFKA_METRICS_TOPIC
+              value: {{ .Values.ranAnomalyDetector.env.kafkaMetricsTopic | quote }}
+            - name: KAFKA_GROUP_ID
+              value: {{ .Values.ranAnomalyDetector.env.kafkaGroupId | quote }}
+            - name: KAFKA_CONSUMER_ENABLED
+              value: {{ .Values.ranAnomalyDetector.env.kafkaConsumerEnabled | quote }}
+            - name: KAFKA_ANOMALIES_TOPIC
+              value: {{ .Values.ranAnomalyDetector.env.kafkaAnomaliesTopic | quote }}
+            - name: KAFKA_PRODUCER_ENABLED
+              value: {{ .Values.ranAnomalyDetector.env.kafkaProducerEnabled | quote }}
+            - name: HISTORY_WINDOW_SIZE
+              value: {{ .Values.ranAnomalyDetector.env.historyWindowSize | quote }}
+            - name: RECENT_ANOMALIES_LIMIT
+              value: {{ .Values.ranAnomalyDetector.env.recentAnomaliesLimit | quote }}
+          ports:
+            - name: http
+              containerPort: 8002
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.ranAnomalyDetector.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.ranAnomalyDetector.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ranAnomalyDetector.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-anomaly-detector
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-anomaly-detector
+spec:
+  type: {{ .Values.ranAnomalyDetector.service.type }}
+  ports:
+    - port: {{ .Values.ranAnomalyDetector.service.port }}
+      targetPort: {{ .Values.ranAnomalyDetector.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "telco.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-anomaly-detector
+{{- end }}

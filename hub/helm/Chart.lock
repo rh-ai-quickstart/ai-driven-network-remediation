@@ -5,9 +5,12 @@ dependencies:
 - name: llama-stack
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   version: 0.8.7
-- name: mcp-servers
-  repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
-  version: 0.5.17
+- name: telco
+  repository: file://charts/telco
+  version: 0.0.1
+- name: network
+  repository: file://charts/network
+  version: 0.0.1
 - name: kafka
   repository: file://charts/kafka
   version: 0.1.0
@@ -17,8 +20,5 @@ dependencies:
 - name: gitea
   repository: file://charts/gitea
   version: 0.1.0
-- name: lokistack
-  repository: file://charts/lokistack
-  version: 0.1.0
-digest: sha256:0ef43fa88c2c6365a83add508103d67cfd224ecc6916e5eb2fa5573fe0914339
-generated: "2026-07-28T17:32:19.650980208+03:00"
+digest: sha256:b63530d8e4d7abeed571da9604fbe11902b1bcd68bdf2a0a76966cc274d0c2c1
+generated: "2026-09-07T16:57:50.226967+02:00"

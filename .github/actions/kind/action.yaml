@@ -76,11 +76,12 @@ runs:
           ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
             --set waitImage=curlimages/curl:8.14.1 \
-            --set mcpSecrets.openshift.create=true \
-            --set-file mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
-            --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
-            --set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.hub.svc:8080 \
-            --set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false \
+            --set network.waitImage=curlimages/curl:8.14.1 \
+            --set network.mcpSecrets.openshift.create=true \
+            --set-file network.mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
+            --set network.mcp-servers.mcp-servers.noc-lokistack.enabled=false \
+            --set network.mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.hub.svc:8080 \
+            --set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false \
             --set kafka.kafka.storage.storageClass=standard \
             --set kafka.kafka.storage.size=256Mi \
             --set kafka.kafka.retention.hours=1 \
@@ -97,15 +98,12 @@ runs:
       shell: bash
 
     - name: Wait for MCP pods to be ready
+      if: env.ENABLE_NETWORK_REMEDIATION != 'false'
       run: |
-        for label in noc-kafka noc-aap noc-servicenow; do
+        for label in noc-kafka noc-aap noc-servicenow noc-openshift; do
           echo "Waiting for ${label}..."
           oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=${label}" -n hub --timeout=120s
         done
-        if [ "${ENABLE_NETWORK_REMEDIATION}" != "false" ]; then
-          echo "Waiting for noc-openshift..."
-          oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=noc-openshift" -n hub --timeout=120s
-        fi
       shell: bash
 
 

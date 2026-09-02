@@ -1,0 +1,50 @@
+{{- if and .Values.edgeRbac.enabled (ne .Values.topology.deploymentMode "hub-spoke") }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "network.fullname" . }}-edge-rbac
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "network.fullname" . }}-edge-rbac-{{ .Release.Namespace }}
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "serviceaccounts", "secrets"]
+    verbs: ["create", "get", "list", "update", "patch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings"]
+    verbs: ["create", "get", "update", "patch", "bind", "escalate"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "network.fullname" . }}-edge-rbac-{{ .Release.Namespace }}
+  labels:
+    {{- include "network.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "network.fullname" . }}-edge-rbac-{{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "network.fullname" . }}-edge-rbac
+    namespace: {{ .Release.Namespace }}
+{{- end }}

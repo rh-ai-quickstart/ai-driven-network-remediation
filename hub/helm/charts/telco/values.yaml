@@ -1,0 +1,122 @@
+fullnameOverride: hub
+nameOverride: hub
+
+image:
+  registry: quay.io/rh-ai-quickstart
+  ranAnomalyDetector: hub-ran-anomaly-detector
+  ranRcaService: hub-ran-rca-service
+  ranChatbotService: hub-ran-chatbot-service
+  ranFrontend: noc-ran-frontend
+  pullPolicy: Always
+  tag: "0.0.1"
+
+ranAnomalyDetector:
+  enabled: true
+  replicaCount: 1
+  env:
+    kafkaBootstrap: "kafka:9092"
+    kafkaMetricsTopic: "ran-combined-metrics"
+    kafkaGroupId: "ran-anomaly-detector"
+    kafkaConsumerEnabled: "true"
+    kafkaAnomaliesTopic: "ran-anomalies"
+    kafkaProducerEnabled: "true"
+    historyWindowSize: "10"
+    recentAnomaliesLimit: "100"
+  service:
+    type: ClusterIP
+    port: 8002
+    targetPort: 8002
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8002
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8002
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+ranRcaService:
+  enabled: true
+  replicaCount: 1
+  env:
+    llamastackHost: "llamastack-service"
+    llamastackPort: "8321"
+    vectorStoreName: "telco_oran_docs"
+    graniteModelName: "ibm-granite/granite-3.3-8b-instruct"
+    kafkaBootstrap: "kafka:9092"
+    kafkaAnomaliesTopic: "ran-anomalies"
+    kafkaEnrichedTopic: "ran-anomalies-enriched"
+    kafkaGroupId: "ran-rca-service"
+    kafkaConsumerEnabled: "true"
+    recentAnomaliesLimit: "100"
+  service:
+    type: ClusterIP
+    port: 8003
+    targetPort: 8003
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8003
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8003
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+ranChatbotService:
+  enabled: true
+  replicaCount: 1
+  env:
+    kafkaBootstrap: "kafka:9092"
+    enrichedAnomaliesTopic: "ran-anomalies-enriched"
+    demoMetricsTopic: "ran-combined-metrics"
+    modelApiUrl: "http://llamastack-service:8321/v1/completions"
+    modelName: "granite-4-h-tiny"
+    corsOrigins: "http://localhost:3000"
+  service:
+    type: ClusterIP
+    port: 8003
+    targetPort: 8003
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8003
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8003
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+ranFrontend:
+  enabled: true
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 8080
+    initialDelaySeconds: 5
+    periodSeconds: 10
