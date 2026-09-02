@@ -25,7 +25,7 @@ class TestSuccessfulLlmCall:
 
         result = await analyze_node(make_state(context_snippets=["vendor doc snippet"]))
 
-        assert "RSRP degradation" in result["root_cause"]
+        assert "signal degradation" in result["root_cause"].lower()
         assert "3GPP" in result["root_cause"]
 
     @pytest.mark.asyncio
@@ -54,7 +54,8 @@ class TestSuccessfulLlmCall:
         await analyze_node(make_state(context_snippets=["vendor doc about RSRP"]))
 
         user_msg = mock_llm.ainvoke.call_args[0][0][1].content
-        assert "Low RSRP" in user_msg
+        assert "test-001" in user_msg
+        assert "Zone: A" in user_msg
         assert "vendor doc about RSRP" in user_msg
 
     @pytest.mark.asyncio

@@ -1,22 +1,54 @@
 # RAN RCA Service
 
-LLM-based root cause analysis for RAN anomalies. Consumes anomalies detected by
-`ran-anomaly-detector`, enriches them with a root cause and recommended fix using
-RAG + IBM Granite, and publishes the enriched records.
+LLM-based root cause analysis for ML-detected RAN anomalies. Consumes typeless anomalies
+detected by `ran-anomaly-detector` (via `ran-ml-service` Mantis AD), enriches them with a
+root cause and recommended fix using RAG + IBM Granite, and publishes the enriched records.
 
 ## Data flow
 
 ```
-ran-anomaly-detector
+ran-anomaly-detector (ML-detected anomaly)
   → Kafka: ran-anomalies
   → ran-rca-service (LangGraph: rag_retrieval → analyze)
   → Kafka: ran-anomalies-enriched
 ```
 
 - **`rag_retrieval`** — queries the `telco_oran_docs` vector store via LlamaStack for
-  relevant documentation snippets
-- **`analyze`** — sends anomaly + RAG context to Granite LLM, returns structured
+  relevant documentation snippets, using zone + application + AD confidence as context
+- **`analyze`** — sends anomaly context to Granite LLM, returns structured
   `root_cause` and `recommended_fix`; falls back to empty fields on LLM failure
+
+## Input contract (`ran-anomalies` topic)
+
+Each message is a typeless ML-detected anomaly (see `contracts/ran-anomalies.schema.json`):
+
+```json
+{
+  "incident_id": "a3f7c2d1",
+  "zone": "A",
+  "application": "Twitch",
+  "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
+  "ad_label": "anomalous",
+  "ad_confidence": 0.9995
+}
+```
+
+## Output contract (`ran-anomalies-enriched` topic)
+
+The same record plus LLM enrichment (see `contracts/ran-anomaly-enriched.schema.json`):
+
+```json
+{
+  "incident_id": "a3f7c2d1",
+  "zone": "A",
+  "application": "Twitch",
+  "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
+  "ad_label": "anomalous",
+  "ad_confidence": 0.9995,
+  "root_cause": "Signal degradation consistent with antenna misalignment...",
+  "recommended_fix": "Verify antenna tilt per vendor guide Section 4.3.2..."
+}
+```
 
 ## Endpoints
 

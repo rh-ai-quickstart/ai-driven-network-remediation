@@ -8,12 +8,13 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
 from ran_anomaly_detector.config import (
-    HISTORY_WINDOW_SIZE,
+    DETECT_INFERENCE_URL,
     KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
     KAFKA_CONSUMER_ENABLED,
@@ -37,7 +38,7 @@ def _handle_metrics_message(
 ) -> None:
     anomalies = service.process_message(raw_value)
     for anomaly in anomalies:
-        logger.info("RAN anomaly detected: {}", anomaly)
+        logger.info("RAN anomaly detected: incident_id={}", anomaly.get("incident_id"))
         recent_anomalies.append(anomaly)
         if producer is not None:
             try:
@@ -46,9 +47,25 @@ def _handle_metrics_message(
                 logger.exception("Failed to publish anomaly to Kafka")
 
 
+def _check_predictor_ready() -> bool:
+    """Check if the detect predictor is reachable and ready.
+
+    If DETECT_INFERENCE_URL is not configured, skip the check (allows the
+    detector to pass readiness in CI/test environments without the ML service).
+    """
+    if not DETECT_INFERENCE_URL:
+        return True
+    try:
+        base_url = DETECT_INFERENCE_URL.rsplit("/", 2)[0]
+        resp = httpx.get(f"{base_url}/ready", timeout=3.0)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    detection_service = AnomalyDetectionService(history_size=HISTORY_WINDOW_SIZE)
+    detection_service = AnomalyDetectionService()
     recent_anomalies: AnomalyBuffer = deque(maxlen=RECENT_ANOMALIES_LIMIT)
 
     app.state.detection_service = detection_service
@@ -104,6 +121,9 @@ def ready(req: Request):
         consumer: TopicConsumer | None = getattr(req.app.state, "kafka_consumer", None)
         if consumer is None or not consumer.is_connected:
             not_ready.append("kafka")
+
+    if not _check_predictor_ready():
+        not_ready.append("predictor")
 
     if not_ready:
         return JSONResponse({"ready": False, "reason": ", ".join(not_ready)}, status_code=503)

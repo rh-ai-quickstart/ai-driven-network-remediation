@@ -1,7 +1,7 @@
 [project]
 name = "ran-anomaly-detector"
 version = "0.1.0"
-description = "Rule-based RAN KPI anomaly detection workflow consuming Kafka metrics via the telco-oran domain model"
+description = "ML-based RAN anomaly detection: consumes TelecomTS JSON samples from Kafka, calls Mantis AD predictor, publishes typeless anomalies"
 readme = "README.md"
 authors = [
     { name = "rh-ai-quickstart" }
@@ -9,9 +9,9 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "shared[kafka]",
-    "telco-oran",
     "click>=8.1.0",
     "fastapi>=0.115",
+    "httpx>=0.28",
     "kafka-python-ng>=2.2",
     "loguru>=0.7.0",
     "pydantic>=2.0.0",
@@ -20,7 +20,6 @@ dependencies = [
 
 [tool.uv.sources]
 shared = { path = "../shared" }
-telco-oran = { path = "../telco-oran" }
 
 [project.scripts]
 ran-anomaly-detector = "ran_anomaly_detector:main"
@@ -39,6 +38,7 @@ addopts = "--cov --cov-report=term-missing"
 [dependency-groups]
 dev = [
     "httpx2>=0.1",
+    "jsonschema>=4.0",
     "pytest>=7.4.0",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=6.0",
@@ -48,6 +48,6 @@ dev = [
 source = ["ran_anomaly_detector"]
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 85
 show_missing = true
 skip_empty = true

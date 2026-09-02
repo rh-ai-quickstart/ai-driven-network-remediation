@@ -10,9 +10,10 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-# shared is copied one level up so the "../shared" path source in
-# ran-chatbot-service/pyproject.toml resolves correctly from /app.
+# Sibling packages are copied so the "../<pkg>" path sources in
+# ran-chatbot-service/pyproject.toml resolve correctly from /app.
 COPY shared/ /shared/
+COPY telco-oran/ /telco-oran/
 
 COPY ran-chatbot-service/pyproject.toml ran-chatbot-service/uv.lock ./
 

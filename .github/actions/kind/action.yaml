@@ -81,6 +81,7 @@ runs:
             --set mcp-servers.mcp-servers.noc-lokistack.enabled=false \
             --set mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.hub.svc:8080 \
             --set mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false \
+            --set ranAnomalyDetector.env.detectInferenceUrl='' \
             --set kafka.kafka.storage.storageClass=standard \
             --set kafka.kafka.storage.size=256Mi \
             --set kafka.kafka.retention.hours=1 \

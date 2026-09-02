@@ -22,9 +22,9 @@ class TestQueryConstruction:
         with _patch_rag_client(mock):
             result = await rag_retrieval_node(make_state())
 
-        assert "Band 29" in result["rag_query_used"]
-        assert "LowRsrp" in result["rag_query_used"]
-        assert "Low RSRP" in result["rag_query_used"]
+        assert "zone=A" in result["rag_query_used"]
+        assert "Twitch" in result["rag_query_used"]
+        assert "0.94" in result["rag_query_used"]
 
     @pytest.mark.asyncio
     async def test_passes_query_to_search(self):
@@ -32,11 +32,10 @@ class TestQueryConstruction:
         mock.search = AsyncMock(return_value=[])
 
         with _patch_rag_client(mock):
-            await rag_retrieval_node(make_state(anomaly="High interference on cell 7"))
+            await rag_retrieval_node(make_state(application="YouTube"))
 
         query = mock.search.call_args[0][0]
-        assert "High interference on cell 7" in query
-        assert "LowRsrp" in query
+        assert "YouTube" in query
 
 
 class TestSearchResults:

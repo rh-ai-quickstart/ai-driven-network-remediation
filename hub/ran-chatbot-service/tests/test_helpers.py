@@ -15,13 +15,14 @@ from ran_chatbot_service.models import ModelSource
 
 class TestBuildChatContext:
     def test_includes_anomaly_details(self, sample_anomalies):
-        prompt = build_chat_context("What's wrong with cell 42?", sample_anomalies, [])
-        assert "Cell 42" in prompt
-        assert "Band 29" in prompt
-        assert "LowRsrp" in prompt
-        assert "Poor radio conditions." in prompt
-        assert "Antenna Tilt Adjustment" in prompt
-        assert "What's wrong with cell 42?" in prompt
+        prompt = build_chat_context("What's happening?", sample_anomalies, [])
+        assert "test-001" in prompt
+        assert "zone=A" in prompt
+        assert "Twitch" in prompt
+        assert "0.94" in prompt
+        assert "Signal degradation" in prompt
+        assert "Section 4.2" in prompt
+        assert "What's happening?" in prompt
 
     def test_handles_no_anomalies(self):
         prompt = build_chat_context("Any issues?", [], [])
@@ -34,42 +35,31 @@ class TestBuildChatContext:
         assert "assistant: hi" in prompt
 
     def test_blank_root_cause_and_fix_render_as_na(self, sample_anomaly):
-        """Regression test: ran-rca-service publishes root_cause/recommended_fix as ""
-        (not omitted) when its own LLM/RAG enrichment fails, observed during E2E
-        testing. That must render as "n/a", not a blank line."""
         anomaly = sample_anomaly.model_copy(update={"root_cause": "", "recommended_fix": ""})
         prompt = build_chat_context("What's wrong?", [anomaly], [])
         assert "Root cause: n/a" in prompt
         assert "Recommended fix: n/a" in prompt
 
     def test_uses_the_five_most_recent_anomalies(self, sample_anomaly):
-        """Regression test: the AnomaliesConsumer buffer is in ascending Kafka
-        offset order (oldest first), so the 5 most recent are the tail of the
-        list, not the head."""
-        anomalies = [sample_anomaly.model_copy(update={"cell_id": i}) for i in range(7)]
+        anomalies = [sample_anomaly.model_copy(update={"incident_id": f"inc-{i}"}) for i in range(7)]
         prompt = build_chat_context("Status?", anomalies, [])
-        for cell_id in range(2, 7):
-            assert f"Cell {cell_id}" in prompt
-        for cell_id in range(0, 2):
-            assert f"Cell {cell_id} (" not in prompt
+        for i in range(2, 7):
+            assert f"inc-{i}" in prompt
+        for i in range(0, 2):
+            assert f"Incident inc-{i} " not in prompt
 
 
 class TestCallModel:
-    """call_model() now takes a shared httpx.AsyncClient (constructed once at app
-    startup, see __init__.py's lifespan) instead of creating a new one per call —
-    these tests verify both the HTTP response handling and that reusing a single
-    client instance across multiple calls works correctly."""
-
     @pytest.mark.asyncio
     @respx.mock
     async def test_live_reply(self):
         respx.post(MODEL_API_URL).mock(
-            return_value=httpx.Response(200, json={"choices": [{"text": "Cell 42 has weak signal."}]})
+            return_value=httpx.Response(200, json={"choices": [{"text": "Incident shows signal degradation."}]})
         )
         async with httpx.AsyncClient() as client:
             reply, source = await call_model("prompt", client)
 
-        assert reply == "Cell 42 has weak signal."
+        assert reply == "Incident shows signal degradation."
         assert source == ModelSource.LIVE
 
     @pytest.mark.asyncio
@@ -105,9 +95,6 @@ class TestCallModel:
     @pytest.mark.asyncio
     @respx.mock
     async def test_reuses_the_same_client_instance_across_multiple_calls(self):
-        """Regression test for the shared-client change: calling call_model() twice
-        with the same client (as concurrent /api/chat requests now do) must not
-        raise or corrupt state — httpx.AsyncClient is designed for exactly this."""
         route = respx.post(MODEL_API_URL).mock(return_value=httpx.Response(200, json={"choices": [{"text": "ok"}]}))
         async with httpx.AsyncClient() as client:
             first = await call_model("prompt one", client)
@@ -120,12 +107,12 @@ class TestCallModel:
 
 class TestFormatChatReply:
     def test_with_anomalies_and_live_reply(self, sample_anomalies):
-        reply = format_chat_reply("What's wrong?", "Cell 42 has weak signal.", sample_anomalies)
+        reply = format_chat_reply("What's wrong?", "Signal degradation in zone A.", sample_anomalies)
         assert "Anomalies detected: 1" in reply
-        assert "Cell 42" in reply
-        assert "Poor radio conditions." in reply
-        assert "Antenna Tilt Adjustment" in reply
-        assert "Cell 42 has weak signal." in reply
+        assert "Incident test-001" in reply
+        assert "zone=A" in reply
+        assert "AD confidence: 0.94" in reply
+        assert "Signal degradation" in reply
 
     def test_with_no_anomalies(self):
         reply = format_chat_reply("Any issues?", "All clear.", [])
@@ -143,10 +130,7 @@ class TestFormatChatReply:
         assert "Recommended Fix:\n- n/a" in reply
 
     def test_latest_anomaly_is_the_last_element_not_the_first(self, sample_anomaly):
-        """Regression test: anomalies is in ascending Kafka offset order (oldest
-        first), so the newest/latest anomaly is anomalies[-1], not anomalies[0]."""
-        oldest = sample_anomaly.model_copy(update={"cell_id": 1})
-        newest = sample_anomaly.model_copy(update={"cell_id": 2})
+        oldest = sample_anomaly.model_copy(update={"incident_id": "inc-old"})
+        newest = sample_anomaly.model_copy(update={"incident_id": "inc-new"})
         reply = format_chat_reply("What's wrong?", "insight", [oldest, newest])
-        assert "Latest anomaly: Cell 2" in reply
-        assert "Latest anomaly: Cell 1" not in reply
+        assert "Incident inc-new" in reply

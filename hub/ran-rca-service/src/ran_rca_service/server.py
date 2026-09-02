@@ -58,15 +58,17 @@ def _handle_anomaly_message(
         result = {**anomaly, "root_cause": "", "recommended_fix": ""}
 
     enriched = {
-        "cell_id": result["cell_id"],
-        "band": result["band"],
-        "anomaly_type": result["anomaly_type"],
-        "anomaly": result["anomaly"],
-        "root_cause": result["root_cause"],
-        "recommended_fix": result["recommended_fix"],
+        "incident_id": result.get("incident_id", ""),
+        "zone": result.get("zone", ""),
+        "application": result.get("application", ""),
+        "kpi_window": result.get("kpi_window", []),
+        "ad_label": result.get("ad_label", "anomalous"),
+        "ad_confidence": result.get("ad_confidence", 0.0),
+        "root_cause": result.get("root_cause", ""),
+        "recommended_fix": result.get("recommended_fix", ""),
     }
 
-    logger.info("RAN anomaly enriched: cell_id={} type={}", enriched["cell_id"], enriched["anomaly_type"])
+    logger.info("RAN anomaly enriched: incident_id={} zone={}", enriched["incident_id"], enriched["zone"])
     recent_enriched.append(enriched)
 
     if producer is not None:
