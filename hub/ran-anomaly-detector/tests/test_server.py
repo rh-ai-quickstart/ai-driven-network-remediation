@@ -1,3 +1,5 @@
+"""Tests for the ran-anomaly-detector FastAPI server."""
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -22,12 +24,15 @@ class TestHealthEndpoint:
 
 class TestReadyEndpoint:
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", False)
-    def test_ready_skips_kafka_when_consumer_disabled(self, client):
+    @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "")
+    def test_ready_when_kafka_disabled_and_no_predictor_url(self, client):
+        """With no predictor URL configured, readiness skips the predictor check."""
         response = client.get("/ready")
         assert response.status_code == 200
         assert response.json() == {"ready": True}
 
-    def test_ready_returns_true_when_consumer_connected(self, client):
+    @patch("ran_anomaly_detector.server._check_predictor_ready", return_value=True)
+    def test_ready_returns_true_when_all_deps_up(self, mock_pred, client):
         mock_consumer = MagicMock()
         mock_consumer.is_connected = True
         client.app.state.kafka_consumer = mock_consumer
@@ -35,13 +40,34 @@ class TestReadyEndpoint:
         assert response.status_code == 200
         assert response.json() == {"ready": True}
 
-    def test_ready_returns_503_when_consumer_not_connected(self, client):
+    @patch("ran_anomaly_detector.server._check_predictor_ready", return_value=True)
+    def test_ready_returns_503_when_kafka_not_connected(self, mock_pred, client):
         mock_consumer = MagicMock()
         mock_consumer.is_connected = False
         client.app.state.kafka_consumer = mock_consumer
         response = client.get("/ready")
         assert response.status_code == 503
         assert "kafka" in response.json()["reason"]
+
+    @patch("ran_anomaly_detector.server._check_predictor_ready", return_value=False)
+    def test_ready_returns_503_when_predictor_not_ready(self, mock_pred, client):
+        mock_consumer = MagicMock()
+        mock_consumer.is_connected = True
+        client.app.state.kafka_consumer = mock_consumer
+        response = client.get("/ready")
+        assert response.status_code == 503
+        assert "predictor" in response.json()["reason"]
+
+    @patch("ran_anomaly_detector.server._check_predictor_ready", return_value=False)
+    def test_ready_returns_503_with_both_deps_down(self, mock_pred, client):
+        mock_consumer = MagicMock()
+        mock_consumer.is_connected = False
+        client.app.state.kafka_consumer = mock_consumer
+        response = client.get("/ready")
+        assert response.status_code == 503
+        reason = response.json()["reason"]
+        assert "kafka" in reason
+        assert "predictor" in reason
 
 
 class TestAnomaliesEndpoint:
@@ -51,34 +77,34 @@ class TestAnomaliesEndpoint:
         assert response.json() == {"count": 0, "anomalies": []}
 
     def test_anomalies_returns_detected_items(self, client):
-        service = client.app.state.detection_service
-        csv_blob = (
-            "cell_id,max_capacity,lat,lon,area_type,city,band,frequency,datetime,"
-            "ues_usage,rsrp,rsrq,sinr,throughput_mbps,latency_ms\n"
-            "42,100,33.05,-96.8,industrial,Plano,Band 29,700,2026-07-29T10:00:00Z,10,"
-            "-125.0,-15.0,5.0,50.0,20.0\n"
-        )
-        outputs = service.process_csv(csv_blob)
-        client.app.state.recent_anomalies.extend(outputs)
-
+        client.app.state.recent_anomalies.append({
+            "incident_id": "test-001",
+            "zone": "A",
+            "application": "Twitch",
+            "kpi_window": [],
+            "ad_label": "anomalous",
+            "ad_confidence": 0.94,
+        })
         response = client.get("/anomalies")
-
         assert response.status_code == 200
         body = response.json()
         assert body["count"] == 1
-        assert body["anomalies"][0]["anomaly_type"] == "LowRsrp"
+        assert body["anomalies"][0]["incident_id"] == "test-001"
 
     def test_anomalies_respects_limit(self, client):
         for i in range(5):
-            client.app.state.recent_anomalies.append(
-                {"cell_id": i, "band": "Band 29", "anomaly_type": "X", "anomaly": "x"}
-            )
-
+            client.app.state.recent_anomalies.append({
+                "incident_id": f"inc-{i}",
+                "zone": "A",
+                "application": "X",
+                "kpi_window": [],
+                "ad_label": "anomalous",
+                "ad_confidence": 0.9,
+            })
         response = client.get("/anomalies", params={"limit": 2})
-
         body = response.json()
         assert body["count"] == 2
-        assert [a["cell_id"] for a in body["anomalies"]] == [3, 4]
+        assert [a["incident_id"] for a in body["anomalies"]] == ["inc-3", "inc-4"]
 
 
 class TestKafkaLifespan:
@@ -112,46 +138,17 @@ class TestKafkaLifespan:
     def test_lifespan_skips_consumer_when_disabled(self, TopicConsumer, KafkaProducer):
         with TestClient(app):
             pass
-
         TopicConsumer.assert_not_called()
 
     @patch("ran_anomaly_detector.server.KafkaProducer")
     @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", True)
-    def test_lifespan_wires_handler_into_recent_anomalies(self, TopicConsumer, KafkaProducer):
-        captured_handler = {}
+    @patch("ran_anomaly_detector.detection.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect")
+    def test_handler_publishes_anomaly_to_kafka(self, TopicConsumer, KafkaProducer):
+        import httpx
 
-        def _capture(handler, **kwargs):
-            captured_handler["handler"] = handler
-            return MagicMock()
-
-        TopicConsumer.side_effect = _capture
-
-        with TestClient(app) as client:
-            csv_blob = (
-                "cell_id,max_capacity,lat,lon,area_type,city,band,frequency,datetime,"
-                "ues_usage,rsrp,rsrq,sinr,throughput_mbps,latency_ms\n"
-                "42,100,33.05,-96.8,industrial,Plano,Band 29,700,2026-07-29T10:00:00Z,10,"
-                "-125.0,-15.0,5.0,50.0,20.0\n"
-            ).encode("utf-8")
-
-            captured_handler["handler"](csv_blob)
-
-            response = client.get("/anomalies")
-            assert response.json()["count"] == 1
-
-    @patch("ran_anomaly_detector.server.KafkaProducer")
-    @patch("ran_anomaly_detector.server.TopicConsumer")
-    @patch.multiple(
-        "ran_anomaly_detector.server",
-        KAFKA_CONSUMER_ENABLED=True,
-        KAFKA_PRODUCER_ENABLED=True,
-        KAFKA_ANOMALIES_TOPIC="ran-anomalies",
-    )
-    def test_handler_publishes_anomalies_to_kafka(self, TopicConsumer, KafkaProducer):
         mock_producer = MagicMock()
         KafkaProducer.return_value = mock_producer
-
         captured_handler = {}
 
         def _capture(handler, **kwargs):
@@ -160,19 +157,23 @@ class TestKafkaLifespan:
 
         TopicConsumer.side_effect = _capture
 
-        with TestClient(app):
-            csv_blob = (
-                "cell_id,max_capacity,lat,lon,area_type,city,band,frequency,datetime,"
-                "ues_usage,rsrp,rsrq,sinr,throughput_mbps,latency_ms\n"
-                "42,100,33.05,-96.8,industrial,Plano,Band 29,700,2026-07-29T10:00:00Z,10,"
-                "-125.0,-15.0,5.0,50.0,20.0\n"
-            ).encode("utf-8")
+        with patch("ran_anomaly_detector.detection._get_http_client") as mock_http:
+            mock_http.return_value.post.return_value = httpx.Response(
+                200, json={"label": "anomalous", "confidence": 0.92, "class_index": 1}
+            )
 
-            captured_handler["handler"](csv_blob)
+            with TestClient(app):
+                msg = json.dumps({
+                    "incident_id": "pub-test",
+                    "zone": "B",
+                    "application": "YouTube",
+                    "kpi_window": [{"RSRP": 0}] * 128,
+                }).encode()
+                captured_handler["handler"](msg)
 
-            mock_producer.send.assert_called_once()
-            topic, payload = mock_producer.send.call_args[0]
-            assert topic == "ran-anomalies"
-            published = json.loads(payload)
-            assert published["cell_id"] == 42
-            assert published["anomaly_type"] == "LowRsrp"
+                mock_producer.send.assert_called_once()
+                topic, payload = mock_producer.send.call_args[0]
+                assert topic == "ran-anomalies"
+                published = json.loads(payload)
+                assert published["incident_id"] == "pub-test"
+                assert published["ad_label"] == "anomalous"

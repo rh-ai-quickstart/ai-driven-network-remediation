@@ -1,7 +1,8 @@
 # RAN Frontend — Telco O-RAN Anomaly Dashboard
 
-React webapp for the Telco/O-RAN anomaly detection use case. Polls `ran-chatbot-service` for
-recently detected RAN cell anomalies and lets an operator chat about them in natural language.
+React webapp for the Telco/O-RAN ML anomaly detection use case. Polls `ran-chatbot-service` for
+recently detected RAN anomalies (ML-detected via Mantis AD on TelecomTS 5G lab traces) and lets an
+operator chat about them in natural language.
 
 This is an independent, standalone webapp — a twin of [`hub/frontend`](../frontend/FRONTEND.md)
 (the NOC dashboard) built the same way, against a different (thinner) BFF: separate codebase,

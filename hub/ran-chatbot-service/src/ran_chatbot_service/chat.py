@@ -17,14 +17,10 @@ def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
     if not anomalies:
         return "No recent RAN anomalies detected."
     lines = []
-    # anomalies is in ascending Kafka offset order (oldest first, see kafka.py's
-    # seek-to-start_offset + forward iteration), so the 5 most recent are the tail.
     for a in anomalies[-5:]:
-        # root_cause/recommended_fix are required-but-possibly-empty strings (ran-rca-service
-        # publishes "" rather than omitting the field when LLM enrichment itself failed), so
-        # `or "n/a"` is needed here — a plain default only covers the field being absent.
         lines.append(
-            f"  - Cell {a.cell_id} ({a.band}) [{a.anomaly_type}]: {a.anomaly}\n"
+            f"  - Incident {a.incident_id} (zone={a.zone}, app={a.application}) "
+            f"[AD confidence: {a.ad_confidence:.2f}]\n"
             f"    Root cause: {a.root_cause or 'n/a'}\n"
             f"    Recommended fix: {a.recommended_fix or 'n/a'}"
         )
@@ -43,13 +39,14 @@ def build_chat_context(
 
     return (
         "You are a telco RAN engineer assistant for an O-RAN anomaly detection and root cause "
-        "analysis system.\n"
+        "analysis system using ML-based binary anomaly detection on TelecomTS 5G lab traces.\n"
         "Answer the operator's request directly with concise, actionable analysis about the "
-        "detected RAN cell anomalies below.\n"
-        "When discussing an anomaly, mention: the affected cell/band, the anomaly type, the "
-        "likely root cause, and the recommended fix (including which vendor documentation "
-        "section it references).\n"
-        "Do NOT repeat headers or formatting — just provide your insight.\n"
+        "detected anomalies below.\n"
+        "When discussing an anomaly, mention: the incident ID, zone, application context, "
+        "the AD confidence score, the likely root cause, and the recommended fix (including "
+        "which vendor documentation section it references).\n"
+        "Do NOT mention cell IDs, bands, or rule-based anomaly types — this system uses "
+        "ML-based detection on full KPI windows.\n"
         "Keep output under 250 words.\n\n"
         f"Model: {MODEL_NAME}\n\n"
         f"Recently detected RAN anomalies:\n{anomalies_context}\n\n"
@@ -60,24 +57,7 @@ def build_chat_context(
 
 
 async def call_model(prompt: str, client: httpx.AsyncClient) -> tuple[str, str]:
-    """Call the LLM endpoint using a shared, reused httpx client. Returns (reply_text, source).
-
-    `client` is created once at app startup (see the `lifespan` in __init__.py) and
-    passed in rather than constructed per call: httpx.AsyncClient is explicitly
-    designed to be shared across concurrent requests within one event loop (unlike
-    kafka-python's KafkaConsumer), so reusing it gives connection pooling/keep-alive
-    to MODEL_API_URL instead of paying a fresh TCP/TLS handshake on every request.
-
-    `source` is one of the fixed ModelSource values, or a dynamic
-    ModelSource.http_error(code) string (e.g. "http-404") for HTTP errors —
-    see models.py. Typed as plain `str` here (rather than ModelSource) since
-    it's a mix of both; callers should still compare against ModelSource
-    members (e.g. `source == ModelSource.LIVE`) rather than string literals.
-
-    NOTE: Minimal implementation sufficient for V1 (single vLLM endpoint).
-    Consider replacing with litellm/llama-index if we need streaming,
-    multi-model fallback, or token management.
-    """
+    """Call the LLM endpoint. Returns (reply_text, source)."""
     if not MODEL_API_URL:
         return "", ModelSource.DISABLED
     payload = {
@@ -96,7 +76,6 @@ async def call_model(prompt: str, client: httpx.AsyncClient) -> tuple[str, str]:
         if choices:
             text = (choices[0].get("text") or choices[0].get("message", {}).get("content") or "").strip()
             if text:
-                logger.debug("LLM replied with %d chars", len(text))
                 return text, ModelSource.LIVE
         return "", ModelSource.EMPTY
     except Exception:
@@ -111,17 +90,16 @@ def format_chat_reply(
 ) -> str:
     """Format LLM output into a structured reply, or generate a deterministic fallback."""
     if not anomalies:
-        cells_line = "- No RAN anomalies currently detected."
+        anomaly_line = "- No RAN anomalies currently detected."
         root_cause = "n/a"
         recommended_fix = "n/a"
     else:
-        # anomalies is in ascending Kafka offset order (oldest first, see kafka.py),
-        # so the newest/latest anomaly is the last element, not the first.
         latest = anomalies[-1]
-        cells_line = (
-            f"- Latest anomaly: Cell {latest.cell_id} ({latest.band}) " f"[{latest.anomaly_type}] — {latest.anomaly}"
+        anomaly_line = (
+            f"- Latest anomaly: Incident {latest.incident_id} "
+            f"(zone={latest.zone}, app={latest.application}) "
+            f"[AD confidence: {latest.ad_confidence:.2f}]"
         )
-        # See _format_anomalies: root_cause/recommended_fix can be present-but-empty.
         root_cause = latest.root_cause or "n/a"
         recommended_fix = latest.recommended_fix or "n/a"
 
@@ -133,7 +111,7 @@ def format_chat_reply(
     return (
         "Summary:\n"
         f"- Anomalies detected: {len(anomalies)}\n"
-        f"{cells_line}\n"
+        f"{anomaly_line}\n"
         f"- Request: {user_message}\n\n"
         "Root Cause:\n"
         f"- {root_cause}\n\n"

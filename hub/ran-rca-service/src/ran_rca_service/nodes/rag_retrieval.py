@@ -22,7 +22,7 @@ def _get_rag_client() -> RagClient:
 
 
 async def rag_retrieval_node(state: RCAState) -> dict:
-    query = f"{state.anomaly_type} {state.anomaly} {state.band}"
+    query = f"5G anomaly detection zone={state.zone} application={state.application} AD confidence={state.ad_confidence:.2f}"
     try:
         snippets = await _get_rag_client().search(query)
         return {"context_snippets": snippets, "rag_query_used": query}

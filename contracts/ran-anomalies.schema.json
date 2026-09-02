@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ran-anomalies.schema.json",
+  "title": "RAN Anomaly (ran-anomalies topic)",
+  "description": "Schema for typeless anomaly records published to the ran-anomalies Kafka topic by the ran-anomaly-detector after ML-based binary anomaly detection (Mantis AD on TelecomTS).",
+  "type": "object",
+  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence"],
+  "properties": {
+    "incident_id": {
+      "type": "string",
+      "description": "Synthetic incident handle for chat and Kafka correlation. Not a physical cell or model feature."
+    },
+    "zone": {
+      "type": "string",
+      "description": "TelecomTS zone label (A, B, or C) — real metadata for humans/LLM context."
+    },
+    "application": {
+      "type": "string",
+      "description": "TelecomTS application label (e.g. Twitch, YouTube) — real metadata for humans/LLM context."
+    },
+    "kpi_window": {
+      "type": "array",
+      "minItems": 128,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "description": "One timestep with 18 TelecomTS KPI channel values.",
+        "properties": {
+          "RSRP": { "type": "number" },
+          "DL_BLER": { "type": "number" },
+          "DL_MCS": { "type": "number" },
+          "UL_BLER": { "type": "number" },
+          "UL_MCS": { "type": "number" },
+          "UL_NPRB": { "type": "number" },
+          "UL_SNR": { "type": "number" },
+          "TX_Bytes": { "type": "number" },
+          "RX_Bytes": { "type": "number" },
+          "Estimated_UL_Buffer": { "type": "number" },
+          "PRBs_DL_Current": { "type": "number" },
+          "PRBs_UL_Current": { "type": "number" },
+          "PRB_Utilization_DL": { "type": "number" },
+          "PRB_Utilization_UL": { "type": "number" },
+          "UL_Protocol": { "type": "number" },
+          "UL_NumberOfPackets": { "type": "number" },
+          "DL_Protocol": { "type": "number" },
+          "DL_NumberOfPackets": { "type": "number" }
+        },
+        "required": [
+          "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB",
+          "UL_SNR", "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer",
+          "PRBs_DL_Current", "PRBs_UL_Current", "PRB_Utilization_DL",
+          "PRB_Utilization_UL", "UL_Protocol", "UL_NumberOfPackets",
+          "DL_Protocol", "DL_NumberOfPackets"
+        ]
+      }
+    },
+    "ad_label": {
+      "type": "string",
+      "enum": ["anomalous"],
+      "description": "Always 'anomalous' — normal samples are never published."
+    },
+    "ad_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Softmax confidence from the Mantis AD binary classifier."
+    }
+  }
+}

@@ -2,33 +2,49 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ran-anomaly-enriched.schema.json",
   "title": "Enriched RAN Anomaly (ran-anomalies-enriched topic)",
-  "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis.",
+  "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis on ML-detected anomalies.",
   "type": "object",
-  "required": ["cell_id", "band", "anomaly_type", "anomaly", "root_cause", "recommended_fix"],
+  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause", "recommended_fix"],
   "properties": {
-    "cell_id": {
-      "type": "integer",
-      "description": "Numeric identifier of the RAN cell that produced the anomaly"
-    },
-    "band": {
+    "incident_id": {
       "type": "string",
-      "description": "Frequency band of the cell (e.g. Band 29)"
+      "description": "Synthetic incident handle for chat and Kafka correlation."
     },
-    "anomaly_type": {
+    "zone": {
       "type": "string",
-      "description": "Classification of the anomaly (e.g. LowRsrp, SinrDegradation)"
+      "description": "TelecomTS zone label (A, B, or C)."
     },
-    "anomaly": {
+    "application": {
       "type": "string",
-      "description": "Human-readable description of the detected anomaly"
+      "description": "TelecomTS application label (e.g. Twitch, YouTube)."
+    },
+    "kpi_window": {
+      "type": "array",
+      "minItems": 128,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "description": "One timestep with 18 TelecomTS KPI channel values."
+      }
+    },
+    "ad_label": {
+      "type": "string",
+      "enum": ["anomalous"],
+      "description": "Always 'anomalous' — only anomalous windows reach RCA."
+    },
+    "ad_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Softmax confidence from the Mantis AD binary classifier."
     },
     "root_cause": {
       "type": "string",
-      "description": "LLM-determined root cause of the anomaly"
+      "description": "LLM-determined root cause of the anomaly."
     },
     "recommended_fix": {
       "type": "string",
-      "description": "LLM-recommended remediation action"
+      "description": "LLM-recommended remediation action referencing vendor documentation."
     }
   }
 }

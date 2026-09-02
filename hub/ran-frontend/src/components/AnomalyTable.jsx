@@ -1,16 +1,9 @@
 import { useState } from "react";
 
-const ANOMALY_TYPE_LABELS = {
-  LowRsrp: "Low RSRP",
-  SinrDegradation: "SINR Degradation",
-  ThroughputDrop: "Throughput Drop",
-  UesSpikeOrDrop: "UEs Spike/Drop",
-  HighPrbUtilization: "High PRB Utilization",
-  CellOutage: "Cell Outage",
-};
-
-function typeLabel(anomalyType) {
-  return ANOMALY_TYPE_LABELS[anomalyType] || anomalyType;
+function confidenceBadge(confidence) {
+  if (confidence >= 0.9) return "high";
+  if (confidence >= 0.7) return "medium";
+  return "low";
 }
 
 export function AnomalyTable({ anomalies, baseUrl, onCleared }) {
@@ -52,19 +45,23 @@ export function AnomalyTable({ anomalies, baseUrl, onCleared }) {
       {!hasAnomalies ? (
         <p className="empty-state">
           No RAN anomalies detected yet. This panel updates automatically as new
-          readings are processed.
+          readings are processed by the ML detector.
         </p>
       ) : (
         <div className="anomaly-list">
           {anomalies.map((a, idx) => (
-            <article key={`${a.cell_id}-${a.band}-${a.anomaly_type}-${idx}`} className="anomaly-card">
+            <article key={`${a.incident_id}-${idx}`} className="anomaly-card">
               <header>
-                <span className="anomaly-type-pill">{typeLabel(a.anomaly_type)}</span>
+                <span className={`anomaly-type-pill confidence-${confidenceBadge(a.ad_confidence)}`}>
+                  AD {(a.ad_confidence * 100).toFixed(0)}%
+                </span>
                 <span className="anomaly-cell">
-                  Cell {a.cell_id} · {a.band}
+                  Incident {a.incident_id} · Zone {a.zone}
                 </span>
               </header>
-              <p className="anomaly-detail">{a.anomaly}</p>
+              <p className="anomaly-detail">
+                Application: {a.application} · 128×18 KPI window
+              </p>
               <div className="anomaly-grid">
                 <div>
                   <span className="anomaly-label">Root Cause</span>

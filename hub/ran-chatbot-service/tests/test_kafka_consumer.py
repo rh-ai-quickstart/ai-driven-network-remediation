@@ -12,14 +12,16 @@ from ran_chatbot_service.kafka import AnomaliesConsumer
 from ran_chatbot_service.models import EnrichedAnomaly
 
 _SAMPLE_ANOMALY_1 = {
-    "cell_id": 1,
-    "band": "Band 29",
-    "anomaly_type": "LowRsrp",
-    "anomaly": "Low RSRP: -125.0 dBm < -110.0 dBm",
-    "root_cause": "Poor radio conditions.",
-    "recommended_fix": "Section 4.2 — Antenna Tilt Adjustment",
+    "incident_id": "inc-001",
+    "zone": "A",
+    "application": "Twitch",
+    "kpi_window": [{"RSRP": -85.0}] * 128,
+    "ad_label": "anomalous",
+    "ad_confidence": 0.94,
+    "root_cause": "Signal degradation in zone A.",
+    "recommended_fix": "Section 4.2 — Verify antenna alignment.",
 }
-_SAMPLE_ANOMALY_2 = {**_SAMPLE_ANOMALY_1, "cell_id": 2}
+_SAMPLE_ANOMALY_2 = {**_SAMPLE_ANOMALY_1, "incident_id": "inc-002"}
 _TOPIC = "ran-anomalies-enriched"
 
 
@@ -147,7 +149,7 @@ def test_seed_recent_history_prepopulates_buffer_on_connect(monkeypatch):
     _wait_until(lambda: len(buffer) >= 2)
     consumer.stop()
 
-    assert [a.cell_id for a in buffer] == [1, 2]
+    assert [a.incident_id for a in buffer] == ["inc-001", "inc-002"]
 
 
 def test_poll_loop_dispatches_new_messages_to_buffer(monkeypatch):
@@ -163,7 +165,7 @@ def test_poll_loop_dispatches_new_messages_to_buffer(monkeypatch):
     assert consumer.is_connected
     consumer.stop()
 
-    assert [a.cell_id for a in buffer] == [1, 2]
+    assert [a.incident_id for a in buffer] == ["inc-001", "inc-002"]
 
 
 def test_buffer_respects_maxlen():
@@ -173,7 +175,7 @@ def test_buffer_respects_maxlen():
     buffer: deque[EnrichedAnomaly] = deque(maxlen=1)
     buffer.append(EnrichedAnomaly(**_SAMPLE_ANOMALY_1))
     buffer.append(EnrichedAnomaly(**_SAMPLE_ANOMALY_2))
-    assert [a.cell_id for a in buffer] == [2]
+    assert [a.incident_id for a in buffer] == ["inc-002"]
 
 
 def test_skips_malformed_message_without_crashing_the_loop(monkeypatch):
@@ -199,7 +201,7 @@ def test_skips_malformed_message_without_crashing_the_loop(monkeypatch):
     _wait_until(lambda: len(buffer) >= 1)
     consumer.stop()
 
-    assert [a.cell_id for a in buffer] == [1]
+    assert [a.incident_id for a in buffer] == ["inc-001"]
 
 
 def test_returns_empty_buffer_when_no_partitions_assigned(monkeypatch):
@@ -261,7 +263,7 @@ def test_poll_failure_triggers_reconnect_instead_of_killing_the_thread(monkeypat
     _wait_until(lambda: len(buffer) >= 2)
     consumer.stop()
 
-    assert [a.cell_id for a in buffer] == [1, 2]
+    assert [a.incident_id for a in buffer] == ["inc-001", "inc-002"]
     assert len(_FlakyThenHealthyKafkaConsumer.instances) == 2
     assert _FlakyThenHealthyKafkaConsumer.instances[0].closed is True
 

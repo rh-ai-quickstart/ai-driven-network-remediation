@@ -30,9 +30,9 @@ applied at that new entry point too, since none of it lives in this service's ow
 
 This service is a **thin channel layer**: it does not detect anomalies or perform root cause
 analysis itself. That domain logic lives in [`ran-anomaly-detector`](../ran-anomaly-detector)
-(rule-based detection) and the upstream `ran-rca-service` (LLM root cause analysis + RAG
-recommended fix retrieval). This service only builds a conversational prompt from already-
-enriched anomaly data and formats the LLM's reply.
+(ML-based detection via [`ran-ml-service`](../ran-ml-service)) and the upstream `ran-rca-service`
+(LLM root cause analysis + RAG recommended fix retrieval). This service only builds a conversational
+prompt from already-enriched anomaly data and formats the LLM's reply.
 
 This is an independent workflow/deployment from `hub/chatbot-service` (the network remediation
 NOC chatbot): different domain, different Kafka topics, different persona/prompt, and it can be
@@ -67,41 +67,44 @@ every (re)connect, so anomalies still on that topic will resurface then.
 
 That topic is populated by [`ran-rca-service`](../ran-rca-service) (LLM root cause analysis + RAG-
 based recommended fix), which enriches each anomaly detected by
-[`ran-anomaly-detector`](../ran-anomaly-detector) with `root_cause` and `recommended_fix`, matching
-this output contract (`contracts/ran-anomaly-enriched.schema.json`):
+[`ran-anomaly-detector`](../ran-anomaly-detector) (via [`ran-ml-service`](../ran-ml-service) Mantis
+AD) with `root_cause` and `recommended_fix`, matching this output contract
+(`contracts/ran-anomaly-enriched.schema.json`):
 
 ```json
 {
-  "cell_id": 42,
-  "band": "Band 29",
-  "anomaly_type": "LowRsrp",
-  "anomaly": "Low RSRP: -125.0 dBm < -110.0 dBm",
-  "root_cause": "Low RSRP typically indicates poor radio conditions, possibly due to distance, interference, or physical obstructions.",
-  "recommended_fix": "Refer to Baicells documentation Section 4.2, Page 15 — Antenna Tilt Adjustment"
+  "incident_id": "a3f7c2d1",
+  "zone": "A",
+  "application": "Twitch",
+  "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
+  "ad_label": "anomalous",
+  "ad_confidence": 0.9995,
+  "root_cause": "Signal degradation consistent with antenna misalignment...",
+  "recommended_fix": "Verify antenna tilt per vendor guide Section 4.3.2..."
 }
 ```
 
 ## Demo trigger
 
-[`demo.py`](src/ran_chatbot_service/demo.py) builds a single-row CSV reading matching
-[`ran-anomaly-detector`](../ran-anomaly-detector)'s `csv_mapper.py` column format and publishes it
-straight to `DEMO_METRICS_TOPIC` (`ran-combined-metrics` by default) — the same real input topic
-real KPI data arrives on. This service never talks to `ran-anomaly-detector` directly: everything
-downstream (detection -> RCA -> this service's own `AnomaliesConsumer` buffer) is the already-
-running real pipeline, exactly like `hub/chatbot-service`'s `POST /api/demo/trigger` publishes
-straight to `system-alerts` rather than calling `agent-service`.
+[`demo.py`](src/ran_chatbot_service/demo.py) loads a checked-in TelecomTS fixture from the
+[`telco-oran`](../telco-oran) catalog and publishes it as a JSON sample straight to
+`DEMO_METRICS_TOPIC` (`ran-combined-metrics` by default) — the same real input topic real data
+arrives on. This service never talks to `ran-anomaly-detector` directly: everything downstream
+(ML detection -> RCA -> this service's own `AnomaliesConsumer` buffer) is the already-running real
+pipeline.
 
-Two scenarios, using reserved `cell_id`s (`9001`/`9002`) and `city: "Demo City"` so they're
-unmistakably synthetic in the UI:
+Available scenarios (from `hub/telco-oran/src/telco_oran/fixtures/`):
 
-| Scenario | Fires | Notes |
+| Scenario | Expected AD result | TelecomTS class |
 |---|---|---|
-| `low_signal` (default) | `LowRsrp` only | Clean single-anomaly demo (`rsrp=-125.0` dBm) |
-| `cell_outage` | `CellOutage` + `LowRsrp` + `SinrDegradation` | All three fire off one reading; each gets its own RCA pass, so expect them to appear over ~45-60s, not all at once |
+| `antenna_failure` (default) | Anomalous (>99% confidence) | Antenna Failure |
+| `high_congestion_sudden` | Anomalous (>90%) | High Network Congestion (Sudden Spike) |
+| `co_channel_interference_severe` | Anomalous (>90%) | Co-Channel Interference (Severe) |
+| `doppler_shift_severe` | Anomalous (>95%) | Doppler Shift (Severe) |
+| `normal_traffic` | Normal (no anomaly published) | Normal |
 
-**Prerequisite:** `ran-anomaly-detector` must actually be running for the trigger to have any
-downstream effect (`ranAnomalyDetector.enabled` in Helm, on by default as part of the Telco/O-RAN
-use case — see `docs/RAN-DEMO-SCRIPT.md`).
+**Prerequisite:** `ran-anomaly-detector` AND `ran-ml-service` must be running for the trigger to
+have any downstream effect — see `docs/RAN-DEMO-SCRIPT.md`.
 
 ## Usage
 

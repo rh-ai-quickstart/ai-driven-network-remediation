@@ -49,7 +49,7 @@ from .config import (
     MODEL_TIMEOUT_SECONDS,
     SSL_VERIFY,
 )
-from .demo import DEFAULT_SCENARIO, build_demo_csv, publish_demo_metrics
+from .demo import DEFAULT_SCENARIO, build_demo_sample, publish_demo_metrics
 from .kafka import AnomaliesConsumer
 from .models import EnrichedAnomaly, ModelSource
 
@@ -178,19 +178,15 @@ def clear_anomalies(request: Request) -> dict:
 
 @app.post("/api/demo/trigger")
 async def trigger_demo(req: DemoTriggerRequest, request: Request) -> dict:
-    """Publish a synthetic RAN KPI reading straight to ran-combined-metrics —
+    """Publish a TelecomTS fixture sample straight to ran-combined-metrics —
     the same real input topic ran-anomaly-detector consumes from. Everything
     downstream (detection -> RCA -> this service's own buffer) is the real,
-    already-running pipeline; this only injects one fresh reading into it.
+    already-running pipeline; this only injects one fresh sample into it.
     """
-    csv_blob, meta = build_demo_csv(req.scenario)
+    json_blob, meta = build_demo_sample(req.scenario)
     try:
-        offset = await asyncio.to_thread(publish_demo_metrics, csv_blob)
+        offset = await asyncio.to_thread(publish_demo_metrics, json_blob)
     except Exception:
-        # Don't expose str(exc) to the client: Kafka producer failures (e.g.
-        # NoBrokersAvailable, KafkaTimeoutError) can include broker
-        # addresses/DNS names in their message. The full exception + stack
-        # trace is already captured server-side by logger.exception above.
         logger.exception("Failed to publish demo RAN metrics for scenario=%s", req.scenario)
         return JSONResponse(
             status_code=502,
@@ -199,8 +195,7 @@ async def trigger_demo(req: DemoTriggerRequest, request: Request) -> dict:
                 "status": "error",
                 "error": "Failed to publish demo metrics to Kafka",
                 "scenario": meta["scenario"],
-                "cell_id": meta["cell_id"],
-                "band": meta["band"],
+                "incident_id": meta["incident_id"],
             },
         )
 
@@ -210,8 +205,7 @@ async def trigger_demo(req: DemoTriggerRequest, request: Request) -> dict:
         "timestamp": utc_now(),
         "status": "queued",
         "scenario": meta["scenario"],
-        "cell_id": meta["cell_id"],
-        "band": meta["band"],
+        "incident_id": meta["incident_id"],
         "topic": DEMO_METRICS_TOPIC,
         "kafka_offset": offset,
     }

@@ -9,18 +9,20 @@ from unittest.mock import MagicMock
 from ran_rca_service.models import RCAState
 
 SAMPLE_ANOMALY = {
-    "cell_id": 42,
-    "band": "Band 29",
-    "anomaly_type": "LowRsrp",
-    "anomaly": "Low RSRP: -125.0 dBm (threshold: -110 dBm) for cell 42 on Band 29",
+    "incident_id": "test-001",
+    "zone": "A",
+    "application": "Twitch",
+    "kpi_window": [{"RSRP": -85.0, "DL_BLER": 0.1}] * 128,
+    "ad_label": "anomalous",
+    "ad_confidence": 0.94,
 }
 
 CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
 VALID_LLM_JSON = json.dumps(
     {
-        "root_cause": "Downlink interference from adjacent cell on Band 29 causing RSRP degradation below -110 dBm threshold (see 3GPP TS 38.214, Section 5.1.1).",
-        "recommended_fix": "Adjust PCI and downlink power parameters for cell 42 per vendor O-RAN configuration guide, Section 4.3.2, Table 4-5.",
+        "root_cause": "Severe signal degradation in zone A detected by Mantis AD with 94% confidence. Pattern consistent with antenna misalignment causing RSRP drop and increased BLER (see 3GPP TS 38.214, Section 5.1.1).",
+        "recommended_fix": "Inspect antenna alignment for the affected zone per vendor O-RAN configuration guide, Section 4.3.2. Verify physical tilt and azimuth against planned values.",
     }
 )
 
@@ -42,10 +44,12 @@ def make_state(**overrides) -> RCAState:
 
 def project_enriched(state: RCAState, result: dict) -> dict:
     return {
-        "cell_id": state.cell_id,
-        "band": state.band,
-        "anomaly_type": state.anomaly_type,
-        "anomaly": state.anomaly,
+        "incident_id": state.incident_id,
+        "zone": state.zone,
+        "application": state.application,
+        "kpi_window": state.kpi_window,
+        "ad_label": state.ad_label,
+        "ad_confidence": state.ad_confidence,
         "root_cause": result["root_cause"],
         "recommended_fix": result["recommended_fix"],
     }

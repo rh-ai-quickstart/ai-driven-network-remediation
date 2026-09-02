@@ -1,74 +1,77 @@
-"""Unit tests for demo.py's CSV-building logic (no Kafka)."""
+"""Unit tests for demo.py's fixture catalog trigger logic (no Kafka)."""
 
-import csv
-import io
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ran_chatbot_service.demo import CSV_COLUMNS, build_demo_csv, publish_demo_metrics
+from ran_chatbot_service.demo import build_demo_sample, publish_demo_metrics
 
 
-def _parse(csv_blob: str) -> list[dict]:
-    return list(csv.DictReader(io.StringIO(csv_blob)))
+class TestBuildDemoSample:
+    def test_antenna_failure_returns_valid_json_and_meta(self):
+        json_blob, meta = build_demo_sample("antenna_failure")
 
+        assert meta["scenario"] == "antenna_failure"
+        assert meta["incident_id"]
+        assert meta["zone"]
+        assert meta["application"]
 
-class TestBuildDemoCsv:
-    def test_low_signal_has_expected_header_and_cell(self):
-        csv_blob, meta = build_demo_csv("low_signal")
-        rows = _parse(csv_blob)
+        payload = json.loads(json_blob)
+        assert "incident_id" in payload
+        assert "zone" in payload
+        assert "application" in payload
+        assert "kpi_window" in payload
+        assert len(payload["kpi_window"]) == 128
 
-        assert meta == {"scenario": "low_signal", "cell_id": 9001, "band": "Band 71"}
-        assert len(rows) == 1
-        assert rows[0]["cell_id"] == "9001"
-        assert rows[0]["band"] == "Band 71"
-        assert rows[0]["city"] == "Demo City"
-        assert csv_blob.splitlines()[0].split(",") == list(CSV_COLUMNS)
+    def test_normal_traffic_scenario(self):
+        json_blob, meta = build_demo_sample("normal_traffic")
 
-    def test_low_signal_only_breaches_the_low_rsrp_threshold(self):
-        """Regression test: this scenario must fire exactly one anomaly type
-        (LowRsrp) in the real detector, not also SinrDegradation/CellOutage."""
-        csv_blob, meta = build_demo_csv("low_signal")
-        row = _parse(csv_blob)[0]
+        assert meta["scenario"] == "normal_traffic"
+        payload = json.loads(json_blob)
+        assert len(payload["kpi_window"]) == 128
 
-        assert float(row["rsrp"]) < -110.0
-        assert float(row["sinr"]) >= 0.0
-        assert float(row["throughput_mbps"]) != 0.0
-        assert meta["cell_id"] == 9001
+    def test_high_congestion_scenario(self):
+        json_blob, meta = build_demo_sample("high_congestion_sudden")
 
-    def test_cell_outage_breaches_all_cell_outage_thresholds(self):
-        """Regression test: this scenario must satisfy every CellOutage
-        condition (see telco_oran.domain.anomaly_detector) so it fires
-        CellOutage + LowRsrp + SinrDegradation simultaneously."""
-        csv_blob, meta = build_demo_csv("cell_outage")
-        row = _parse(csv_blob)[0]
-
-        assert meta == {"scenario": "cell_outage", "cell_id": 9002, "band": "Band 29"}
-        assert int(row["ues_usage"]) == 0
-        assert float(row["throughput_mbps"]) == 0.0
-        assert float(row["sinr"]) <= -10.0
-        assert float(row["rsrp"]) <= -120.0
-        assert float(row["rsrq"]) <= -20.0
+        assert meta["scenario"] == "high_congestion_sudden"
+        payload = json.loads(json_blob)
+        assert len(payload["kpi_window"]) == 128
 
     def test_unknown_scenario_falls_back_to_default(self):
-        csv_blob, meta = build_demo_csv("not-a-real-scenario")
-        assert meta["scenario"] == "low_signal"
-        assert meta["cell_id"] == 9001
-        assert "9001" in csv_blob
+        json_blob, meta = build_demo_sample("not-a-real-scenario")
+
+        assert meta["scenario"] == "antenna_failure"
+        payload = json.loads(json_blob)
+        assert len(payload["kpi_window"]) == 128
 
     def test_case_and_whitespace_insensitive(self):
-        _, meta = build_demo_csv("  Cell_Outage  ")
-        assert meta["scenario"] == "cell_outage"
+        _, meta = build_demo_sample("  Antenna_Failure  ")
+        assert meta["scenario"] == "antenna_failure"
 
-    def test_datetime_is_a_valid_fresh_iso_timestamp(self):
-        from datetime import datetime
+    def test_kpi_window_has_18_channels_per_timestep(self):
+        json_blob, _ = build_demo_sample("antenna_failure")
+        payload = json.loads(json_blob)
+        timestep = payload["kpi_window"][0]
 
-        csv_blob, _ = build_demo_csv("low_signal")
-        row = _parse(csv_blob)[0]
+        expected_channels = {
+            "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB",
+            "UL_SNR", "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer",
+            "PRBs_DL_Current", "PRBs_UL_Current", "PRB_Utilization_DL",
+            "PRB_Utilization_UL", "UL_Protocol", "UL_NumberOfPackets",
+            "DL_Protocol", "DL_NumberOfPackets",
+        }
+        assert expected_channels.issubset(set(timestep.keys()))
 
-        # Not asserting against wall-clock time (flaky under CI clock skew),
-        # just that it's a well-formed ISO datetime csv_mapper can parse.
-        datetime.fromisoformat(row["datetime"])
+    def test_each_call_generates_unique_incident_id(self):
+        _, meta1 = build_demo_sample("antenna_failure")
+        _, meta2 = build_demo_sample("antenna_failure")
+        assert meta1["incident_id"] != meta2["incident_id"]
+
+    def test_meta_does_not_contain_cell_id_or_band(self):
+        _, meta = build_demo_sample("antenna_failure")
+        assert "cell_id" not in meta
+        assert "band" not in meta
 
 
 class TestPublishDemoMetrics:
@@ -78,25 +81,18 @@ class TestPublishDemoMetrics:
         mock_producer.send.return_value.get.return_value = MagicMock(offset=42)
         mock_producer_cls.return_value = mock_producer
 
-        offset = publish_demo_metrics("csv,blob")
+        offset = publish_demo_metrics('{"test": true}')
 
         assert offset == 42
         mock_producer.close.assert_called_once_with(timeout=10)
-        # close() flushes internally, so an explicit flush() call would be
-        # redundant dead work — verify we don't make one.
-        mock_producer.flush.assert_not_called()
 
     @patch("kafka.KafkaProducer")
     def test_closes_producer_even_if_future_get_raises(self, mock_producer_cls):
-        """Regression test: a prior version skipped close() whenever
-        future.get() raised (e.g. a Kafka timeout), leaking the producer's
-        background sender thread and socket connection on every failed
-        demo-trigger click."""
         mock_producer = MagicMock()
         mock_producer.send.return_value.get.side_effect = Exception("Kafka unreachable")
         mock_producer_cls.return_value = mock_producer
 
         with pytest.raises(Exception, match="Kafka unreachable"):
-            publish_demo_metrics("csv,blob")
+            publish_demo_metrics('{"test": true}')
 
         mock_producer.close.assert_called_once_with(timeout=10)

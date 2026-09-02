@@ -497,7 +497,9 @@ agentService:
     periodSeconds: 10
 
 # ══════════════════════════════════════════════════════════════════════
-# RAN Anomaly Detector (Telco/O-RAN) — independent, rule-based workflow.
+# RAN Anomaly Detector (Telco/O-RAN) — ML-based detection workflow.
+# Consumes TelecomTS JSON samples from Kafka, calls an external ML
+# predictor for binary AD, publishes typeless anomalies to ran-anomalies.
 # Gated by global.telcoOran.enabled (the whole Telco/O-RAN use case).
 # ══════════════════════════════════════════════════════════════════════
 
@@ -511,7 +513,7 @@ ranAnomalyDetector:
     kafkaConsumerEnabled: "true"
     kafkaAnomaliesTopic: "ran-anomalies"
     kafkaProducerEnabled: "true"
-    historyWindowSize: "10"
+    detectInferenceUrl: ""
     recentAnomaliesLimit: "100"
   service:
     type: ClusterIP

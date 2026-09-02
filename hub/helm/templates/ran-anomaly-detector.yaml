@@ -35,8 +35,8 @@ spec:
               value: {{ .Values.ranAnomalyDetector.env.kafkaAnomaliesTopic | quote }}
             - name: KAFKA_PRODUCER_ENABLED
               value: {{ .Values.ranAnomalyDetector.env.kafkaProducerEnabled | quote }}
-            - name: HISTORY_WINDOW_SIZE
-              value: {{ .Values.ranAnomalyDetector.env.historyWindowSize | quote }}
+            - name: DETECT_INFERENCE_URL
+              value: {{ .Values.ranAnomalyDetector.env.detectInferenceUrl | quote }}
             - name: RECENT_ANOMALIES_LIMIT
               value: {{ .Values.ranAnomalyDetector.env.recentAnomaliesLimit | quote }}
           ports:

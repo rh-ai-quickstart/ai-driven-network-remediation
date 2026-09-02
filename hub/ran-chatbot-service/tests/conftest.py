@@ -6,21 +6,19 @@ from ran_chatbot_service import app
 from ran_chatbot_service.models import EnrichedAnomaly
 
 SAMPLE_ANOMALY_DICT = {
-    "cell_id": 42,
-    "band": "Band 29",
-    "anomaly_type": "LowRsrp",
-    "anomaly": "Low RSRP: -125.0 dBm < -110.0 dBm",
-    "root_cause": "Poor radio conditions.",
-    "recommended_fix": "Section 4.2 — Antenna Tilt Adjustment",
+    "incident_id": "test-001",
+    "zone": "A",
+    "application": "Twitch",
+    "kpi_window": [{"RSRP": -85.0, "DL_BLER": 0.1}] * 128,
+    "ad_label": "anomalous",
+    "ad_confidence": 0.94,
+    "root_cause": "Signal degradation due to antenna misalignment in zone A.",
+    "recommended_fix": "Section 4.2 — Verify antenna tilt and azimuth alignment.",
 }
 
 
 @pytest.fixture()
 def client():
-    # Patch out the real background Kafka consumer so the lifespan startup event
-    # doesn't try to connect to a real broker; using TestClient as a context
-    # manager triggers that lifespan (startup populates app.state.recent_anomalies
-    # / app.state.kafka_consumer, shutdown calls consumer.stop()).
     with patch("ran_chatbot_service.AnomaliesConsumer"):
         with TestClient(app) as test_client:
             yield test_client

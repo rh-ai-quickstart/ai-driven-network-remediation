@@ -99,7 +99,7 @@ class TestHandleAnomalyMessage:
             return_value={
                 **SAMPLE_ANOMALY,
                 "context_snippets": [],
-                "rag_query_used": SAMPLE_ANOMALY["anomaly"],
+                "rag_query_used": "5G anomaly detection",
                 "root_cause": "stub root cause",
                 "recommended_fix": "stub fix",
             }
@@ -184,7 +184,7 @@ class TestHandleAnomalyMessage:
         _handle_anomaly_message(raw, graph, None, "topic", buffer)
 
         assert len(buffer) == 1
-        assert buffer[0]["cell_id"] == 42
+        assert buffer[0]["incident_id"] == "test-001"
         assert buffer[0]["root_cause"] == ""
         assert buffer[0]["recommended_fix"] == ""
 

@@ -1,30 +1,53 @@
 # ran-anomaly-detector
 
-Rule-based RAN/O-RAN anomaly detection workflow. Consumes RAN KPI readings (CSV) from the
-`ran-combined-metrics` Kafka topic, maps them onto the [`telco-oran`](../telco-oran) domain model
-(`Cell`, `RanKpiRecord`, `CellBandMetrics`), and runs the existing deterministic `AnomalyDetector`
-against a rolling per-cell/band history — no LLM involved.
+ML-based RAN/O-RAN anomaly detection orchestrator. Consumes TelecomTS JSON samples (18 KPI channels
+× 128 timesteps) from the `ran-combined-metrics` Kafka topic, calls the `ran-ml-service` predictor
+via HTTP (`POST /v1/detect`), and publishes typeless anomalies to `ran-anomalies` only when the
+Mantis AD model says anomalous.
 
-This is an independent workflow/deployment from `agent-service`: it does not touch the existing
-pod-failure remediation LangGraph, and can be enabled/disabled separately in Helm.
+This is a stream client — it does not run the model itself. The model runs in `ran-ml-service`
+(a separate FastAPI service backed by Mantis-8M on OpenShift AI or local `uv run`).
 
 ## Output
 
-For each detected anomaly, one JSON record is produced:
+For each detected anomaly, one JSON record is published to `ran-anomalies`:
 
 ```json
 {
-  "cell_id": 42,
-  "band": "Band 29",
-  "anomaly_type": "LowRsrp",
-  "anomaly": "Low RSRP: -125.0 dBm < -110.0 dBm"
+  "incident_id": "a3f7c2d1",
+  "zone": "A",
+  "application": "Twitch",
+  "kpi_window": [ /* 128 timesteps × 18 channels */ ],
+  "ad_label": "anomalous",
+  "ad_confidence": 0.9995
 }
 ```
 
-This service only logs/exposes anomalies (via `/anomalies`), kept in a bounded in-memory buffer —
-no database or object storage is used, confirmed as sufficient by design. LLM-based root cause
-analysis and RAG-based recommended fixes are separate, planned follow-up work (extending this
-output with `root_cause`/`recommended_fix` fields).
+Normal samples (ad_label="normal") are **never** published — only anomalous windows reach
+downstream (ran-rca-service, chatbot).
+
+See `contracts/ran-anomalies.schema.json` for the full JSON Schema.
+
+## Configuration
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `DETECT_INFERENCE_URL` | *(required)* | Full URL to the detect predictor (e.g., `http://hub-ran-ml-service:8080/v1/detect`) |
+| `KAFKA_BOOTSTRAP` | `kafka:9092` | Kafka bootstrap servers |
+| `KAFKA_METRICS_TOPIC` | `ran-combined-metrics` | Input topic (JSON TelecomTS samples) |
+| `KAFKA_ANOMALIES_TOPIC` | `ran-anomalies` | Output topic (anomalies only) |
+| `KAFKA_CONSUMER_ENABLED` | `true` | Enable Kafka consumption |
+| `KAFKA_PRODUCER_ENABLED` | `true` | Enable Kafka publishing |
+| `RECENT_ANOMALIES_LIMIT` | `100` | In-memory buffer size for `/anomalies` endpoint |
+
+## Readiness
+
+`/ready` returns 503 unless **both**:
+1. Kafka consumer is connected
+2. The detect predictor (`DETECT_INFERENCE_URL`) is reachable and reports ready
+
+This means Kubernetes will not send traffic to this detector until the ML model is loaded and
+serving. If the predictor pod restarts, this detector will go not-ready until it's back.
 
 ## Usage
 
@@ -32,4 +55,22 @@ output with `root_cause`/`recommended_fix` fields).
 cd hub/ran-anomaly-detector
 uv sync --group dev
 uv run pytest
+```
+
+## Architecture
+
+```
+Kafka (ran-combined-metrics)
+    │ JSON TelecomTS sample
+    ▼
+ran-anomaly-detector
+    │ POST /v1/detect { kpi_window }
+    ▼
+ran-ml-service (Mantis AD)
+    │ { label: "anomalous", confidence: 0.99 }
+    ▼
+ran-anomaly-detector
+    │ publish to ran-anomalies (only if anomalous)
+    ▼
+Kafka (ran-anomalies)
 ```
