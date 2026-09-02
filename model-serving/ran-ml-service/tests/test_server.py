@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-FIXTURES_DIR = Path(__file__).resolve().parents[3] / "hub" / "telco-oran" / "src" / "telco_oran" / "fixtures"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
 @pytest.fixture
@@ -33,19 +33,8 @@ def unloaded_client():
 @pytest.fixture
 def sample_kpi_window():
     fixture_path = FIXTURES_DIR / "antenna_failure.json"
-    if fixture_path.exists():
-        fixture = json.loads(fixture_path.read_text())
-        return fixture["kpi_window"]
-    return [
-        {ch: 0.0 for ch in [
-            "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB",
-            "UL_SNR", "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer",
-            "PRBs_DL_Current", "PRBs_UL_Current", "PRB_Utilization_DL",
-            "PRB_Utilization_UL", "UL_Protocol", "UL_NumberOfPackets",
-            "DL_Protocol", "DL_NumberOfPackets",
-        ]}
-        for _ in range(128)
-    ]
+    fixture = json.loads(fixture_path.read_text())
+    return fixture["kpi_window"]
 
 
 class TestHealthEndpoint:

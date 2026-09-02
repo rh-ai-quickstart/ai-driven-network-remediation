@@ -20,6 +20,12 @@ dependencies = [
 
 [tool.uv.sources]
 mantis-tsfm = { git = "https://github.com/vfeofanov/mantis.git", rev = "9018b98b" }
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [project.scripts]
 ran-ml-service = "ran_ml_service:main"

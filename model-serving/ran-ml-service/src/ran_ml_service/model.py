@@ -102,7 +102,7 @@ class MantisPredictor:
             return
 
         logger.info("Loading model weights from: {}", weights_path)
-        ckpt = torch.load(weights_path, map_location="cpu", weights_only=False)
+        ckpt = torch.load(weights_path, map_location="cpu", weights_only=True)
 
         task = ckpt.get("task", "anomaly detection")
         n_classes = ckpt.get("n_classes", 2)

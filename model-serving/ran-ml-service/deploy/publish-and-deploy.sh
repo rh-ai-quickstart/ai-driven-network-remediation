@@ -24,10 +24,17 @@ cd "$REPO_ROOT"
 
 HF_REPO="${HF_REPO:-rh-ai-quickstart/mantis-ad-telecomts}"
 WEIGHTS_PATH="${WEIGHTS_PATH:-model-serving/training/models/mantis_pretrained_ad.pt}"
+REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
+if [ -z "${VERSION:-}" ]; then
+    VERSION="$(make -s version)"
+fi
+export REGISTRY VERSION
+IMAGE="${REGISTRY}/noc-ran-ml-service:${VERSION}"
 ISVC_NAMESPACE="${ISVC_NAMESPACE:-model-serving}"
 SKIP_BUILD="${SKIP_BUILD:-}"
 SKIP_HF_UPLOAD="${SKIP_HF_UPLOAD:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-}"
+ISVC_YAML="model-serving/ran-ml-service/deploy/inferenceservice.yaml"
 
 info()  { echo "==> $*"; }
 error() { echo "ERROR: $*" >&2; exit 1; }
@@ -59,8 +66,8 @@ fi
 
 # ── Step 2: Build and push predictor image ─────────────────────────
 if [ -z "$SKIP_BUILD" ]; then
-    info "Step 2: Building and pushing predictor image"
-    make build-push-ran-ml-service
+    info "Step 2: Building and pushing predictor image ($IMAGE)"
+    make build-push-ran-ml-service REGISTRY="$REGISTRY" VERSION="$VERSION"
     info "Image pushed"
 else
     info "Step 2: SKIPPED (SKIP_BUILD set)"
@@ -75,7 +82,11 @@ if [ -z "$SKIP_DEPLOY" ]; then
 
     oc create namespace "$ISVC_NAMESPACE" 2>/dev/null || true
 
-    oc apply -f model-serving/ran-ml-service/deploy/inferenceservice.yaml
+    TMP_YAML=$(mktemp)
+    trap 'rm -f "$TMP_YAML"' EXIT
+    sed "s|image: .*noc-ran-ml-service:.*|image: ${IMAGE}|" "$ISVC_YAML" > "$TMP_YAML"
+    info "Applying InferenceService with image $IMAGE"
+    oc apply -f "$TMP_YAML"
 
     info "Waiting for InferenceService to become ready (timeout: 5m)..."
     oc wait --for=condition=Ready inferenceservice/ran-ml-service \
