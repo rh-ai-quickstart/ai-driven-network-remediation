@@ -1,0 +1,42 @@
+[project]
+name = "ran-ml-service"
+version = "0.1.0"
+description = "ML inference service for RAN anomaly classification using TelecomTS models"
+authors = [
+    { name = "rh-ai-quickstart" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "telco-oran",
+    "fastapi>=0.115",
+    "loguru>=0.7.0",
+    "numpy>=2.0",
+    "pydantic>=2.0.0",
+    "torch>=2.0",
+    "uvicorn>=0.34",
+]
+
+[project.optional-dependencies]
+local = ["mantis-tsfm"]
+mlflow = ["mlflow"]
+
+[tool.uv.sources]
+telco-oran = { path = "../telco-oran" }
+
+[project.scripts]
+ran-ml-service = "ran_ml_service.server:start"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "httpx2>=0.1",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=1.4.0",
+]

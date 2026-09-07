@@ -12,6 +12,9 @@ SAMPLE_ANOMALY_DICT = {
     "anomaly": "Low RSRP: -125.0 dBm < -110.0 dBm",
     "root_cause": "Poor radio conditions.",
     "recommended_fix": "Section 4.2 — Antenna Tilt Adjustment",
+    "ml_root_cause_class": "",
+    "ml_confidence": 0.0,
+    "ml_steer_used": False,
 }
 
 

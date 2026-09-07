@@ -55,7 +55,14 @@ def _handle_anomaly_message(
         result = loop.run_until_complete(graph.ainvoke(anomaly))
     except Exception:
         logger.exception("Graph invocation failed, forwarding anomaly unenriched")
-        result = {**anomaly, "root_cause": "", "recommended_fix": ""}
+        result = {
+            **anomaly,
+            "root_cause": "",
+            "recommended_fix": "",
+            "ml_root_cause_class": "",
+            "ml_confidence": 0.0,
+            "ml_steer_used": False,
+        }
 
     enriched = {
         "cell_id": result["cell_id"],
@@ -64,6 +71,9 @@ def _handle_anomaly_message(
         "anomaly": result["anomaly"],
         "root_cause": result["root_cause"],
         "recommended_fix": result["recommended_fix"],
+        "ml_root_cause_class": result.get("ml_root_cause_class", ""),
+        "ml_confidence": result.get("ml_confidence", 0.0),
+        "ml_steer_used": result.get("ml_steer_used", False),
     }
 
     logger.info("RAN anomaly enriched: cell_id={} type={}", enriched["cell_id"], enriched["anomaly_type"])

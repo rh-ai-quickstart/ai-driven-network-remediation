@@ -27,6 +27,9 @@ class EnrichedAnomaly(BaseModel):
     anomaly: str
     root_cause: str
     recommended_fix: str
+    ml_root_cause_class: str = ""
+    ml_confidence: float = 0.0
+    ml_steer_used: bool = False
 
 
 class ModelSource(StrEnum):

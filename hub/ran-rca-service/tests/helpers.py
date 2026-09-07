@@ -15,6 +15,8 @@ SAMPLE_ANOMALY = {
     "anomaly": "Low RSRP: -125.0 dBm (threshold: -110 dBm) for cell 42 on Band 29",
 }
 
+SAMPLE_KPI_WINDOW = [[float(i + j) for j in range(18)] for i in range(128)]
+
 CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
 VALID_LLM_JSON = json.dumps(
@@ -23,6 +25,12 @@ VALID_LLM_JSON = json.dumps(
         "recommended_fix": "Adjust PCI and downlink power parameters for cell 42 per vendor O-RAN configuration guide, Section 4.3.2, Table 4-5.",
     }
 )
+
+SAMPLE_CLASSIFY_RESPONSE = {
+    "class": "Antenna Failure",
+    "confidence": 0.92,
+    "class_index": 0,
+}
 
 
 def make_llm_response(content=VALID_LLM_JSON):
@@ -48,4 +56,7 @@ def project_enriched(state: RCAState, result: dict) -> dict:
         "anomaly": state.anomaly,
         "root_cause": result["root_cause"],
         "recommended_fix": result["recommended_fix"],
+        "ml_root_cause_class": result.get("ml_root_cause_class", ""),
+        "ml_confidence": result.get("ml_confidence", 0.0),
+        "ml_steer_used": result.get("ml_steer_used", False),
     }

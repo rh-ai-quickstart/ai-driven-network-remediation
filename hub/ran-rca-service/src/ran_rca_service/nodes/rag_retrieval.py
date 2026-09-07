@@ -22,7 +22,10 @@ def _get_rag_client() -> RagClient:
 
 
 async def rag_retrieval_node(state: RCAState) -> dict:
-    query = f"{state.anomaly_type} {state.anomaly} {state.band}"
+    if state.ml_steer_used and state.ml_root_cause_class:
+        query = f"{state.ml_root_cause_class} {state.anomaly_type} {state.band}"
+    else:
+        query = f"{state.anomaly_type} {state.anomaly} {state.band}"
     try:
         snippets = await _get_rag_client().search(query)
         return {"context_snippets": snippets, "rag_query_used": query}

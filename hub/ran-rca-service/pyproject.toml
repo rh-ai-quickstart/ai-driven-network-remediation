@@ -8,8 +8,10 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "shared[kafka,rag]",
+    "telco-oran",
     "click>=8.1.0",
     "fastapi>=0.115",
+    "httpx>=0.28",
     "kafka-python-ng>=2.2",
     "langchain-openai>=0.3",
     "langgraph>=0.2",
@@ -21,6 +23,7 @@ dependencies = [
 
 [tool.uv.sources]
 shared = { path = "../shared" }
+telco-oran = { path = "../telco-oran" }
 
 [project.scripts]
 ran-rca-service = "ran_rca_service:main"
