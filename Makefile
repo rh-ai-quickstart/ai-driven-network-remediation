@@ -882,51 +882,62 @@ multi-cluster-template-tests: helm-depend
 # Starts port-forwards for services used by tests/generic/ (MCP servers,
 # ingestion-pipeline, llamastack). Each target appends use-case-specific
 # port-forwards and its own trap/pytest line.
-define shared_port_forwards
-oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
-PF_INGESTION_PID=$$!; \
-oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
-PF_LLAMASTACK_PID=$$!; \
-PF_LOKISTACK_PID=""; \
-if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
-	PF_LOKISTACK_PID=$$!; \
-fi; \
-oc port-forward -n $(NAMESPACE) svc/mcp-noc-kafka 8003:8000 & \
-PF_KAFKA_PID=$$!; \
-oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
-PF_AAP_PID=$$!; \
-oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
-PF_SERVICENOW_PID=$$!;
-endef
-
-SHARED_PF_PIDS = $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID
-
 .PHONY: network-integration-tests
 network-integration-tests:
-	$(shared_port_forwards) \
+	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
+	PF_INGESTION_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
+	PF_LLAMASTACK_PID=$$!; \
+	PF_LOKISTACK_PID=""; \
+	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
+		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
+		PF_LOKISTACK_PID=$$!; \
+	fi; \
+	oc port-forward -n $(NAMESPACE) svc/mcp-noc-kafka 8003:8000 & \
+	PF_KAFKA_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
+	PF_AAP_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
+	PF_SERVICENOW_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-openshift 8001:8000 & \
 	PF_OPENSHIFT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
 	PF_CHATBOT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
 	PF_AGENT_PID=$$!; \
-	trap "kill $(SHARED_PF_PIDS) $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID" EXIT; \
+	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
 	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/network -v
 
 .PHONY: telco-integration-tests
 telco-integration-tests:
-	$(shared_port_forwards) \
+	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
+	PF_INGESTION_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
+	PF_LLAMASTACK_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	trap "kill $(SHARED_PF_PIDS) $$PF_RAN_CHATBOT_PID" EXIT; \
+	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
+	uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:
-	$(shared_port_forwards) \
+	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
+	PF_INGESTION_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
+	PF_LLAMASTACK_PID=$$!; \
+	PF_LOKISTACK_PID=""; \
+	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
+		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
+		PF_LOKISTACK_PID=$$!; \
+	fi; \
+	oc port-forward -n $(NAMESPACE) svc/mcp-noc-kafka 8003:8000 & \
+	PF_KAFKA_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
+	PF_AAP_PID=$$!; \
+	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
+	PF_SERVICENOW_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/mcp-noc-openshift 8001:8000 & \
 	PF_OPENSHIFT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
@@ -935,7 +946,7 @@ integration-tests:
 	PF_AGENT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	trap "kill $(SHARED_PF_PIDS) $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID" EXIT; \
+	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
 	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic $(if $(filter true,$(ENABLE_TELCO_ORAN)),tests/telco) $(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),tests/network)
 
