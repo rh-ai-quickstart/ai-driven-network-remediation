@@ -30,7 +30,7 @@ REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" EDGE_NAMESP
 	AUTO_INGEST_ON_STARTUP=false make helm-install
 
 echo "Creating edge workload in namespace ${EDGE_NAMESPACE}"
-EDGE_NAMESPACE="${EDGE_NAMESPACE}" make deploy-edge-workload	
+EDGE_NAMESPACE="${EDGE_NAMESPACE}" make deploy-edge-workload
 
 echo "Running Network integration tests"
 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make network-integration-tests
