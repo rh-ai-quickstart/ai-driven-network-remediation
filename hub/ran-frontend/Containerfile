@@ -4,6 +4,7 @@ ARG BUILDPLATFORM
 # under amd64 emulation on Apple Silicon. The generated dist/ files are
 # architecture-agnostic and can be copied into the target runtime image.
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
+ARG VITE_ENABLE_NETWORK_REMEDIATION=true
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci

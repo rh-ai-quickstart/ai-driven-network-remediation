@@ -25,8 +25,17 @@ export default function App() {
   const baseUrl = useMemo(getBaseUrl, []);
   const { summary, integrations, deps, lastUpdated } = usePolling(baseUrl);
 
+  const showTelcoTab = import.meta.env.VITE_ENABLE_TELCO_ORAN !== "false";
+  const telcoUrl = window.location.origin.replace("hub-frontend", "hub-ran-frontend");
+
   return (
     <main className="page">
+      {showTelcoTab && (
+        <nav className="tab-bar">
+          <span className="tab-btn active">Network</span>
+          <a href={telcoUrl} className="tab-btn">Telco ORAN</a>
+        </nav>
+      )}
       <DegradedBanner deps={deps} />
       <HeaderMetrics
         integrations={integrations}
