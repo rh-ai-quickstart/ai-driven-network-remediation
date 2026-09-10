@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable
 
 from ogx_client import OgxClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -13,6 +16,25 @@ class VectorStoreSummary:
     name: str | None
     status: str | None
     file_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class IngestItem:
+    filename: str
+    content: str
+    attributes: dict[str, str | float | bool] | None = None
+
+
+@dataclass(frozen=True)
+class FailedIngestItem:
+    item: IngestItem
+    reason: str
+
+
+@dataclass(frozen=True)
+class IngestBatchResult:
+    succeeded: list[VectorStoreFileSummary]
+    failed: list[FailedIngestItem]
 
 
 @dataclass(frozen=True)
@@ -95,47 +117,56 @@ class LlamaStackVectorStoreClient:
             file_counts=created.file_counts.model_dump(),
         )
 
-    def ingest_text(
+    def ingest_text_batch(
         self,
         *,
-        filename: str,
-        content: str,
-        attributes: dict[str, str | float | bool] | None = None,
+        vector_store_id: str,
+        items: list[IngestItem],
         chunk_size_tokens: int | None = None,
         chunk_overlap_tokens: int | None = None,
-    ) -> VectorStoreFileSummary:
+    ) -> IngestBatchResult:
         chunk_size_tokens = chunk_size_tokens if chunk_size_tokens is not None else self._chunk_size_tokens
         chunk_overlap_tokens = chunk_overlap_tokens if chunk_overlap_tokens is not None else self._chunk_overlap_tokens
-        vector_store = self.ensure_vector_store()
-        created_file = self._client.files.create(
-            file=(filename, content.encode("utf-8"), "text/markdown"),
-            purpose="assistants",
-        )
-        attached_file = self._client.vector_stores.files.create(
-            vector_store.id,
-            file_id=created_file.id,
-            attributes=attributes,
-            chunking_strategy={
-                "type": "static",
-                "static": {
-                    "max_chunk_size_tokens": chunk_size_tokens,
-                    "chunk_overlap_tokens": chunk_overlap_tokens,
-                },
+        chunking_strategy = {
+            "type": "static",
+            "static": {
+                "max_chunk_size_tokens": chunk_size_tokens,
+                "chunk_overlap_tokens": chunk_overlap_tokens,
             },
-        )
-        return VectorStoreFileSummary(
-            id=attached_file.id,
-            vector_store_id=attached_file.vector_store_id,
-            status=attached_file.status,
-            attributes=attached_file.attributes,
-        )
+        }
+
+        logger.info("Ingesting %d files into vector store %s", len(items), vector_store_id)
+        succeeded: list[VectorStoreFileSummary] = []
+        failed: list[FailedIngestItem] = []
+        for item in items:
+            try:
+                created_file = self._client.files.create(
+                    file=(item.filename, item.content.encode("utf-8"), "text/markdown"),
+                    purpose="assistants",
+                )
+                attached_file = self._client.vector_stores.files.create(
+                    vector_store_id,
+                    file_id=created_file.id,
+                    attributes=item.attributes,
+                    chunking_strategy=chunking_strategy,
+                )
+                succeeded.append(VectorStoreFileSummary(
+                    id=attached_file.id,
+                    vector_store_id=attached_file.vector_store_id,
+                    status=attached_file.status,
+                    attributes=attached_file.attributes,
+                ))
+            except Exception as exc:
+                logger.exception("Failed to ingest '%s'", item.filename)
+                failed.append(FailedIngestItem(item=item, reason=str(exc)))
+        return IngestBatchResult(succeeded=succeeded, failed=failed)
 
     def get_file_content(
         self,
         *,
         file_id: str,
         vector_store_id: str,
-        wait_timeout_seconds: float = 30,
+        wait_timeout_seconds: float = 300,
         poll_interval_seconds: float = 1,
     ) -> VectorStoreFileContentSummary:
         vector_file = self._wait_for_file_ready(

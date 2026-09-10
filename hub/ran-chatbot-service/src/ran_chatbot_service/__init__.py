@@ -45,6 +45,7 @@ from .config import (
     ENRICHED_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
     MODEL_API_URL,
+    MODEL_HEALTH_URL,
     MODEL_NAME,
     MODEL_TIMEOUT_SECONDS,
     SSL_VERIFY,
@@ -131,7 +132,7 @@ async def ready(request: Request):
     """
     checks: dict[str, bool] = {"kafka": request.app.state.kafka_consumer.is_connected}
 
-    llm_probe = await probe_http(MODEL_API_URL, timeout=2.0, verify=SSL_VERIFY)
+    llm_probe = await probe_http(MODEL_HEALTH_URL, timeout=2.0, verify=SSL_VERIFY)
     checks["llm"] = llm_probe["reachable"]
 
     return {"status": "ready", "checks": checks}

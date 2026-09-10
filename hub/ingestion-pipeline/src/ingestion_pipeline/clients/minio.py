@@ -79,6 +79,24 @@ class MinioDocumentClient:
                 response.close()
                 response.release_conn()
 
+    def delete_prefix_objects(self, prefix: str) -> list[str]:
+        """Delete all objects under a prefix. Returns the deleted object names."""
+        from minio.deleteobjects import DeleteObject
+
+        names = [obj.object_name for obj in self._client.list_objects(self._bucket, prefix=prefix, recursive=True)]
+        if not names:
+            return []
+        for error in self._client.remove_objects(self._bucket, [DeleteObject(n) for n in names]):
+            raise S3Error(
+                code=error.code,
+                message=error.message,
+                resource=error.name,
+                request_id=None,
+                host_id=None,
+                response=None,
+            )
+        return names
+
     def load_prefix_text_objects(self, prefix: str) -> list[MinioTextObject]:
         objects: list[MinioTextObject] = []
         for obj in self._client.list_objects(self._bucket, prefix=prefix, recursive=True):

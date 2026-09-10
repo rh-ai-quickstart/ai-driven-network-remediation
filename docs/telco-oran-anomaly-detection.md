@@ -241,9 +241,11 @@ in-memory approach is intentional and sufficient for this workflow as designed.
 
 **Vendor documentation RAG ingestion, in detail:** [`hub/ingestion-pipeline`](../hub/ingestion-pipeline/)
 (the same service Workflow 1 already used to ingest its runbooks) was extended, not replaced with
-a new service, to also convert and chunk RAN/O-RAN vendor docs (`hub/ingestion-pipeline/telco-docs/`:
-`gnodeb.pdf` — the Baicells gNodeB manual, `ran_metrics_and_anomalies.docx`, and an OpenShift edge
-computing PDF) into their own vector store, `telco_oran_docs` (distinct from Workflow 1's
+a new service, to also convert and chunk RAN/O-RAN vendor docs from
+`hub/ingestion-pipeline/telco-docs/`, split into `mandatory/` (`gnodeb.pdf` — the Baicells gNodeB
+manual, `ran_metrics_and_anomalies.docx`) and `optional/` (an OpenShift edge computing PDF,
+included only when `TELCO_DOCS_INCLUDE_OPTIONAL=true`), into their own vector store,
+`telco_oran_docs` (distinct from Workflow 1's
 `noc_runbooks` store), configured via `TELCO_VECTOR_STORE_NAME` /
 `hub/helm/values.yaml`'s `ingestionPipeline.telcoVectorStoreName`. With
 `ingestionPipeline.autoIngestOnStartup: "true"` (the default), this vector store is populated

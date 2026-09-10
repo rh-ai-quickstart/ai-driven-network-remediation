@@ -2,42 +2,55 @@ import pytest
 
 pytestmark = pytest.mark.telco
 
-# The packaged vendor PDFs are large (500+ pages combined), and each page/section becomes its
-# own vector-store file, so a full ingest run involves hundreds of embedding calls.
+_EXPECTED_DOCS = {
+    "telco-docs/ran_metrics_and_anomalies.docx.md",
+    "telco-docs/gnodeb.pdf.md",
+}
+
+_EXPECTED_SOURCES = {
+    "telco-docs/ran_metrics_and_anomalies.docx",
+    "telco-docs/gnodeb.pdf",
+}
+_EXPECTED_INGESTED_FILES = 121
+_SYNC_TIMEOUT_SECONDS = 300.0
 _INGEST_TIMEOUT_SECONDS = 1200.0
 
 
-def _sync_telco_docs(ingestion_client) -> dict:
-    response = ingestion_client.post("/telco-docs/sync", timeout=_INGEST_TIMEOUT_SECONDS)
-    assert response.status_code == 200
-    return response.json()
-
-
 def test_telco_docs_sync_ingest_and_content_flow(ingestion_client):
-    sync_data = _sync_telco_docs(ingestion_client)
-    assert sync_data["bucket"]
-    assert sync_data["prefix"] == "telco-docs/"
-    assert sync_data["converted_count"] > 0
-    assert any(name.endswith(".md") for name in sync_data["converted_objects"])
+    # sync
+    sync_response = ingestion_client.post("/telco-docs/sync", timeout=_SYNC_TIMEOUT_SECONDS)
+    assert sync_response.status_code == 200
+    sync_data = sync_response.json()
+    assert sync_data["failed_count"] == 0
+    assert sync_data["converted_count"] == len(sync_data["converted_objects"])
+    assert set(sync_data["converted_objects"]) == _EXPECTED_DOCS
 
+    # ingest
     ingest_response = ingestion_client.post("/telco-docs/ingest", timeout=_INGEST_TIMEOUT_SECONDS)
     assert ingest_response.status_code == 200
     ingest_data = ingest_response.json()
-    assert ingest_data["prefix"] == "telco-docs/"
-    assert ingest_data["ingested_count"] > 0
-    assert ingest_data["objects"][0]["id"]
-    assert ingest_data["objects"][0]["vector_store_id"]
-    assert ingest_data["objects"][0]["attributes"]["source_type"] == "vendor_doc"
-    assert ingest_data["objects"][0]["attributes"]["source_name"].startswith("telco-docs/")
+    assert ingest_data["failed_count"] == 0
+    assert ingest_data["ingested_count"] == len(ingest_data["objects"])
+    assert ingest_data["ingested_count"] == _EXPECTED_INGESTED_FILES
+    ingested_sources = {obj["attributes"]["source_name"] for obj in ingest_data["objects"]}
+    assert ingested_sources == _EXPECTED_SOURCES
+    for obj in ingest_data["objects"]:
+        assert obj["id"]
+        assert obj["vector_store_id"]
+        assert obj["attributes"]["source_type"] == "vendor_doc"
 
-    response = ingestion_client.get(
-        f"/vector-store/files/{ingest_data['objects'][0]['id']}/content",
-        params={"vector_store_id": ingest_data["objects"][0]["vector_store_id"]},
+    # verify content retrieval
+    first_obj = ingest_data["objects"][0]
+    content_response = ingestion_client.get(
+        f"/vector-store/files/{first_obj['id']}/content",
+        params={"vector_store_id": first_obj["vector_store_id"]},
+        timeout=_INGEST_TIMEOUT_SECONDS,
     )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["id"] == ingest_data["objects"][0]["id"]
-    assert data["data"]
-    assert data["data"][0]["text"]
-    assert "metadata" in data["data"][0]
-    assert "embedding" in data["data"][0]
+    assert content_response.status_code == 200
+    data = content_response.json()
+    assert data["id"] == first_obj["id"]
+    assert len(data["data"]) > 0
+    for chunk in data["data"]:
+        assert chunk["text"]
+        assert "metadata" in chunk
+        assert "embedding" in chunk
