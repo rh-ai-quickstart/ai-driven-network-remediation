@@ -102,7 +102,7 @@ async def call_model(prompt: str) -> tuple[str, str]:
     Consider replacing with litellm/llama-index if we need streaming,
     multi-model fallback, or token management.
     """
-    if not MODEL_API_URL:
+    if not MODEL_API_URL or not MODEL_NAME:
         return "", "disabled"
     payload = {
         "model": MODEL_NAME,

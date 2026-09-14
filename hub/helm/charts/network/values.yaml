@@ -152,7 +152,7 @@ agentService:
     investigateSystem: ""
   replicaCount: 1
   granite:
-    modelName: "granite-4.0-8b"
+    modelName: ""
   lightspeed:
     url: ""
     token: ""

@@ -201,6 +201,7 @@ version:
 # Helm argument builders
 # ══════════════════════════════════════════════════════════════════════
 
+# LlamaStack registers the model under alias "adnr-llm"; services reference it as adnr-llm/<id>
 helm_adnr_llm_args = \
 	--set llama-stack.models.adnr-llm.enabled=true \
 	--set-string llama-stack.models.adnr-llm.id='$(ADNR_LLM_ID)' \
