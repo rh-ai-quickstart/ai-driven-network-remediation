@@ -177,7 +177,7 @@ class TestBuildLaunchExtraVarsBareDeployment:
         assert result["container"] == "memory-hog"
         assert result["edge_site_id"] == "edge-site-01"
 
-    def test_demo_oom_pod_maps_to_edge_nginx_deployment(self):
+    def test_nginx_edge_pod_maps_to_edge_nginx_deployment(self):
         result = build_launch_extra_vars(
             _log_event(
                 ns="dark-noc-edge",
