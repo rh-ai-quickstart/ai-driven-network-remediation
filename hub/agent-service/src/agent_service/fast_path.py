@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from agent_service.config import FAST_PATH_COOLDOWN_SECONDS, FAST_PATH_LAST_HEAL_ANNOTATION
-from agent_service.utils import derive_deployment_name, invoke_tool
+from agent_service.utils import invoke_tool, resolve_remediation_deployment
 
 _FAST_PATH_FAILURES = frozenset({"OOMKilled"})
 
@@ -60,16 +60,17 @@ async def spoke_fast_path_recent(
     return fast_path_cooldown_active(annotations.get(FAST_PATH_LAST_HEAL_ANNOTATION), cooldown)
 
 
-def target_deployment_name(pod_name: str) -> str | None:
-    """Parent Deployment name from the Kafka pod name, or None.
+def target_deployment_name(pod_name: str, namespace: str = "") -> str | None:
+    """Parent Deployment name from the alert pod, or None.
 
-    Uses the same ReplicaSet suffix strip as AAP extra_vars. Returns None when
-    the name cannot be derived so remediate can continue to AAP.
+    Uses the same rules as AAP extra_vars (including demo nginx-edge → edge-nginx).
+    Returns None when the name cannot be derived so remediate can continue to AAP.
     """
-    derived = derive_deployment_name(pod_name or "")
-    if not derived or derived == pod_name:
+    pod = pod_name or ""
+    deployment = resolve_remediation_deployment(namespace or "", pod)
+    if not deployment or deployment == pod:
         return None
-    return derived
+    return deployment
 
 
 def should_check_fast_path(failure_type: str | None) -> bool:

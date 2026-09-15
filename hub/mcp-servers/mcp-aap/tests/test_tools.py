@@ -141,6 +141,26 @@ class TestListJobTemplates:
         assert result["count"] == 2
         assert {t["name"] for t in result["job_templates"]} == {"alpha", "restart-nginx"}
 
+    def test_follows_relative_pagination_next(self, mock_client, mock_ctx):
+        page1 = {
+            "results": [{"id": 1, "name": "alpha", "description": "", "playbook": "a.yml"}],
+            "next": "/job_templates/?page=2",
+        }
+        page2 = {
+            "results": [{"id": 2, "name": "beta", "description": "", "playbook": "b.yml"}],
+            "next": None,
+        }
+        mock_ctx.get.side_effect = [
+            _mock_response(json_data=page1),
+            _mock_response(json_data=page2),
+        ]
+        mock_client.return_value = mock_ctx
+
+        result = list_job_templates()
+        assert result["success"] is True
+        assert result["count"] == 2
+        assert mock_ctx.get.call_args_list[1][0][0] == "/job_templates/?page=2"
+
     def test_api_error(self, mock_client, mock_ctx):
         mock_ctx.get.return_value = _mock_response(status_code=401)
         mock_client.return_value = mock_ctx

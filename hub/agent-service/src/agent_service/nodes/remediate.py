@@ -138,7 +138,7 @@ def make_remediate_node(config: GraphConfig):
 
         log_event = state.log_event
         if log_event and should_check_fast_path(rca.failure_type):
-            deployment = target_deployment_name(log_event.pod_name)
+            deployment = target_deployment_name(log_event.pod_name, log_event.namespace)
             if deployment and await spoke_fast_path_recent(
                 namespace=log_event.namespace,
                 deployment=deployment,

@@ -27,7 +27,11 @@ from agent_service.evidence import build_evidence_prompt, build_grounding_text, 
 from agent_service.models import RemediationResult
 from agent_service.nodes.rag_retrieval import store_generated_playbook
 from agent_service.playbook_sanitize import fix_ansible_facts, quote_jinja, sanitize_playbook
-from agent_service.utils import build_launch_extra_vars, derive_deployment_name, normalize_component_name
+from agent_service.utils import (
+    build_launch_extra_vars,
+    normalize_component_name,
+    resolve_remediation_deployment,
+)
 from agent_service.utils import invoke_tool as _invoke_tool
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
@@ -448,7 +452,16 @@ async def _resolve_target(extra_vars: dict, llm_summary: dict | None, original_e
         site = edge_site_id or "default cluster"
         return extra_vars, f"target '{candidate}' not found on {site}: {spec.get('error', '')}"
     resolved_pod = spec.get("name") or candidate
-    return {**extra_vars, "pod_name": resolved_pod, "deployment_name": derive_deployment_name(resolved_pod)}, ""
+    deployment = resolve_remediation_deployment(
+        extra_vars.get("namespace", "") or "",
+        resolved_pod,
+    )
+    return {
+        **extra_vars,
+        "pod_name": resolved_pod,
+        "deployment": deployment,
+        "deployment_name": deployment,
+    }, ""
 
 
 async def _execute_in_aap(

@@ -170,9 +170,12 @@ class TestBuildLaunchExtraVarsBareDeployment:
             ),
             None,
         )
-        assert result["deployment_name"]
         assert result["deployment_name"] == "memory-hog"
         assert result["deployment"] == "memory-hog"
+        assert result["namespace"] == "dark-noc-edge"
+        assert result["pod_name"] == "memory-hog"
+        assert result["container"] == "memory-hog"
+        assert result["edge_site_id"] == "edge-site-01"
 
     def test_demo_oom_pod_maps_to_edge_nginx_deployment(self):
         result = build_launch_extra_vars(

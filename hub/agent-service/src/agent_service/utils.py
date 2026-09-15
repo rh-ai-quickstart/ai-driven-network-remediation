@@ -51,12 +51,12 @@ _EDGE_DEMO_NAMESPACE = "dark-noc-edge"
 _EDGE_NGINX_DEPLOYMENT = "edge-nginx"
 
 
-def resolve_remediation_deployment(log_event) -> str:
+def resolve_remediation_deployment(namespace: str, pod_name: str) -> str:
     """Deployment name for restart-nginx and similar playbooks (``deployment`` extra var)."""
-    if not log_event:
+    pod = pod_name or ""
+    ns = namespace or ""
+    if not pod:
         return ""
-    pod = log_event.pod_name or ""
-    ns = log_event.namespace or ""
     derived = derive_deployment_name(pod) or pod
     if derived == _EDGE_NGINX_DEPLOYMENT:
         return _EDGE_NGINX_DEPLOYMENT
@@ -71,7 +71,10 @@ def build_launch_extra_vars(log_event, llm_summary=None, evidence_text="", resou
     """Build the extra_vars dict from a log event for AAP job launches."""
     if not log_event:
         return {}
-    deployment = resolve_remediation_deployment(log_event)
+    deployment = resolve_remediation_deployment(
+        log_event.namespace or "",
+        log_event.pod_name or "",
+    )
     extra_vars = {
         "namespace": log_event.namespace,
         "pod_name": log_event.pod_name,

@@ -33,6 +33,13 @@ def test_target_deployment_name_derives_from_replicaset_pod():
     assert target_deployment_name("payments-api-7d8f9c6b5-abcde") == "payments-api"
 
 
+def test_target_deployment_name_maps_demo_nginx_edge_pod():
+    assert (
+        target_deployment_name("nginx-edge-oom", namespace="dark-noc-edge")
+        == "edge-nginx"
+    )
+
+
 def test_target_deployment_name_returns_none_when_unparseable():
     assert target_deployment_name("other-pod") is None
     assert target_deployment_name("edge-nginx-abc123") is None
