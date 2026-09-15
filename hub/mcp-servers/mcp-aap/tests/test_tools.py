@@ -116,6 +116,31 @@ class TestListJobTemplates:
         assert result["count"] == 0
         assert result["job_templates"] == []
 
+    def test_follows_pagination(self, mock_client, mock_ctx):
+        page1 = {
+            "results": [
+                {"id": 1, "name": "alpha", "description": "", "playbook": "a.yml"},
+            ],
+            "next": "http://aap.example/api/controller/v2/job_templates/?page=2",
+        }
+        page2 = {
+            "results": [
+                {"id": 2, "name": "restart-nginx", "description": "", "playbook": "restart.yml"},
+            ],
+            "next": None,
+        }
+        mock_ctx.base_url = "http://aap.example/api/controller/v2"
+        mock_ctx.get.side_effect = [
+            _mock_response(json_data=page1),
+            _mock_response(json_data=page2),
+        ]
+        mock_client.return_value = mock_ctx
+
+        result = list_job_templates()
+        assert result["success"] is True
+        assert result["count"] == 2
+        assert {t["name"] for t in result["job_templates"]} == {"alpha", "restart-nginx"}
+
     def test_api_error(self, mock_client, mock_ctx):
         mock_ctx.get.return_value = _mock_response(status_code=401)
         mock_client.return_value = mock_ctx

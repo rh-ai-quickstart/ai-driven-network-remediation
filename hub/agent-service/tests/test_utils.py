@@ -172,10 +172,35 @@ class TestBuildLaunchExtraVarsBareDeployment:
         )
         assert result["deployment_name"]
         assert result["deployment_name"] == "memory-hog"
-        assert result["namespace"] == "dark-noc-edge"
-        assert result["pod_name"] == "memory-hog"
-        assert result["container"] == "memory-hog"
-        assert result["edge_site_id"] == "edge-site-01"
+        assert result["deployment"] == "memory-hog"
+
+    def test_demo_oom_pod_maps_to_edge_nginx_deployment(self):
+        result = build_launch_extra_vars(
+            _log_event(
+                ns="dark-noc-edge",
+                pod="nginx-edge-oom",
+                container="nginx",
+                site="edge-01",
+            ),
+            None,
+        )
+        assert result["deployment"] == "edge-nginx"
+        assert result["deployment_name"] == "edge-nginx"
+
+    def test_real_edge_nginx_pod_maps_to_edge_nginx(self):
+        result = build_launch_extra_vars(
+            _log_event(
+                ns="dark-noc-edge",
+                pod="edge-nginx-6b7f8c9d4-x2k9z",
+                container="nginx",
+                site="edge-01",
+            ),
+            None,
+        )
+        assert result["deployment"] == "edge-nginx"
+        assert result["deployment_name"] == "edge-nginx"
+        assert result["pod_name"] == "edge-nginx-6b7f8c9d4-x2k9z"
+        assert result["edge_site_id"] == "edge-01"
 
 
 class TestNormalizeComponentName:

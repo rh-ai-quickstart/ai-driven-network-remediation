@@ -106,6 +106,9 @@ issues/
 once.sh
 prompt.md
 
+# Personal OpenShift lab scripts and env (never commit)
+local/
+
 # Postman Desktop workspace scaffolding (auto-generated)
 /.postman/
 /postman/

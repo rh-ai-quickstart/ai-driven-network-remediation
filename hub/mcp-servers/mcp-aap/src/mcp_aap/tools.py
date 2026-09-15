@@ -32,6 +32,27 @@ def _aap_client() -> httpx.Client:
     )
 
 
+def _paginate_aap_results(client: httpx.Client, path: str) -> list[dict]:
+    """Fetch all pages from a list endpoint (AAP controller v2)."""
+    items: list[dict] = []
+    next_path: str | None = path
+    base = client.base_url
+    while next_path:
+        resp = client.get(next_path)
+        resp.raise_for_status()
+        data = resp.json()
+        items.extend(data.get("results", []))
+        nxt = data.get("next")
+        if not nxt:
+            break
+        if nxt.startswith("http"):
+            prefix = str(base).rstrip("/")
+            next_path = nxt[len(prefix) :] if nxt.startswith(prefix) else nxt
+        else:
+            next_path = nxt
+    return items
+
+
 @mcp.tool()
 def list_job_templates() -> dict:
     """
@@ -42,16 +63,14 @@ def list_job_templates() -> dict:
     """
     try:
         with _aap_client() as client:
-            resp = client.get("/job_templates/?page_size=50")
-            resp.raise_for_status()
-            data = resp.json()
+            rows = _paginate_aap_results(client, "/job_templates/?page_size=200")
     except httpx.HTTPStatusError as e:
         return {"success": False, "error": f"AAP API error: {e.response.status_code}"}
     except httpx.HTTPError as e:
         return {"success": False, "error": f"AAP connection error: {e}"}
 
     templates = []
-    for jt in data.get("results", []):
+    for jt in rows:
         templates.append(
             {
                 "id": jt["id"],

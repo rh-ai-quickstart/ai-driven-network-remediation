@@ -47,21 +47,44 @@ def derive_deployment_name(pod_name: str) -> str:
     return _POD_HASH_SUFFIX.sub("", pod_name) if pod_name else pod_name
 
 
+_EDGE_DEMO_NAMESPACE = "dark-noc-edge"
+_EDGE_NGINX_DEPLOYMENT = "edge-nginx"
+
+
+def resolve_remediation_deployment(log_event) -> str:
+    """Deployment name for restart-nginx and similar playbooks (``deployment`` extra var)."""
+    if not log_event:
+        return ""
+    pod = log_event.pod_name or ""
+    ns = log_event.namespace or ""
+    derived = derive_deployment_name(pod) or pod
+    if derived == _EDGE_NGINX_DEPLOYMENT:
+        return _EDGE_NGINX_DEPLOYMENT
+    if ns == _EDGE_DEMO_NAMESPACE and (
+        pod.startswith("nginx-edge-") or pod.startswith("edge-nginx-")
+    ):
+        return _EDGE_NGINX_DEPLOYMENT
+    return derived
+
+
 def build_launch_extra_vars(log_event, llm_summary=None, evidence_text="", resource_specs="") -> dict:
     """Build the extra_vars dict from a log event for AAP job launches."""
     if not log_event:
         return {}
+    deployment = resolve_remediation_deployment(log_event)
     extra_vars = {
         "namespace": log_event.namespace,
         "pod_name": log_event.pod_name,
         "container": log_event.container,
         "edge_site_id": log_event.edge_site_id,
-        "deployment_name": derive_deployment_name(log_event.pod_name),
+        "deployment": deployment,
+        "deployment_name": deployment,
     }
     if not llm_summary:
         return extra_vars
     component = normalize_component_name(llm_summary.get("affected_component", ""))
     if component and re.search(rf"\b{re.escape(component)}\b", evidence_text):
+        extra_vars["deployment"] = component
         extra_vars["deployment_name"] = component
     site_id = llm_summary.get("edge_site_id")
     if isinstance(site_id, str) and site_id and f"{EDGE_SITE_STAMP} {site_id}" in resource_specs:
