@@ -73,8 +73,6 @@ aapCredential:
   organizationId: 1
   remediationTemplateNames:
     - restart-nginx
-    - scale-up-workers
-    - clear-disk-space
   multicluster:
     enabled: false
     clusterProxyUrl: ""
@@ -105,8 +103,8 @@ chatbotService:
     mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
     servicenowUrl: "http://servicenow-mock:8080"
     kafkaBootstrap: "kafka:9092"
-    modelApiUrl: "http://llamastack-service:8321/v1/completions"
-    modelName: "granite-4-h-tiny"
+    modelApiUrl: "http://llamastack-service:8321/v1/chat/completions"
+    modelName: ""
     demoTopic: "system-alerts"
     auditTopic: "incident-audit"
   resources: {}

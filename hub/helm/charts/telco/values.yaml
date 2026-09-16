@@ -47,7 +47,7 @@ ranRcaService:
     llamastackHost: "llamastack-service"
     llamastackPort: "8321"
     vectorStoreName: "telco_oran_docs"
-    graniteModelName: "ibm-granite/granite-3.3-8b-instruct"
+    graniteModelName: ""
     kafkaBootstrap: "kafka:9092"
     kafkaAnomaliesTopic: "ran-anomalies"
     kafkaEnrichedTopic: "ran-anomalies-enriched"
@@ -79,8 +79,8 @@ ranChatbotService:
     kafkaBootstrap: "kafka:9092"
     enrichedAnomaliesTopic: "ran-anomalies-enriched"
     demoMetricsTopic: "ran-combined-metrics"
-    modelApiUrl: "http://llamastack-service:8321/v1/completions"
-    modelName: "granite-4-h-tiny"
+    modelApiUrl: "http://llamastack-service:8321/v1/chat/completions"
+    modelName: ""
     corsOrigins: "http://localhost:3000"
   service:
     type: ClusterIP

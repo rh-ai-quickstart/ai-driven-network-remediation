@@ -113,15 +113,14 @@ After identifying the optimal configuration, update the ingestion pipeline's chu
 in `hub/ingestion-pipeline/src/ingestion_pipeline/clients/llamastack.py`:
 
 ```python
-def ingest_text(
+def ingest_text_batch(
     self,
     *,
-    filename: str,
-    content: str,
-    attributes: dict[str, str | float | bool] | None = None,
-    chunk_size_tokens: int = 800,   # ← update with AutoRAG best value
-    chunk_overlap_tokens: int = 80, # ← update with AutoRAG best value
-) -> VectorStoreFileSummary:
+    vector_store_id: str,
+    items: list[IngestItem],
+    chunk_size_tokens: int | None = None,   # ← falls back to constructor default
+    chunk_overlap_tokens: int | None = None, # ← falls back to constructor default
+) -> IngestBatchResult:
 ```
 
 Then redeploy:

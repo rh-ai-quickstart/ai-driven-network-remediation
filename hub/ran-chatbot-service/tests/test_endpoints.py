@@ -186,7 +186,7 @@ def test_chat(mock_model, client, sample_anomalies):
     data = resp.json()
     assert data["_deps"] == {"status": "ok"}
     assert "reply" in data
-    assert data["model"]["name"]
+    assert "name" in data["model"]
     assert data["model"]["source"] == "live"
     assert "session_id" in data
     assert data["context"]["anomaly_count"] > 0

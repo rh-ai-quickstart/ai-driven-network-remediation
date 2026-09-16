@@ -18,7 +18,7 @@ def _env_bool(name: str, default: bool) -> bool:
 LLAMASTACK_HOST = os.getenv("LLAMASTACK_HOST", "llamastack-service")
 LLAMASTACK_PORT = int(os.getenv("LLAMASTACK_PORT", "8321"))
 VECTOR_STORE_NAME = os.getenv("VECTOR_STORE_NAME", "telco_oran_docs")
-GRANITE_MODEL = os.getenv("GRANITE_MODEL_NAME", "ibm-granite/granite-3.3-8b-instruct")
+GRANITE_MODEL = os.getenv("GRANITE_MODEL_NAME", "")
 
 _llm: ChatOpenAI | None = None
 

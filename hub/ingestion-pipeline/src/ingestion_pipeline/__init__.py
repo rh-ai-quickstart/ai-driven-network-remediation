@@ -23,7 +23,8 @@ Environment Variables:
     MINIO_RUNBOOK_PREFIX: MinIO object prefix for runbooks (default: runbooks/)
 
     TELCO_VECTOR_STORE_NAME: Name of the vector store for RAN/ORAN vendor docs (unset skips telco ingestion)
-    TELCO_DOCS_DIR: Directory of packaged vendor docs, PDF/DOCX/Markdown (default: /app/telco-docs)
+    TELCO_DOCS_DIR: Directory of packaged vendor docs, with mandatory/ and optional/ subdirectories (default: /app/telco-docs)
+    TELCO_DOCS_INCLUDE_OPTIONAL: Include docs from the optional/ subdirectory (default: false)
     MINIO_TELCO_DOCS_PREFIX: MinIO object prefix for converted vendor doc markdown (default: telco-docs/)
 
     MINIO_ENDPOINT: MinIO endpoint, e.g. minio:9000 (required for any MinIO sync/ingest)

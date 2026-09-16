@@ -56,10 +56,7 @@ async def lifespan(app: FastAPI):
 
     producer: KafkaProducer | None = None
     if KAFKA_PRODUCER_ENABLED:
-        try:
-            producer = KafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP)
-        except Exception:
-            logger.warning("Could not connect Kafka producer, anomalies will not be published")
+        producer = KafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP)
 
     consumer: TopicConsumer | None = None
     if KAFKA_CONSUMER_ENABLED:
@@ -103,7 +100,11 @@ def ready(req: Request):
     if KAFKA_CONSUMER_ENABLED:
         consumer: TopicConsumer | None = getattr(req.app.state, "kafka_consumer", None)
         if consumer is None or not consumer.is_connected:
-            not_ready.append("kafka")
+            not_ready.append("kafka-consumer")
+
+    if KAFKA_PRODUCER_ENABLED:
+        if req.app.state.kafka_producer is None:
+            not_ready.append("kafka-producer")
 
     if not_ready:
         return JSONResponse({"ready": False, "reason": ", ".join(not_ready)}, status_code=503)

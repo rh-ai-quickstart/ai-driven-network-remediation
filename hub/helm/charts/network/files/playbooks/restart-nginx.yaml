@@ -6,8 +6,8 @@
 
   vars:
     namespace: "{{ namespace | default(edge_namespace | default('dark-noc-edge')) }}"
-    deployment: "{{ deployment | default(deployment_name | default('nginx')) }}"
-    edge_cluster: "{{ edge_cluster | default('edge-01') }}"
+    deployment: "{{ deployment_name | default('nginx') }}"
+    edge_cluster: "{{ edge_site_id | default('edge-01') }}"
     edge_api_url_from_env: "{{ lookup('env', 'K8S_AUTH_HOST') | default('', true) }}"
     edge_token_from_env: "{{ lookup('env', 'K8S_AUTH_API_KEY') | default('', true) }}"
     edge_verify_ssl_from_env: "{{ lookup('env', 'K8S_AUTH_VERIFY_SSL') | default('false', true) }}"

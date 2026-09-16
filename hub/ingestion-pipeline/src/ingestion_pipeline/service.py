@@ -14,9 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from ingestion_pipeline.clients.llamastack import (
+    FailedIngestItem,
+    IngestItem,
     LlamaStackVectorStoreClient,
     VectorStoreFileContentSummary,
-    VectorStoreFileSummary,
     VectorStoreSummary,
 )
 from ingestion_pipeline.clients.minio import MinioDocumentClient
@@ -137,26 +138,31 @@ class IngestionPipelineService:
             failed: list[dict[str, str]] = []
 
             self._vector_client.delete_vector_store()
-            self._vector_client.ensure_vector_store()
+            vector_store = self._vector_client.ensure_vector_store()
 
-            for obj in objects:
-                try:
-                    summary: VectorStoreFileSummary = self._vector_client.ingest_text(
-                        filename=Path(obj.object_name).name,
-                        content=obj.content,
-                        attributes={"source_type": "runbook", "source_name": obj.object_name},
-                    )
-                    ingested.append(
-                        {
-                            "id": summary.id,
-                            "vector_store_id": summary.vector_store_id,
-                            "status": summary.status,
-                            "attributes": summary.attributes,
-                        }
-                    )
-                except Exception as exc:
-                    logger.exception("Failed to ingest '%s'", obj.object_name)
-                    failed.append({"object_name": obj.object_name, "reason": str(exc)})
+            items = [
+                IngestItem(
+                    filename=Path(obj.object_name).name,
+                    content=obj.content,
+                    attributes={"source_type": "runbook", "source_name": obj.object_name},
+                )
+                for obj in objects
+            ]
+            batch_result = self._vector_client.ingest_text_batch(
+                vector_store_id=vector_store.id,
+                items=items,
+            )
+            for summary in batch_result.succeeded:
+                ingested.append(
+                    {
+                        "id": summary.id,
+                        "vector_store_id": summary.vector_store_id,
+                        "status": summary.status,
+                        "attributes": summary.attributes,
+                    }
+                )
+            for failure in batch_result.failed:
+                failed.append({"object_name": failure.item.filename, "reason": failure.reason})
 
             result = {
                 "bucket": settings.minio_bucket,
@@ -188,11 +194,17 @@ class IngestionPipelineService:
         fix or improvement takes effect automatically on the next deploy.
         """
         self._minio_client.ensure_bucket()
+        self._minio_client.delete_prefix_objects(settings.minio_telco_docs_prefix)
         converted: list[str] = []
         failed: list[dict[str, str]] = []
-        if settings.telco_docs_dir.exists():
+        scan_dirs = [settings.telco_docs_dir / "mandatory"]
+        if settings.telco_docs_include_optional:
+            scan_dirs.append(settings.telco_docs_dir / "optional")
+        for scan_dir in scan_dirs:
+            if not scan_dir.exists():
+                continue
             for extension in sorted(supported_extensions()):
-                for doc_path in sorted(settings.telco_docs_dir.glob(f"*{extension}")):
+                for doc_path in sorted(scan_dir.glob(f"*{extension}")):
                     object_name = _telco_doc_object_name(markdown_object_name(doc_path.name))
                     try:
                         markdown_text = convert_to_markdown(doc_path.name, doc_path.read_bytes())
@@ -233,15 +245,14 @@ class IngestionPipelineService:
             failed: list[dict[str, str]] = []
 
             self._telco_vector_client.delete_vector_store()
-            self._telco_vector_client.ensure_vector_store()
+            vector_store = self._telco_vector_client.ensure_vector_store()
 
+            items: list[IngestItem] = []
             for obj in objects:
                 source_name = original_filename_from_markdown_object(obj.object_name)
-                try:
-                    units = split_markdown_units(obj.content)
-
-                    for index, unit in enumerate(units, start=1):
-                        summary: VectorStoreFileSummary = self._telco_vector_client.ingest_text(
+                for index, unit in enumerate(split_markdown_units(obj.content), start=1):
+                    items.append(
+                        IngestItem(
                             filename=f"{Path(source_name).stem}#{index:03d}.md",
                             content=unit.text,
                             attributes={
@@ -250,17 +261,23 @@ class IngestionPipelineService:
                                 **unit.attributes,
                             },
                         )
-                        ingested.append(
-                            {
-                                "id": summary.id,
-                                "vector_store_id": summary.vector_store_id,
-                                "status": summary.status,
-                                "attributes": summary.attributes,
-                            }
-                        )
-                except Exception as exc:
-                    logger.exception("Failed to ingest '%s'", obj.object_name)
-                    failed.append({"object_name": obj.object_name, "reason": str(exc)})
+                    )
+
+            batch_result = self._telco_vector_client.ingest_text_batch(
+                vector_store_id=vector_store.id,
+                items=items,
+            )
+            for summary in batch_result.succeeded:
+                ingested.append(
+                    {
+                        "id": summary.id,
+                        "vector_store_id": summary.vector_store_id,
+                        "status": summary.status,
+                        "attributes": summary.attributes,
+                    }
+                )
+            for failure in batch_result.failed:
+                failed.append({"object_name": failure.item.filename, "reason": failure.reason})
 
             result = {
                 "bucket": settings.minio_bucket,

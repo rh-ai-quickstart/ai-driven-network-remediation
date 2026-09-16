@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from urllib.parse import urlparse
 
 APP_VERSION = "0.1.0"
 
@@ -19,8 +20,10 @@ ENRICHED_ANOMALIES_MAX_MESSAGES = int(os.getenv("ENRICHED_ANOMALIES_MAX_MESSAGES
 DEMO_METRICS_TOPIC = os.getenv("DEMO_METRICS_TOPIC", "ran-combined-metrics")
 
 # ── LLM ───────────────────────────────────────────────────────────
-MODEL_API_URL = os.getenv("MODEL_API_URL", "http://llamastack-service:8321/v1/completions")
-MODEL_NAME = os.getenv("MODEL_NAME", "granite-4-h-tiny")
+MODEL_API_URL = os.getenv("MODEL_API_URL", "http://llamastack-service:8321/v1/chat/completions")
+_parsed_model_url = urlparse(MODEL_API_URL)
+MODEL_HEALTH_URL = f"{_parsed_model_url.scheme}://{_parsed_model_url.netloc}/v1/health"
+MODEL_NAME = os.getenv("MODEL_NAME", "")
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "20"))
 MODEL_MAX_TOKENS = int(os.getenv("MODEL_MAX_TOKENS", "280"))
 

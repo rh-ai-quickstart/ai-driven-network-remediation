@@ -82,7 +82,7 @@ async def call_model(prompt: str, client: httpx.AsyncClient) -> tuple[str, str]:
         return "", ModelSource.DISABLED
     payload = {
         "model": MODEL_NAME,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "max_tokens": MODEL_MAX_TOKENS,
         "temperature": 0.2,
     }

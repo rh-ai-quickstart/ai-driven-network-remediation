@@ -106,7 +106,7 @@ async def call_model(prompt: str) -> tuple[str, str]:
         return "", "disabled"
     payload = {
         "model": MODEL_NAME,
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         "max_tokens": MODEL_MAX_TOKENS,
         "temperature": 0.2,
     }
