@@ -11,7 +11,7 @@ from agent_service.config import (
 )
 from agent_service.edge_site import remediation_should_retry, resolve_edge_site_id
 from agent_service.fast_path import (
-    should_check_fast_path,
+    should_consult_spoke_fast_path,
     spoke_fast_path_recent,
     target_deployment_name,
 )
@@ -149,7 +149,7 @@ def make_remediate_node(config: GraphConfig):
             raw_event=state.raw_event or "",
         )
         raw_event = state.raw_event or ""
-        if log_event and should_check_fast_path(rca.failure_type, raw_event):
+        if log_event and should_consult_spoke_fast_path(rca.failure_type, raw_event):
             deployment = target_deployment_name(log_event.pod_name, log_event.namespace)
             if deployment and await spoke_fast_path_recent(
                 namespace=log_event.namespace,
@@ -247,14 +247,15 @@ def _failure(
     if job_id is not None:
         entry["job_id"] = job_id
     attempts = state.failed_attempts + [entry]
+    can_retry = job_id is None and remediation_should_retry(
+        error,
+        edge_site_id,
+        len(attempts),
+        config.max_retries,
+    )
     return {
         "failed_attempts": attempts,
-        "should_retry": remediation_should_retry(
-            error,
-            edge_site_id,
-            len(attempts),
-            config.max_retries,
-        ),
+        "should_retry": can_retry,
         "remediation_result": RemediationResult(
             action_taken=template,
             tool_used="aap",

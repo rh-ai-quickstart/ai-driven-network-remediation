@@ -24,20 +24,29 @@ def fast_path_cooldown_active(annotation_value: str | None, cooldown_seconds: in
     return age.total_seconds() < cooldown_seconds
 
 
-def is_demo_oom_kafka_alert(raw_event: str) -> bool:
-    """True for dashboard Trigger OOM Demo payloads (synthetic Kafka alert)."""
+def _demo_scenario(raw_event: str) -> str:
     if not raw_event:
-        return False
+        return ""
     try:
         data = json.loads(raw_event)
     except (json.JSONDecodeError, TypeError):
-        return False
+        return ""
     if not isinstance(data, dict):
-        return False
+        return ""
     labels = data.get("labels")
     if not isinstance(labels, dict):
-        return False
-    return str(labels.get("dark_noc_scenario", "")).lower() == "oom"
+        return ""
+    return str(labels.get("dark_noc_scenario", "")).lower()
+
+
+def is_demo_oom_kafka_alert(raw_event: str) -> bool:
+    """True for dashboard Trigger OOM Demo payloads (synthetic Kafka alert)."""
+    return _demo_scenario(raw_event) == "oom"
+
+
+def demo_requires_hub_aap(raw_event: str) -> bool:
+    """Demo buttons that must run hub/AAP even when a spoke fast-path heal is recent."""
+    return _demo_scenario(raw_event) in {"crashloop", "lightspeed"}
 
 
 def spoke_fast_path_actuated(
@@ -115,3 +124,14 @@ def should_check_fast_path(failure_type: str | None, raw_event: str = "") -> boo
     if failure_type in _FAST_PATH_FAILURES:
         return True
     return is_demo_oom_kafka_alert(raw_event)
+
+
+def should_consult_spoke_fast_path(failure_type: str | None, raw_event: str = "") -> bool:
+    """Whether remediate should read adnr.io/fast-path-last-heal before launch_job.
+
+    UC3 OOM and live CLF alerts after a spoke heal should skip duplicate AAP work.
+    CrashLoop and Lightspeed demo buttons bypass this gate so those paths still run AAP.
+    """
+    if demo_requires_hub_aap(raw_event):
+        return False
+    return should_check_fast_path(failure_type, raw_event) or bool(raw_event.strip())

@@ -5,9 +5,11 @@ import pytest
 
 from agent_service.config import FAST_PATH_LAST_HEAL_ANNOTATION
 from agent_service.fast_path import (
+    demo_requires_hub_aap,
     fast_path_cooldown_active,
     is_demo_oom_kafka_alert,
     should_check_fast_path,
+    should_consult_spoke_fast_path,
     spoke_fast_path_actuated,
     spoke_fast_path_recent,
     target_deployment_name,
@@ -33,6 +35,22 @@ def test_should_check_fast_path_for_oom():
 def test_should_check_fast_path_for_demo_oom_alert():
     raw = '{"labels":{"dark_noc_scenario":"oom","edge_site_id":"edge-01"}}'
     assert should_check_fast_path("ConfigError", raw) is True
+
+
+def test_demo_requires_hub_aap_for_crashloop_and_lightspeed():
+    assert demo_requires_hub_aap('{"labels":{"dark_noc_scenario":"crashloop"}}') is True
+    assert demo_requires_hub_aap('{"labels":{"dark_noc_scenario":"lightspeed"}}') is True
+    assert demo_requires_hub_aap('{"labels":{"dark_noc_scenario":"oom"}}') is False
+
+
+def test_should_consult_spoke_fast_path_skips_crashloop_demo():
+    raw = '{"labels":{"dark_noc_scenario":"crashloop"}}'
+    assert should_consult_spoke_fast_path("ConfigError", raw) is False
+
+
+def test_should_consult_spoke_fast_path_for_live_clf_alert():
+    raw = '{"kubernetes":{"namespace_name":"dark-noc-edge","pod_name":"edge-nginx-abc-x"}}'
+    assert should_consult_spoke_fast_path("ConfigError", raw) is True
 
 
 def test_is_demo_oom_kafka_alert():

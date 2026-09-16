@@ -491,7 +491,7 @@ class TestRemediateNode:
             result = await node(state)
 
         assert result["remediation_result"].success is False
-        assert result["should_retry"] is True
+        assert result["should_retry"] is False
         assert len(result["failed_attempts"]) == 1
 
     async def test_timeout_does_not_retry(self):
@@ -510,7 +510,7 @@ class TestRemediateNode:
 
         assert result["remediation_result"].success is False
         assert result["remediation_result"].timed_out is True
-        assert result["should_retry"] is True
+        assert result["should_retry"] is False
         assert len(result["failed_attempts"]) == 1
 
     async def test_failure_then_timeout_stops_retrying(self):
