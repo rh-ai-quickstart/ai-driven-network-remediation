@@ -3,7 +3,7 @@ import re
 
 from loguru import logger
 
-from agent_service.config import get_http_client
+from agent_service.config import EDGE_NAMESPACE, get_http_client
 
 # Prefix stamped onto pod-spec evidence in investigate.py to record which cluster
 # it came from. Retargeting only trusts an edge_site_id that carries this stamp,
@@ -47,8 +47,6 @@ def derive_deployment_name(pod_name: str) -> str:
     return _POD_HASH_SUFFIX.sub("", pod_name) if pod_name else pod_name
 
 
-# Default edge workload namespace (Helm topology.edgeNamespace).
-_EDGE_NAMESPACE = "dark-noc-edge"
 _EDGE_NGINX_DEPLOYMENT = "edge-nginx"
 
 
@@ -63,7 +61,7 @@ def resolve_remediation_deployment(namespace: str, pod_name: str) -> str:
         return _EDGE_NGINX_DEPLOYMENT
     # Standalone nginx-edge-* pods (synthetic alerts) and edge-nginx-* ReplicaSet pods
     # both target the edge-nginx Deployment on the spoke.
-    if ns == _EDGE_NAMESPACE and (
+    if ns == EDGE_NAMESPACE and (
         pod.startswith("nginx-edge-") or pod.startswith("edge-nginx-")
     ):
         return _EDGE_NGINX_DEPLOYMENT

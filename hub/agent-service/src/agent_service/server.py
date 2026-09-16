@@ -30,6 +30,7 @@ from agent_service.config import (
     KAFKA_CONSUMER_ENABLED,
     KAFKA_GROUP_ID,
 )
+from agent_service.fast_path import should_suppress_clf_feedback_loop
 from agent_service.graph import build_graph
 from agent_service.kafka.consumer import AlertConsumer, AlertMessage
 from agent_service.models import FailureType, IncidentState
@@ -68,10 +69,18 @@ def _invoke_graph_for_alert(
     }
     input_state.update(_extract_overrides(alert.raw_event))
 
-    future = asyncio.run_coroutine_threadsafe(
-        graph.ainvoke(input_state),
-        loop,
-    )
+    async def _run_workflow():
+        if await should_suppress_clf_feedback_loop(alert.raw_event):
+            logger.info(
+                "Suppressed CLF feedback-loop alert (no workflow, no audit) "
+                "topic={} offset={}",
+                alert.topic,
+                alert.offset,
+            )
+            return {"suppressed": True}
+        return await graph.ainvoke(input_state)
+
+    future = asyncio.run_coroutine_threadsafe(_run_workflow(), loop)
     try:
         result = future.result(timeout=GRAPH_INVOKE_TIMEOUT_SECONDS)
     except TimeoutError:
@@ -82,6 +91,8 @@ def _invoke_graph_for_alert(
             alert.offset,
             GRAPH_INVOKE_TIMEOUT_SECONDS,
         )
+        return
+    if result.get("suppressed"):
         return
     logger.info(
         "Workflow completed for Kafka alert offset={} incident_id={}",

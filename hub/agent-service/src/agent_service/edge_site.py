@@ -6,9 +6,8 @@ import json
 import re
 from typing import Any
 
+from agent_service.config import EDGE_NAMESPACE
 from agent_service.utils import EDGE_SITE_STAMP
-
-_EDGE_NAMESPACE = "dark-noc-edge"
 # Hub-spoke demo default when CLF records omit site labels (single primary edge chart).
 _DEFAULT_EDGE_SITE = "edge-01"
 
@@ -98,7 +97,7 @@ def resolve_edge_site_id(
         return stamped
 
     namespace = (getattr(log_event, "namespace", None) or "").strip()
-    if namespace == _EDGE_NAMESPACE:
+    if namespace == EDGE_NAMESPACE:
         return _DEFAULT_EDGE_SITE
 
     return site or "unknown"

@@ -51,8 +51,8 @@ class TestClusterName:
         )
         with (
             patch(
-                "agent_service.nodes.remediate.spoke_fast_path_recent",
-                AsyncMock(return_value=False),
+                "agent_service.nodes.remediate.recent_deployment_remediation_actuation",
+                AsyncMock(return_value=None),
             ),
             patch("agent_service.nodes.remediate._invoke_tool", AsyncMock(side_effect=mock_invoke)),
         ):

@@ -21,8 +21,8 @@ class TestFastPathSkip:
 
         with (
             patch(
-                "agent_service.nodes.remediate.spoke_fast_path_recent",
-                AsyncMock(return_value=True),
+                "agent_service.nodes.remediate.recent_deployment_remediation_actuation",
+                AsyncMock(return_value="spoke"),
             ) as recent_mock,
             patch("agent_service.nodes.remediate._invoke_tool", AsyncMock()) as launch_mock,
         ):
@@ -61,8 +61,8 @@ class TestFastPathSkip:
 
         with (
             patch(
-                "agent_service.nodes.remediate.spoke_fast_path_recent",
-                AsyncMock(return_value=False),
+                "agent_service.nodes.remediate.recent_deployment_remediation_actuation",
+                AsyncMock(return_value=None),
             ),
             patch("agent_service.nodes.remediate._invoke_tool", AsyncMock(side_effect=mock_invoke)),
         ):

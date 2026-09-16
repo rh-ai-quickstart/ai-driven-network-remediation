@@ -10,11 +10,7 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.edge_site import remediation_should_retry, resolve_edge_site_id
-from agent_service.fast_path import (
-    should_consult_spoke_fast_path,
-    spoke_fast_path_recent,
-    target_deployment_name,
-)
+from agent_service.fast_path import recent_deployment_remediation_actuation, target_deployment_name
 from agent_service.models import GraphConfig, RemediationResult
 from agent_service.utils import build_launch_extra_vars
 from agent_service.utils import invoke_tool as _invoke_tool
@@ -149,25 +145,36 @@ def make_remediate_node(config: GraphConfig):
             raw_event=state.raw_event or "",
         )
         raw_event = state.raw_event or ""
-        if log_event and should_consult_spoke_fast_path(rca.failure_type, raw_event):
+        if log_event:
             deployment = target_deployment_name(log_event.pod_name, log_event.namespace)
-            if deployment and await spoke_fast_path_recent(
-                namespace=log_event.namespace,
-                deployment=deployment,
-                edge_site_id=edge_site_id,
-                raw_event=raw_event,
-            ):
-                summary = (
-                    f"Spoke fast-path healer already restarted {deployment} "
-                    f"(annotation {FAST_PATH_LAST_HEAL_ANNOTATION} within cooldown)"
+            actuation = (
+                await recent_deployment_remediation_actuation(
+                    namespace=log_event.namespace,
+                    deployment=deployment,
+                    edge_site_id=edge_site_id,
+                    raw_event=raw_event,
                 )
+                if deployment
+                else None
+            )
+            if actuation:
+                if actuation == "spoke":
+                    summary = (
+                        f"Deployment {deployment} was already remediated on the spoke "
+                        f"({FAST_PATH_LAST_HEAL_ANNOTATION}); skipping duplicate hub AAP job"
+                    )
+                else:
+                    summary = (
+                        f"Deployment {deployment} had a recent hub rollout restart; "
+                        f"skipping duplicate AAP job"
+                    )
                 logger.info(summary)
                 return {
                     "should_retry": False,
-                    "fast_path_actuation": "spoke",
+                    "fast_path_actuation": actuation,
                     "remediation_result": RemediationResult(
                         action_taken="fast_path_skip",
-                        tool_used="spoke",
+                        tool_used="spoke" if actuation == "spoke" else "aap",
                         success=True,
                         job_id="",
                         duration_seconds=0,

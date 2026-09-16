@@ -393,6 +393,32 @@ class TestToolArgDefaults:
         assert calls["get_events"]["edge_site_id"] == "edge-1"
         assert "edge_site_id" not in calls["search_logs"]
 
+    async def test_loki_tool_strips_edge_site_id_when_llm_passes_it(self):
+        config = GraphConfig()
+        node = make_investigate_node(config)
+        state = make_state()
+
+        tool_call = _llm_with_tool_call(
+            name="find_error_patterns",
+            args={
+                "namespace": "prod",
+                "app": "nginx",
+                "edge_site_id": "edge-site-02",
+            },
+        )
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(side_effect=[tool_call, _llm_no_tool_call()])
+        mock_invoke = AsyncMock(return_value={"patterns": []})
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            await node(state)
+
+        mock_invoke.assert_called_once_with(
+            "find_error_patterns", {"namespace": "prod", "app": "nginx"}
+        )
+
     async def test_omitted_edge_site_id_defaults_to_log_event(self):
         config = GraphConfig()
         node = make_investigate_node(config)

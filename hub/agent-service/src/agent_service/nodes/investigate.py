@@ -125,12 +125,19 @@ def _extract_events(result: dict) -> list[dict]:
 
 _OPENSHIFT_TOOLS = {"get_events", "get_pod_logs", "get_pod_spec"}
 
+_TOOL_SCHEMAS = {t["function"]["name"]: t["function"]["parameters"] for t in _TOOLS}
+
 
 def _default_tool_args(tool_name: str, tool_args: dict, log_event) -> dict:
     # Only the OpenShift tools route by cluster via edge_site_id. The Loki tools
     # select a log stream via a separate tenant argument (application|
     # infrastructure|audit), so we leave it at the server default instead.
-    args = dict(tool_args)
+    schema = _TOOL_SCHEMAS.get(tool_name, {})
+    allowed = schema.get("properties", {})
+    args = {k: v for k, v in tool_args.items() if k in allowed}
+    for key, prop in allowed.items():
+        if prop.get("type") == "integer" and isinstance(args.get(key), float):
+            args[key] = int(args[key])
     if tool_name in _OPENSHIFT_TOOLS and "edge_site_id" not in args:
         args["edge_site_id"] = log_event.edge_site_id
     return args

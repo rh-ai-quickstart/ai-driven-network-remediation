@@ -247,6 +247,12 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Simulated edge workload namespace (Helm topology.edgeNamespace).
+EDGE_NAMESPACE = os.getenv("EDGE_NAMESPACE", "dark-noc-edge")
+
 # Spoke edge fast-path healer coordination
 FAST_PATH_LAST_HEAL_ANNOTATION = "adnr.io/fast-path-last-heal"
+ROLLOUT_RESTART_ANNOTATION = "kubectl.kubernetes.io/restartedAt"
 FAST_PATH_COOLDOWN_SECONDS = int(os.getenv("FAST_PATH_COOLDOWN_SECONDS", "300"))
+# Max seconds between spoke fast-path heal and dashboard OOM demo alert to skip hub AAP (UC3).
+DEMO_OOM_FAST_PATH_MAX_GAP_SECONDS = int(os.getenv("DEMO_OOM_FAST_PATH_MAX_GAP_SECONDS", "900"))
