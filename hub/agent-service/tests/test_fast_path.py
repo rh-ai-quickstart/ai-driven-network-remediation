@@ -6,7 +6,9 @@ import pytest
 from agent_service.config import FAST_PATH_LAST_HEAL_ANNOTATION
 from agent_service.fast_path import (
     fast_path_cooldown_active,
+    is_demo_oom_kafka_alert,
     should_check_fast_path,
+    spoke_fast_path_actuated,
     spoke_fast_path_recent,
     target_deployment_name,
 )
@@ -26,6 +28,22 @@ def test_should_check_fast_path_for_oom():
     assert should_check_fast_path("OOMKilled") is True
     assert should_check_fast_path("CrashLoopBackOff") is False
     assert should_check_fast_path("DNSFailure") is False
+
+
+def test_should_check_fast_path_for_demo_oom_alert():
+    raw = '{"labels":{"dark_noc_scenario":"oom","edge_site_id":"edge-01"}}'
+    assert should_check_fast_path("ConfigError", raw) is True
+
+
+def test_is_demo_oom_kafka_alert():
+    assert is_demo_oom_kafka_alert('{"labels":{"dark_noc_scenario":"oom"}}') is True
+    assert is_demo_oom_kafka_alert('{"labels":{"dark_noc_scenario":"crashloop"}}') is False
+
+
+def test_spoke_fast_path_actuated_demo_oom_after_cooldown():
+    stale = "2020-01-01T00:00:00Z"
+    assert spoke_fast_path_actuated(stale, cooldown_seconds=300, demo_oom_alert=True) is True
+    assert spoke_fast_path_actuated(stale, cooldown_seconds=300, demo_oom_alert=False) is False
 
 
 def test_target_deployment_name_derives_from_replicaset_pod():
@@ -59,13 +77,11 @@ async def test_spoke_fast_path_recent_true_when_annotation_fresh():
             }
         ),
     ):
-        assert (
-            await spoke_fast_path_recent(
-                namespace="dark-noc-edge",
-                deployment="edge-nginx",
-                edge_site_id="edge-01",
-            )
-            is True
+        assert await spoke_fast_path_recent(
+            namespace="dark-noc-edge",
+            deployment="edge-nginx",
+            edge_site_id="edge-01",
+            raw_event='{"labels":{"dark_noc_scenario":"oom"}}',
         )
 
 
@@ -88,6 +104,26 @@ async def test_spoke_fast_path_recent_false_when_annotation_stale():
                 edge_site_id="edge-01",
             )
             is False
+        )
+
+
+@pytest.mark.asyncio
+async def test_spoke_fast_path_recent_true_when_stale_but_demo_oom():
+    stale = (datetime.now(timezone.utc) - timedelta(seconds=400)).isoformat()
+    with patch(
+        "agent_service.fast_path.invoke_tool",
+        AsyncMock(
+            return_value={
+                "success": True,
+                "annotations": {FAST_PATH_LAST_HEAL_ANNOTATION: stale},
+            }
+        ),
+    ):
+        assert await spoke_fast_path_recent(
+            namespace="dark-noc-edge",
+            deployment="edge-nginx",
+            edge_site_id="edge-01",
+            raw_event='{"labels":{"dark_noc_scenario":"oom","edge_site_id":"edge-01"}}',
         )
 
 

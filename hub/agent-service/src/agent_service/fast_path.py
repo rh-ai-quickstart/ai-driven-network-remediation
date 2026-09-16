@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from loguru import logger
@@ -23,12 +24,45 @@ def fast_path_cooldown_active(annotation_value: str | None, cooldown_seconds: in
     return age.total_seconds() < cooldown_seconds
 
 
+def is_demo_oom_kafka_alert(raw_event: str) -> bool:
+    """True for dashboard Trigger OOM Demo payloads (synthetic Kafka alert)."""
+    if not raw_event:
+        return False
+    try:
+        data = json.loads(raw_event)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    labels = data.get("labels")
+    if not isinstance(labels, dict):
+        return False
+    return str(labels.get("dark_noc_scenario", "")).lower() == "oom"
+
+
+def spoke_fast_path_actuated(
+    annotation_value: str | None,
+    *,
+    cooldown_seconds: int,
+    demo_oom_alert: bool = False,
+) -> bool:
+    if not annotation_value:
+        return False
+    if fast_path_cooldown_active(annotation_value, cooldown_seconds):
+        return True
+    # UC3 demo: heal on spoke first, then synthetic OOM alert (may be after cooldown).
+    if demo_oom_alert:
+        return True
+    return False
+
+
 async def spoke_fast_path_recent(
     *,
     namespace: str,
     deployment: str,
     edge_site_id: str,
     cooldown_seconds: int | None = None,
+    raw_event: str = "",
 ) -> bool:
     """Return True when the spoke fast-path healer acted within the cooldown window.
 
@@ -57,7 +91,11 @@ async def spoke_fast_path_recent(
         )
         return False
     annotations = result.get("annotations") or {}
-    return fast_path_cooldown_active(annotations.get(FAST_PATH_LAST_HEAL_ANNOTATION), cooldown)
+    return spoke_fast_path_actuated(
+        annotations.get(FAST_PATH_LAST_HEAL_ANNOTATION),
+        cooldown_seconds=cooldown,
+        demo_oom_alert=is_demo_oom_kafka_alert(raw_event),
+    )
 
 
 def target_deployment_name(pod_name: str, namespace: str = "") -> str | None:
@@ -73,5 +111,7 @@ def target_deployment_name(pod_name: str, namespace: str = "") -> str | None:
     return deployment
 
 
-def should_check_fast_path(failure_type: str | None) -> bool:
-    return failure_type in _FAST_PATH_FAILURES
+def should_check_fast_path(failure_type: str | None, raw_event: str = "") -> bool:
+    if failure_type in _FAST_PATH_FAILURES:
+        return True
+    return is_demo_oom_kafka_alert(raw_event)

@@ -148,12 +148,14 @@ def make_remediate_node(config: GraphConfig):
             resource_specs=state.resource_specs or "",
             raw_event=state.raw_event or "",
         )
-        if log_event and should_check_fast_path(rca.failure_type):
+        raw_event = state.raw_event or ""
+        if log_event and should_check_fast_path(rca.failure_type, raw_event):
             deployment = target_deployment_name(log_event.pod_name, log_event.namespace)
             if deployment and await spoke_fast_path_recent(
                 namespace=log_event.namespace,
                 deployment=deployment,
                 edge_site_id=edge_site_id,
+                raw_event=raw_event,
             ):
                 summary = (
                     f"Spoke fast-path healer already restarted {deployment} "
