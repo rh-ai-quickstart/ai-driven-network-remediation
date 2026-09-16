@@ -494,8 +494,8 @@ Two scenarios, using reserved `cell_id`s (`9001`/`9002`) so demo data is unmista
 
 **Prerequisite:** the RAN anomaly pipeline (`ranAnomalyDetector`, `ranRcaService`,
 `ranChatbotService`) and this webapp (`ranFrontend`) are all part of the Telco/O-RAN use case and
-are enabled by default via `global.telcoOran.enabled`. They deploy together whenever Telco/O-RAN is
-on (`ENABLE_TELCO_ORAN=true`, the default, via Make; or `--set global.telcoOran.enabled=true` via
+are enabled by default via `telco.enabled`. They deploy together whenever Telco/O-RAN is
+on (`ENABLE_TELCO_ORAN=true`, the default, via Make; or `--set telco.enabled=true` via
 raw Helm) and are skipped entirely when it's off. To toggle a single service without disabling the
 whole use case, override its own flag, e.g. `--set ranFrontend.enabled=false`.
 

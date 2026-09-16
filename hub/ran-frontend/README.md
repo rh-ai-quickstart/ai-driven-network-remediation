@@ -128,10 +128,10 @@ make helm-install
 ```
 
 The Helm chart creates a Deployment, Service, and OpenShift Route with TLS edge termination,
-gated behind `global.telcoOran.enabled` and `ranFrontend.enabled` (both default `true`, same as
+gated behind `telco.enabled` and `ranFrontend.enabled` (both default `true`, same as
 `ranAnomalyDetector.enabled` and the other RAN services) so the whole Telco/O-RAN stack deploys
 together. Disable the entire use case with `ENABLE_TELCO_ORAN=false` (Make) / `--set
-global.telcoOran.enabled=false` (Helm), or toggle just this webapp via `--set
+telco.enabled=false` (Helm), or toggle just this webapp via `--set
 ranFrontend.enabled=false`.
 
 ## Access control
