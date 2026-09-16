@@ -2,6 +2,7 @@ import json
 
 from loguru import logger
 
+from agent_service.edge_site import extract_edge_site_id_from_alert
 from agent_service.models import LogEvent
 
 _LEVEL_ALIASES = {
@@ -28,6 +29,9 @@ def normalize_node(state: dict) -> dict:
     if isinstance(data, dict) and "kubernetes" in data:
         k8s = data.get("kubernetes", {})
         labels = data.get("labels", {})
+        site_id = extract_edge_site_id_from_alert(data) or labels.get("edge_site_id", "unknown")
+        if not site_id:
+            site_id = "unknown"
         log_event = LogEvent(
             timestamp=data.get("@timestamp", "unknown"),
             message=data.get("message", "unknown"),
@@ -35,7 +39,7 @@ def normalize_node(state: dict) -> dict:
             namespace=k8s.get("namespace_name", "unknown"),
             pod_name=k8s.get("pod_name", "unknown"),
             container=k8s.get("container_name", "unknown"),
-            edge_site_id=labels.get("edge_site_id", "unknown"),
+            edge_site_id=site_id,
             kafka_offset=kafka_offset,
             raw=raw_event,
         )

@@ -55,6 +55,23 @@ class TestCanonicalJsonParsing:
         assert log_event.namespace == "prod"
         assert log_event.pod_name == "nginx-abc123"
 
+    def test_clf_openshift_labels_edge_site_id(self):
+        event = {
+            "@timestamp": "2024-01-15T10:30:00Z",
+            "message": "OOMKilled",
+            "level": "error",
+            "kubernetes": {
+                "namespace_name": "dark-noc-edge",
+                "pod_name": "edge-nginx-abc123-x2k9z",
+                "container_name": "nginx",
+            },
+            "openshift": {"edge_site_id": "edge-01"},
+        }
+        raw = json.dumps(event)
+        state = IncidentState(raw_event=raw)
+        result = normalize_node(state)
+        assert result["log_event"].edge_site_id == "edge-01"
+
     def test_missing_kubernetes_fields_default_to_unknown(self):
         event = {
             "@timestamp": "2024-01-15T10:30:00Z",
