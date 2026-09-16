@@ -73,8 +73,6 @@ aapCredential:
   organizationId: 1
   remediationTemplateNames:
     - restart-nginx
-    - scale-up-workers
-    - clear-disk-space
   multicluster:
     enabled: false
     clusterProxyUrl: ""

@@ -128,6 +128,8 @@ The token's user must have the following [RBAC roles](https://docs.redhat.com/en
 
 A second AAP project (`lightspeed-generated`) is created automatically by the Helm credential job, pointing at the Gitea repository where generated playbooks are stored. The agent commits each generated playbook to Gitea, syncs this project, then upserts a job template referencing the committed file.
 
+The same credential job also seeds demo playbooks when `ENABLE_AAP_MOCK=false`. Every `*.yaml` file under `hub/helm/charts/network/files/playbooks/` (e.g. `restart-nginx.yaml`) is committed into Gitea and gets a matching job template named after the file (copied from `lightspeed-runner`, so it inherits the inventory and credentials). To add a remediation playbook, drop a file in that directory and redeploy: no manual Controller UI work is needed beyond the `lightspeed-runner` base template above.
+
 Provide the AAP API token at deploy time:
 
 ```bash
