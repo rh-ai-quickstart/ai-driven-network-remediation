@@ -919,7 +919,7 @@ telco-integration-tests:
 	PF_RAN_CHATBOT_PID=$$!; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	uv run pytest tests/generic tests/telco -v
+	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:

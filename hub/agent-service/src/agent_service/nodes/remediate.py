@@ -174,7 +174,7 @@ def make_remediate_node(config: GraphConfig):
                     "fast_path_actuation": actuation,
                     "remediation_result": RemediationResult(
                         action_taken="fast_path_skip",
-                        tool_used="spoke" if actuation == "spoke" else "aap",
+                        tool_used=actuation,
                         success=True,
                         job_id="",
                         duration_seconds=0,
