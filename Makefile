@@ -178,7 +178,8 @@ TELCO_IMAGES := \
 	$(RAN_ANOMALY_IMG) \
 	$(RAN_RCA_IMG) \
 	$(RAN_CHATBOT_IMG) \
-	$(RAN_FRONTEND_IMG)
+	$(RAN_FRONTEND_IMG) \
+	$(RAN_REMEDIATION_IMG)
 
 # Spoke-only. Built with network remediation, not hub shared services.
 EDGE_IMAGES := \
@@ -672,7 +673,7 @@ edge-rbac-teardown:
 .PHONY: build-all-images
 build-all-images: build-ingestion-image \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
-	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image)
+	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image)
 
 .PHONY: build-ingestion-image
 build-ingestion-image:
