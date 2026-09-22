@@ -26,6 +26,8 @@ from typing import Any
 from kafka import KafkaConsumer
 from pydantic import ValidationError
 
+import json
+
 from .models import EnrichedAnomaly
 
 logger = logging.getLogger(__name__)
@@ -176,5 +178,134 @@ class AnomaliesConsumer:
                 except ValidationError:
                     logger.warning(
                         "Skipping enriched anomaly that failed schema validation at offset %s",
+                        msg.offset,
+                    )
+
+
+class RemediationConsumer:
+    """Continuously consume ran-remediation-results into a bounded in-memory buffer.
+
+    Mirrors AnomaliesConsumer in structure. No consumer group_id for the same
+    reason: every replica of ran-chatbot-service needs the full view of
+    remediation results to correctly join against its anomaly buffer.
+
+    Records are stored as plain dicts — just the fields needed for the join:
+    incident_id, success, job_id, timestamp.
+    """
+
+    def __init__(
+        self,
+        buffer: deque[dict],
+        *,
+        bootstrap_servers: str,
+        topic: str,
+        max_messages: int,
+        poll_timeout_ms: int = 1000,
+    ) -> None:
+        if not topic:
+            raise ValueError("A remediation-results Kafka topic is required")
+        self._buffer = buffer
+        self._bootstrap_servers = bootstrap_servers
+        self._topic = topic
+        self._max_messages = max_messages
+        self._poll_timeout_ms = poll_timeout_ms
+        self._consumer: KafkaConsumer | None = None
+        self._running = False
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._run, name="ran-remediation-consumer", daemon=True)
+        self._thread.start()
+        logger.info("Kafka remediation-results consumer started topic=%s", self._topic)
+
+    @property
+    def is_connected(self) -> bool:
+        return self._running and self._consumer is not None
+
+    def stop(self) -> None:
+        self._running = False
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=self._poll_timeout_ms / 1000 + 5)
+            if self._thread.is_alive():
+                logger.warning("Kafka remediation-results consumer thread still running after join timeout")
+            self._thread = None
+        logger.info("Kafka remediation-results consumer stopped")
+
+    def close(self) -> None:
+        if self._consumer is not None:
+            self._consumer.close()
+            self._consumer = None
+
+    def _run(self) -> None:
+        while self._running:
+            if not self._connect():
+                return
+            try:
+                self._seed_recent_history()
+                self._poll_loop()
+            except Exception:
+                logger.exception(
+                    "Kafka remediation-results poll loop failed, reconnecting to %s in 5s",
+                    self._bootstrap_servers,
+                )
+                self._stop_event.wait(5)
+            finally:
+                self.close()
+
+    def _connect(self) -> bool:
+        while self._running:
+            try:
+                self._consumer = KafkaConsumer(
+                    self._topic,
+                    bootstrap_servers=self._bootstrap_servers,
+                    auto_offset_reset="latest",
+                    enable_auto_commit=False,
+                    value_deserializer=lambda m: m.decode("utf-8", errors="replace"),
+                )
+                return True
+            except Exception:
+                logger.warning("Kafka not reachable at %s, retrying in 5s", self._bootstrap_servers)
+                self._stop_event.wait(5)
+        return False
+
+    def _seed_recent_history(self) -> None:
+        self._consumer.poll(timeout_ms=800)
+        partitions = self._consumer.assignment()
+        if not partitions:
+            return
+        max_per_partition = max(10, self._max_messages // max(1, len(partitions)))
+        for tp in partitions:
+            end_offset = self._consumer.end_offsets([tp])[tp]
+            start_offset = max(0, end_offset - max_per_partition)
+            self._consumer.seek(tp, start_offset)
+        records = self._consumer.poll(timeout_ms=1000)
+        if records:
+            self._dispatch(records)
+
+    def _poll_loop(self) -> None:
+        while self._running:
+            records = self._consumer.poll(timeout_ms=self._poll_timeout_ms)
+            if not records:
+                continue
+            self._dispatch(records)
+
+    def _dispatch(self, records: Any) -> None:
+        for messages in records.values():
+            for msg in messages:
+                if not self._running:
+                    return
+                try:
+                    record = json.loads(msg.value)
+                    if "incident_id" not in record:
+                        raise ValueError("missing incident_id")
+                    self._buffer.append(record)
+                except Exception:
+                    logger.warning(
+                        "Skipping remediation result that failed to parse at offset %s",
                         msg.offset,
                     )

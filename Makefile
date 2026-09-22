@@ -82,8 +82,13 @@ AGENT_CONTEXT               := hub
 CHATBOT_CONTAINERFILE       := hub/chatbot-service/Containerfile
 CHATBOT_CONTEXT             := hub
 
-RAN_CHATBOT_CONTAINERFILE   := hub/ran-chatbot-service/Containerfile
-RAN_CHATBOT_CONTEXT         := hub
+RAN_CHATBOT_CONTAINERFILE       := hub/ran-chatbot-service/Containerfile
+RAN_CHATBOT_CONTEXT             := hub
+
+# ran-remediation-service depends on sibling shared package — hub/ build context.
+RAN_REMEDIATION_IMG             := $(REGISTRY)/hub-ran-remediation-service:$(VERSION)
+RAN_REMEDIATION_CONTAINERFILE   := hub/ran-remediation-service/Containerfile
+RAN_REMEDIATION_CONTEXT         := hub
 
 # ── Feature flags ─────────────────────────────────────────────────
 ENABLE_HUB             ?= true
@@ -722,6 +727,10 @@ build-ran-rca-image:
 build-ran-chatbot-image: generate-fixtures
 	$(CONTAINER_TOOL) build -t $(RAN_CHATBOT_IMG) --platform=$(ARCH) -f $(RAN_CHATBOT_CONTAINERFILE) $(RAN_CHATBOT_CONTEXT)
 
+.PHONY: build-ran-remediation-image
+build-ran-remediation-image:
+	$(CONTAINER_TOOL) build -t $(RAN_REMEDIATION_IMG) --platform=$(ARCH) -f $(RAN_REMEDIATION_CONTAINERFILE) $(RAN_REMEDIATION_CONTEXT)
+
 .PHONY: build-ran-frontend-image
 build-ran-frontend-image:
 	$(CONTAINER_TOOL) build -t $(RAN_FRONTEND_IMG) --platform=$(ARCH) --build-arg VITE_ENABLE_NETWORK_REMEDIATION=$(ENABLE_NETWORK_REMEDIATION) -f hub/ran-frontend/Containerfile hub/ran-frontend
@@ -886,6 +895,7 @@ unit-tests:
 	cd hub/ran-anomaly-detector && uv sync --group dev && uv run pytest
 	cd hub/ran-rca-service && uv sync --group dev && uv run pytest
 	cd hub/ran-chatbot-service && uv sync --group dev && uv run pytest
+	cd hub/ran-remediation-service && uv sync --group dev && uv run pytest
 	cd edge/fast-path-healer && uv sync --group dev && uv run pytest
 
 # Offline multi-cluster template / dry-run tests (no live ACM). C8.

@@ -1,0 +1,84 @@
+{{- if .Values.ranRemediationService.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-remediation-service
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-remediation-service
+spec:
+  replicas: {{ .Values.ranRemediationService.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "telco.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ran-remediation-service
+  template:
+    metadata:
+      labels:
+        {{- include "telco.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ran-remediation-service
+    spec:
+      containers:
+        - name: ran-remediation-service
+          image: "{{ .Values.image.registry }}/{{ .Values.image.ranRemediationService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: LLAMASTACK_HOST
+              value: {{ .Values.ranRemediationService.env.llamastackHost | quote }}
+            - name: LLAMASTACK_PORT
+              value: {{ .Values.ranRemediationService.env.llamastackPort | quote }}
+            - name: KAFKA_BOOTSTRAP
+              value: {{ .Values.ranRemediationService.env.kafkaBootstrap | quote }}
+            - name: KAFKA_ENRICHED_TOPIC
+              value: {{ .Values.ranRemediationService.env.kafkaEnrichedTopic | quote }}
+            - name: KAFKA_REMEDIATION_TOPIC
+              value: {{ .Values.ranRemediationService.env.kafkaRemediationTopic | quote }}
+            - name: KAFKA_GROUP_ID
+              value: {{ .Values.ranRemediationService.env.kafkaGroupId | quote }}
+            - name: KAFKA_CONSUMER_ENABLED
+              value: {{ .Values.ranRemediationService.env.kafkaConsumerEnabled | quote }}
+            - name: SLACK_ENABLED
+              value: {{ .Values.ranRemediationService.env.slackEnabled | quote }}
+            - name: SLACK_CHANNEL
+              value: {{ .Values.ranRemediationService.env.slackChannel | quote }}
+            - name: POLL_INTERVAL_SECONDS
+              value: {{ .Values.ranRemediationService.env.pollIntervalSeconds | quote }}
+            - name: JOB_TIMEOUT_SECONDS
+              value: {{ .Values.ranRemediationService.env.jobTimeoutSeconds | quote }}
+            - name: RECENT_RESULTS_LIMIT
+              value: {{ .Values.ranRemediationService.env.recentResultsLimit | quote }}
+            - name: SLACK_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: slack-secret
+                  key: token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8004
+              protocol: TCP
+          livenessProbe:
+            {{- toYaml .Values.ranRemediationService.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.ranRemediationService.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ranRemediationService.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telco.fullname" . }}-ran-remediation-service
+  labels:
+    {{- include "telco.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-remediation-service
+spec:
+  type: {{ .Values.ranRemediationService.service.type }}
+  ports:
+    - port: {{ .Values.ranRemediationService.service.port }}
+      targetPort: {{ .Values.ranRemediationService.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "telco.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: ran-remediation-service
+{{- end }}

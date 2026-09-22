@@ -48,10 +48,12 @@ from .config import (
     MODEL_HEALTH_URL,
     MODEL_NAME,
     MODEL_TIMEOUT_SECONDS,
+    REMEDIATION_RESULTS_MAX_MESSAGES,
+    REMEDIATION_RESULTS_TOPIC,
     SSL_VERIFY,
 )
 from .demo import DEFAULT_SCENARIO, build_demo_sample, publish_demo_metrics
-from .kafka import AnomaliesConsumer
+from .kafka import AnomaliesConsumer, RemediationConsumer
 from .models import EnrichedAnomaly, ModelSource
 
 logger = logging.getLogger(__name__)
@@ -75,6 +77,18 @@ async def lifespan(app: FastAPI):
     consumer.start()
     app.state.kafka_consumer = consumer
 
+    recent_remediations: deque[dict] = deque(maxlen=REMEDIATION_RESULTS_MAX_MESSAGES)
+    app.state.recent_remediations = recent_remediations
+
+    remediation_consumer = RemediationConsumer(
+        recent_remediations,
+        bootstrap_servers=KAFKA_BOOTSTRAP,
+        topic=REMEDIATION_RESULTS_TOPIC,
+        max_messages=REMEDIATION_RESULTS_MAX_MESSAGES,
+    )
+    remediation_consumer.start()
+    app.state.remediation_consumer = remediation_consumer
+
     # Shared across requests rather than one-per-call: httpx.AsyncClient is designed
     # for exactly this (safe for concurrent use within one event loop), and reusing
     # it gives connection pooling/keep-alive to MODEL_API_URL instead of a fresh
@@ -84,6 +98,7 @@ async def lifespan(app: FastAPI):
     yield
 
     consumer.stop()
+    remediation_consumer.stop()
     await app.state.http_client.aclose()
 
 
@@ -130,7 +145,10 @@ async def ready(request: Request):
     chat, empty anomaly list), so it can always serve useful traffic. Dependency
     status is informational.
     """
-    checks: dict[str, bool] = {"kafka": request.app.state.kafka_consumer.is_connected}
+    checks: dict[str, bool] = {
+        "kafka": request.app.state.kafka_consumer.is_connected,
+        "remediation_kafka": request.app.state.remediation_consumer.is_connected,
+    }
 
     llm_probe = await probe_http(MODEL_HEALTH_URL, timeout=2.0, verify=SSL_VERIFY)
     checks["llm"] = llm_probe["reachable"]
@@ -140,20 +158,36 @@ async def ready(request: Request):
 
 @app.get("/api/anomalies")
 def anomalies(request: Request) -> dict:
-    """Recently detected RAN anomalies, newest first.
+    """Recently detected RAN anomalies, newest first, with remediation status joined in.
 
-    Reads the same in-memory buffer /api/chat uses for LLM context — an
-    instant operation, no Kafka I/O on the request path.
+    Reads both in-memory buffers — anomalies and remediation results — and joins
+    them by incident_id. No Kafka I/O on the request path.
     """
     # The buffer is in ascending Kafka offset order (oldest first, see kafka.py),
     # so reversing it puts the newest anomaly first for display.
     recent = list(reversed(request.app.state.recent_anomalies))
     kafka_ok = request.app.state.kafka_consumer.is_connected
+    remediation_kafka_ok = request.app.state.remediation_consumer.is_connected
+
+    # Build a lookup of the latest remediation result per incident_id.
+    # Iterating forward means later entries overwrite earlier ones — most recent wins.
+    remediation_index: dict[str, dict] = {}
+    for r in request.app.state.recent_remediations:
+        remediation_index[r["incident_id"]] = r
+
+    result = []
+    for a in recent:
+        data = a.model_dump()
+        r = remediation_index.get(a.incident_id)
+        data["remediation_status"] = ("completed" if r.get("success") else "failed") if r else None
+        data["remediation_job_id"] = r.get("job_id") if r else None
+        data["remediation_timestamp"] = r.get("timestamp") if r else None
+        result.append(data)
 
     return {
-        "_deps": build_deps({"kafka": kafka_ok}),
-        "count": len(recent),
-        "anomalies": [a.model_dump() for a in recent],
+        "_deps": build_deps({"kafka": kafka_ok, "remediation_kafka": remediation_kafka_ok}),
+        "count": len(result),
+        "anomalies": result,
     }
 
 
@@ -168,10 +202,12 @@ def clear_anomalies(request: Request) -> dict:
     (re)connects, so old anomalies still on that topic will resurface then.
     """
     request.app.state.recent_anomalies.clear()
+    request.app.state.recent_remediations.clear()
     kafka_ok = request.app.state.kafka_consumer.is_connected
+    remediation_kafka_ok = request.app.state.remediation_consumer.is_connected
 
     return {
-        "_deps": build_deps({"kafka": kafka_ok}),
+        "_deps": build_deps({"kafka": kafka_ok, "remediation_kafka": remediation_kafka_ok}),
         "status": "cleared",
         "count": 0,
     }

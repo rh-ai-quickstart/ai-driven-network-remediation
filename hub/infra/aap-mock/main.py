@@ -46,9 +46,18 @@ def _seed() -> None:
         "current_update": None,
     }
     for name, playbook, desc in [
+        # Workflow 1 — edge infrastructure templates
         ("restart-nginx", "restart.yml", "Restart nginx on edge"),
         ("scale-up-workers", "scale.yml", "Scale up worker replicas"),
         ("lightspeed-runner", "playbooks/lightspeed-generate-and-run.yaml", "Run ALS-generated playbook"),
+        # Workflow 2 — RAN remediation templates (ran-remediation-service)
+        ("ran-antenna-tilt-adjust",    "playbooks/ran-antenna-tilt-adjust.yml",    "Adjust antenna downtilt/azimuth for low RSRP"),
+        ("ran-interference-mitigation","playbooks/ran-interference-mitigation.yml","Reduce interference via power/beam adjustment"),
+        ("ran-scheduler-optimize",     "playbooks/ran-scheduler-optimize.yml",     "Tune RAN scheduler parameters"),
+        ("ran-load-balance",           "playbooks/ran-load-balance.yml",           "Redistribute UEs across adjacent cells"),
+        ("ran-capacity-expand",        "playbooks/ran-capacity-expand.yml",        "Expand PRB allocation or trigger offload"),
+        ("ran-cell-recovery",          "playbooks/ran-cell-recovery.yml",          "Cell restart and recovery sequence"),
+        ("ran-generic-remediation",    "playbooks/ran-generic-remediation.yml",    "Generic RAN remediation fallback"),
     ]:
         job_templates_db[_next_template_id] = {
             "id": _next_template_id,

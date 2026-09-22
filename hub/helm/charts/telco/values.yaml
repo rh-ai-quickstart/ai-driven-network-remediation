@@ -7,6 +7,7 @@ image:
   ranRcaService: hub-ran-rca-service
   ranChatbotService: hub-ran-chatbot-service
   ranFrontend: noc-ran-frontend
+  ranRemediationService: hub-ran-remediation-service
   pullPolicy: Always
   tag: "0.0.1"
 
@@ -79,6 +80,7 @@ ranChatbotService:
   env:
     kafkaBootstrap: "kafka:9092"
     enrichedAnomaliesTopic: "ran-anomalies-enriched"
+    remediationResultsTopic: "ran-remediation-results"
     demoMetricsTopic: "ran-combined-metrics"
     modelApiUrl: "http://llamastack-service:8321/v1/chat/completions"
     modelName: ""
@@ -120,4 +122,38 @@ ranFrontend:
       path: /
       port: 8080
     initialDelaySeconds: 5
+    periodSeconds: 10
+
+ranRemediationService:
+  enabled: true
+  replicaCount: 1
+  env:
+    llamastackHost: "llamastack-service"
+    llamastackPort: "8321"
+    kafkaBootstrap: "kafka:9092"
+    kafkaEnrichedTopic: "ran-anomalies-enriched"
+    kafkaRemediationTopic: "ran-remediation-results"
+    kafkaGroupId: "ran-remediation-service"
+    kafkaConsumerEnabled: "true"
+    slackEnabled: "false"
+    slackChannel: "#ran-alerts"
+    pollIntervalSeconds: "5"
+    jobTimeoutSeconds: "120"
+    recentResultsLimit: "100"
+  service:
+    type: ClusterIP
+    port: 8004
+    targetPort: 8004
+  resources: {}
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8004
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8004
+    initialDelaySeconds: 10
     periodSeconds: 10

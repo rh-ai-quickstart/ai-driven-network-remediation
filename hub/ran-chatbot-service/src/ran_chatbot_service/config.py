@@ -15,6 +15,11 @@ KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 ENRICHED_ANOMALIES_TOPIC = os.getenv("ENRICHED_ANOMALIES_TOPIC", "ran-anomalies-enriched")
 ENRICHED_ANOMALIES_MAX_MESSAGES = int(os.getenv("ENRICHED_ANOMALIES_MAX_MESSAGES", "50"))
 
+# Topic ran-remediation-service publishes audit records to after each remediation
+# attempt. See kafka.py:RemediationConsumer.
+REMEDIATION_RESULTS_TOPIC = os.getenv("REMEDIATION_RESULTS_TOPIC", "ran-remediation-results")
+REMEDIATION_RESULTS_MAX_MESSAGES = int(os.getenv("REMEDIATION_RESULTS_MAX_MESSAGES", "100"))
+
 # Topic ran-anomaly-detector consumes RAN KPI readings from (see demo.py). Demo
 # trigger publishes directly here, the same real input topic real data uses.
 DEMO_METRICS_TOPIC = os.getenv("DEMO_METRICS_TOPIC", "ran-combined-metrics")

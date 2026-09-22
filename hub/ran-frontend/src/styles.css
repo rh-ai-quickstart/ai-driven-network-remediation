@@ -181,6 +181,25 @@ body {
   color: var(--muted);
 }
 
+.remediation-badge {
+  font-size: 0.7rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+}
+
+.remediation-badge.completed {
+  color: #c6f6d5;
+  background: rgba(72, 187, 120, 0.18);
+  border: 1px solid rgba(72, 187, 120, 0.4);
+}
+
+.remediation-badge.failed {
+  color: #fed7d7;
+  background: rgba(245, 101, 101, 0.18);
+  border: 1px solid rgba(245, 101, 101, 0.4);
+}
+
 .anomaly-detail {
   margin: 8px 0;
   font-size: 0.92rem;

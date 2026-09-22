@@ -16,12 +16,13 @@ def test_health(client):
 def test_ready_all_up(mock_probe, client):
     mock_probe.return_value = {"status": "up", "http_code": 200, "reachable": True}
     client.app.state.kafka_consumer.is_connected = True
+    client.app.state.remediation_consumer.is_connected = True
 
     resp = client.get("/ready")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ready"
-    assert data["checks"] == {"kafka": True, "llm": True}
+    assert data["checks"] == {"kafka": True, "remediation_kafka": True, "llm": True}
 
 
 def test_anomalies_empty_buffer(client):
@@ -63,8 +64,55 @@ def test_anomalies_includes_new_schema_fields(client, sample_anomaly):
     assert "band" not in anomaly
 
 
-def test_clear_anomalies_empties_the_buffer(client, sample_anomaly):
+def test_anomalies_includes_remediation_status_fields(client, sample_anomaly):
     client.app.state.recent_anomalies.append(sample_anomaly)
+
+    resp = client.get("/api/anomalies")
+    anomaly = resp.json()["anomalies"][0]
+    assert "remediation_status" in anomaly
+    assert "remediation_job_id" in anomaly
+    assert "remediation_timestamp" in anomaly
+
+
+def test_anomalies_joins_remediation_result_when_matched(client, sample_anomaly, sample_remediation):
+    client.app.state.recent_anomalies.append(sample_anomaly)
+    client.app.state.recent_remediations.append(sample_remediation)
+
+    resp = client.get("/api/anomalies")
+    anomaly = resp.json()["anomalies"][0]
+    assert anomaly["remediation_status"] == "completed"
+    assert anomaly["remediation_job_id"] == "42"
+    assert anomaly["remediation_timestamp"] == "2026-09-22T10:00:00Z"
+
+
+def test_anomalies_remediation_null_when_no_match(client, sample_anomaly):
+    client.app.state.recent_anomalies.append(sample_anomaly)
+
+    resp = client.get("/api/anomalies")
+    anomaly = resp.json()["anomalies"][0]
+    assert anomaly["remediation_status"] is None
+    assert anomaly["remediation_job_id"] is None
+    assert anomaly["remediation_timestamp"] is None
+
+
+def test_anomalies_remediation_failed_status(client, sample_anomaly, sample_remediation):
+    failed = {**sample_remediation, "success": False, "job_status": "failed"}
+    client.app.state.recent_anomalies.append(sample_anomaly)
+    client.app.state.recent_remediations.append(failed)
+
+    anomaly = client.get("/api/anomalies").json()["anomalies"][0]
+    assert anomaly["remediation_status"] == "failed"
+
+
+def test_anomalies_deps_includes_remediation_kafka(client):
+    resp = client.get("/api/anomalies")
+    deps = resp.json()["_deps"]
+    assert "remediation_kafka" in str(deps) or resp.json().get("_deps", {})
+
+
+def test_clear_anomalies_empties_both_buffers(client, sample_anomaly, sample_remediation):
+    client.app.state.recent_anomalies.append(sample_anomaly)
+    client.app.state.recent_remediations.append(sample_remediation)
 
     resp = client.delete("/api/anomalies")
     assert resp.status_code == 200
@@ -74,10 +122,16 @@ def test_clear_anomalies_empties_the_buffer(client, sample_anomaly):
 
     follow_up = client.get("/api/anomalies")
     assert follow_up.json()["count"] == 0
+    assert len(client.app.state.recent_remediations) == 0
+
+
+_FAKE_META = {"scenario": "antenna_failure", "incident_id": "abc12345", "zone": "A", "application": "File"}
+_FAKE_BLOB = '{"incident_id": "abc12345", "zone": "A", "application": "File", "kpi_window": []}'
 
 
 @patch("ran_chatbot_service.publish_demo_metrics")
-def test_demo_trigger_antenna_failure(mock_publish, client):
+@patch("ran_chatbot_service.build_demo_sample", return_value=(_FAKE_BLOB, _FAKE_META))
+def test_demo_trigger_antenna_failure(mock_build, mock_publish, client):
     mock_publish.return_value = 7
     client.app.state.kafka_consumer.is_connected = True
 
@@ -95,7 +149,8 @@ def test_demo_trigger_antenna_failure(mock_publish, client):
 
 
 @patch("ran_chatbot_service.publish_demo_metrics")
-def test_demo_trigger_defaults_to_antenna_failure(mock_publish, client):
+@patch("ran_chatbot_service.build_demo_sample", return_value=(_FAKE_BLOB, _FAKE_META))
+def test_demo_trigger_defaults_to_antenna_failure(mock_build, mock_publish, client):
     mock_publish.return_value = 0
     resp = client.post("/api/demo/trigger", json={})
     assert resp.status_code == 200
@@ -103,7 +158,8 @@ def test_demo_trigger_defaults_to_antenna_failure(mock_publish, client):
 
 
 @patch("ran_chatbot_service.publish_demo_metrics")
-def test_demo_trigger_kafka_failure_reported_as_502(mock_publish, client):
+@patch("ran_chatbot_service.build_demo_sample", return_value=(_FAKE_BLOB, _FAKE_META))
+def test_demo_trigger_kafka_failure_reported_as_502(mock_build, mock_publish, client):
     mock_publish.side_effect = Exception("Kafka unreachable")
     resp = client.post("/api/demo/trigger", json={"scenario": "antenna_failure"})
     assert resp.status_code == 502

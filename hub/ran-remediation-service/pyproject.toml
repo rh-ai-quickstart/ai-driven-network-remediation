@@ -1,0 +1,57 @@
+[project]
+name = "ran-remediation-service"
+version = "0.1.0"
+description = "Automated RAN anomaly remediation via LlamaStack MCP + AAP — Workflow 2 act layer"
+authors = [
+    { name = "rh-ai-quickstart" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "shared[kafka]",
+    "fastapi>=0.115",
+    "httpx>=0.28",
+    "kafka-python-ng>=2.2",
+    "langgraph>=0.2",
+    "loguru>=0.7.0",
+    "pydantic>=2.0.0",
+    "slack-sdk>=3.0.0",
+    "uvicorn>=0.34",
+]
+
+[tool.uv.sources]
+shared = { path = "../shared" }
+
+[project.scripts]
+ran-remediation-service        = "ran_remediation_service:main"
+ran-remediation-service-server = "ran_remediation_service.server:start"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov --cov-report=term-missing"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=6.0",
+    "respx>=0.22",
+]
+
+[tool.coverage.run]
+source = ["ran_remediation_service"]
+omit = [
+    "*/ran_remediation_service/mcp_client.py",  # HTTP integration layer — covered by integration tests
+    "*/ran_remediation_service/__init__.py",     # CLI entry point — not unit testable
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_empty = true

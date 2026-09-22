@@ -33,6 +33,7 @@ kafka:
     - { name: ran-combined-metrics, partitions: 3, retention: 604800000 }
     - { name: ran-anomalies, partitions: 3, retention: 604800000 }
     - { name: ran-anomalies-enriched, partitions: 3, retention: 604800000 }
+    - { name: ran-remediation-results, partitions: 3, retention: 7776000000 }
   externalPort: 9094
   tls:
     enabled: true

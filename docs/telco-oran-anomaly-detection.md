@@ -49,9 +49,9 @@ flowchart TB
         w1in["OpenShift edge logs\n(pod crashes, timeouts...)"] --> w1proc["agent-service\n(LangGraph + LLM)"] --> w1out["Auto-fix via Ansible,\nor escalate to a human"]
     end
 
-    subgraph wf2 ["Workflow 2: Telco/O-RAN ML Anomaly Detection"]
+    subgraph wf2 ["Workflow 2: Telco/O-RAN ML Anomaly Detection + Remediation"]
         direction LR
-        w2in["TelecomTS KPI traces\n(18 channels x 128 timesteps)"] --> w2ml["ran-ml-service\n(Mantis AD model)"] --> w2det["ran-anomaly-detector\n(orchestration)"] --> w2rca["ran-rca-service\n(RAG + Granite LLM)"]
+        w2in["TelecomTS KPI traces\n(18 channels x 128 timesteps)"] --> w2ml["ran-ml-service\n(Mantis AD model)"] --> w2det["ran-anomaly-detector\n(orchestration)"] --> w2rca["ran-rca-service\n(RAG + Granite LLM)"] --> w2rem["ran-remediation-service\n(LangGraph + AAP)"]
     end
 
     kafka[("Shared Kafka cluster")]
@@ -104,6 +104,8 @@ flowchart LR
     F -->|"enriched"| G["Kafka:\nran-anomalies-enriched"]
     G --> H["ran-chatbot-service\n(buffer + chat)"]
     H --> I["ran-frontend\n(webapp)"]
+    G --> J["ran-remediation-service\n(LangGraph + AAP)"]
+    J -->|"audit"| K["Kafka:\nran-remediation-results"]
 ```
 
 ### 5.3 Walking through a real example
@@ -148,6 +150,10 @@ A presenter clicks "Antenna Failure" in the webapp's Demo Mode panel. Here's wha
 6. **`ran-chatbot-service`** picks it up in its background consumer, buffers it, and the webapp
    displays it with the LLM's diagnosis.
 
+7. **`ran-remediation-service`** independently consumes the same enriched record, keyword-matches
+   the `root_cause` to select an AAP job template, executes the remediation via LlamaStack MCP +
+   AAP, and publishes an audit record to `ran-remediation-results`.
+
 If the presenter clicks "Normal Traffic" instead, step 3 returns `label=normal` and step 4
 **does not publish** — nothing reaches the dashboard. The model correctly filters the ~96%
 of normal traffic.
@@ -184,8 +190,9 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 | **`ran-rca-service`** | LangGraph pipeline (rag_retrieval → analyze). Adds `root_cause` + `recommended_fix` via RAG + Granite LLM. |
 | **`ran-chatbot-service`** | Thin BFF. Buffers enriched anomalies, exposes `/api/chat` + `/api/anomalies` + `/api/demo/trigger`. |
 | **`ran-frontend`** | React webapp. Scenario buttons, anomaly table, chat panel. |
+| **`ran-remediation-service`** | LangGraph pipeline (decide → remediate → notify → audit). Keyword-matches `root_cause` to an AAP template, executes via LlamaStack MCP + AAP, sends Slack notification, publishes to `ran-remediation-results`. |
 | **`telco-oran` (fixture catalog)** | Checked-in TelecomTS samples for reproducible demos. No live HuggingFace fetch at click time. |
-| **Kafka topics** | `ran-combined-metrics` (input), `ran-anomalies` (detector → RCA), `ran-anomalies-enriched` (RCA → chatbot) |
+| **Kafka topics** | `ran-combined-metrics` (input), `ran-anomalies` (detector → RCA), `ran-anomalies-enriched` (RCA → chatbot + remediation), `ran-remediation-results` (remediation audit) |
 
 ---
 
@@ -197,12 +204,13 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 | Training notebook | [`model-serving/training/notebooks/telecomts_model_evaluation.ipynb`](../model-serving/training/notebooks/telecomts_model_evaluation.ipynb) |
 | Anomaly detection orchestrator | [`hub/ran-anomaly-detector/`](../hub/ran-anomaly-detector/) |
 | Root cause analysis service | [`hub/ran-rca-service/`](../hub/ran-rca-service/), see [`docs/telco-oran-rca.md`](telco-oran-rca.md) |
+| Remediation service | [`hub/ran-remediation-service/`](../hub/ran-remediation-service/), see [`docs/telco-oran-remediation.md`](telco-oran-remediation.md) |
 | Chatbot entrypoint | [`hub/ran-chatbot-service/`](../hub/ran-chatbot-service/) |
 | RAN webapp | [`hub/ran-frontend/`](../hub/ran-frontend/) |
 | TelecomTS fixture catalog | [`hub/telco-oran/src/telco_oran/fixtures/`](../hub/telco-oran/src/telco_oran/fixtures/) + `catalog.py` |
 | Contracts | [`contracts/ran-anomalies.schema.json`](../contracts/ran-anomalies.schema.json), [`contracts/ran-anomaly-enriched.schema.json`](../contracts/ran-anomaly-enriched.schema.json) |
-| Helm templates | `hub/helm/templates/ran-*.yaml` |
-| Helm values | [`hub/helm/values.yaml`](../hub/helm/values.yaml) (`ranAnomalyDetector:`, `ranRcaService:`, `ranChatbotService:`, `ranFrontend:`) |
+| Helm templates | `hub/helm/charts/telco/templates/ran-*.yaml` |
+| Helm values | [`hub/helm/charts/telco/values.yaml`](../hub/helm/charts/telco/values.yaml) (`ranAnomalyDetector:`, `ranRcaService:`, `ranChatbotService:`, `ranFrontend:`, `ranRemediationService:`) |
 | Demo recording script | [`docs/RAN-DEMO-SCRIPT.md`](RAN-DEMO-SCRIPT.md) |
 
 ---
@@ -211,11 +219,11 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 
 | Item | Status |
 |---|---|
-| **Binary anomaly detection (ML)** | **Done** — Mantis AD via `ran-ml-service` (this ticket, APPENG-6023) |
+| **Binary anomaly detection (ML)** | **Done** — Mantis AD via `ran-ml-service` (APPENG-6023) |
 | **10-class root cause classification (ML)** | Planned — APPENG-6062. Same predictor image, `TASK=classify`, second InferenceService |
 | **Vendor documentation RAG ingestion** | **Done** — `hub/ingestion-pipeline` populates `telco_oran_docs` vector store |
-| **LLM-based root cause + recommended fix** | **Done** — `ran-rca-service` (RAG + Granite) |
-| **Actual remediation** | Not yet built — nothing executes a real-world fix |
+| **LLM-based root cause + recommended fix** | **Done** — `ran-rca-service` (RAG + Granite), see [`docs/telco-oran-rca.md`](telco-oran-rca.md) |
+| **Actual remediation** | **Done** — see [`docs/telco-oran-remediation.md`](telco-oran-remediation.md). The `ran-remediation-service` consumes enriched anomalies, selects an AAP job template based on root cause context, executes via LlamaStack MCP + AAP, sends a Slack notification, and publishes an audit record to `ran-remediation-results`. |
 | **Background replay / live data feed** | Not yet — demos use on-demand fixture injection only |
 | **GPU serving** | Not needed for demo scale (CPU inference ~5ms) |
 
@@ -234,3 +242,5 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 6. **Same image for detect and classify** — APPENG-6062 adds `TASK=classify` to the same
    `ran-ml-service` image with a different artifact and InferenceService.
 7. **Fixtures are checked in** — demos don't fetch from HuggingFace at click time.
+8. **Remediation is independent** — `ran-remediation-service` consumes `ran-anomalies-enriched`
+   in parallel with `ran-chatbot-service`; neither blocks the other.

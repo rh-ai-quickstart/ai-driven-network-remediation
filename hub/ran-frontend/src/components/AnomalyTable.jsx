@@ -6,6 +6,16 @@ function confidenceBadge(confidence) {
   return "low";
 }
 
+function RemediationBadge({ status }) {
+  if (status === "completed") {
+    return <span className="remediation-badge completed">✅ Remediated</span>;
+  }
+  if (status === "failed") {
+    return <span className="remediation-badge failed">❌ Remediation failed</span>;
+  }
+  return null;
+}
+
 export function AnomalyTable({ anomalies, baseUrl, onCleared }) {
   const [clearing, setClearing] = useState(false);
   const [error, setError] = useState("");
@@ -58,6 +68,7 @@ export function AnomalyTable({ anomalies, baseUrl, onCleared }) {
                 <span className="anomaly-cell">
                   Incident {a.incident_id} · Zone {a.zone}
                 </span>
+                <RemediationBadge status={a.remediation_status} />
               </header>
               <p className="anomaly-detail">
                 Application: {a.application} · 128×18 KPI window
