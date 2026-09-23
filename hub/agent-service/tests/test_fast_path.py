@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_service.config import FAST_PATH_LAST_HEAL_ANNOTATION, ROLLOUT_RESTART_ANNOTATION
+from agent_service.config import EDGE_NAMESPACE, FAST_PATH_LAST_HEAL_ANNOTATION, ROLLOUT_RESTART_ANNOTATION
 from agent_service.fast_path import (
     demo_requires_hub_aap,
     deployment_remediation_actuation_source,
@@ -185,7 +185,7 @@ def test_target_deployment_name_derives_from_replicaset_pod():
 
 def test_target_deployment_name_maps_demo_nginx_edge_pod():
     assert (
-        target_deployment_name("nginx-edge-oom", namespace="dark-noc-edge")
+        target_deployment_name("nginx-edge-oom", namespace=EDGE_NAMESPACE)
         == "edge-nginx"
     )
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
+from agent_service.config import EDGE_NAMESPACE
 from agent_service.utils import (
     build_launch_extra_vars,
     derive_deployment_name,
@@ -180,7 +181,7 @@ class TestBuildLaunchExtraVarsBareDeployment:
     def test_nginx_edge_pod_maps_to_edge_nginx_deployment(self):
         result = build_launch_extra_vars(
             _log_event(
-                ns="dark-noc-edge",
+                ns=EDGE_NAMESPACE,
                 pod="nginx-edge-oom",
                 container="nginx",
                 site="edge-01",

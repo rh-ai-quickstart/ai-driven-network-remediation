@@ -1,5 +1,6 @@
 import json
 
+from agent_service.config import EDGE_NAMESPACE
 from agent_service.edge_site import (
     extract_edge_site_id_from_alert,
     remediation_should_retry,
@@ -37,7 +38,7 @@ class TestExtractEdgeSiteIdFromAlert:
 
 class TestResolveEdgeSiteId:
     def test_defaults_dark_noc_edge_namespace_to_edge_01(self):
-        event = make_log_event(namespace="dark-noc-edge", edge_site_id="unknown")
+        event = make_log_event(namespace=EDGE_NAMESPACE, edge_site_id="unknown")
         assert resolve_edge_site_id(event) == "edge-01"
 
     def test_resource_specs_stamp(self):
