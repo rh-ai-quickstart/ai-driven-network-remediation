@@ -10,7 +10,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: ansible-lightspeed-api
+      app.kubernetes.io/component: ansible-lightspeed-chatbot-api
   policyTypes:
     - Ingress
   ingress:
