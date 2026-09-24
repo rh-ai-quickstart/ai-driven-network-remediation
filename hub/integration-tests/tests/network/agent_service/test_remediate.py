@@ -17,6 +17,7 @@ INCIDENT_STATE_FIELDS = {
     "analysis_tokens_used",
     "analysis_latency_ms",
     "decision",
+    "selected_template",
     "remediation_result",
     "pod_status",
     "cluster_events",
@@ -45,15 +46,16 @@ def _assert_valid_remediation_response(response, expected_raw_event, expected_de
 
 class TestRemediateRouting:
     def test_high_confidence_remediates(self, agent_service_client):
+        raw_event = "nginx pod stuck in CrashLoopBackOff, container exits immediately after start"
         response = agent_service_client.post(
             "/remediate",
             json={
-                "raw_event": "high confidence event",
+                "raw_event": raw_event,
                 "confidence_override": 0.9,
                 "failure_type_override": "CrashLoopBackOff",
             },
         )
-        _assert_valid_remediation_response(response, "high confidence event", "remediate")
+        _assert_valid_remediation_response(response, raw_event, "remediate")
 
     def test_high_confidence_generation_type_routes_to_lightspeed(self, agent_service_client):
         response = agent_service_client.post(

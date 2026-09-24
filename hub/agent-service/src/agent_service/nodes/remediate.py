@@ -15,15 +15,12 @@ from agent_service.models import GraphConfig, RemediationResult
 from agent_service.utils import build_launch_extra_vars
 from agent_service.utils import invoke_tool as _invoke_tool
 
-# TODO: remove hardcoded templates before release; use Lightspeed flow only.
 # Demo-only: these templates must be pre-created in AAP manually.
+# Keep only unambiguous keyword mappings; catch-all words (restart, config,
+# service, ...) matched almost every RCA action and collapsed selection onto
+# restart-nginx. Ambiguous cases now resolve to None and are handled upstream.
 _TEMPLATE_KEYWORDS: dict[str, str] = {
     "nginx": "restart-nginx",
-    "restart": "restart-nginx",
-    "configuration": "restart-nginx",
-    "crashloop": "restart-nginx",
-    "config": "restart-nginx",
-    "service": "restart-nginx",
     "scale": "scale-up-workers",
     "replica": "scale-up-workers",
     "oom": "scale-up-workers",
@@ -32,24 +29,27 @@ _TEMPLATE_KEYWORDS: dict[str, str] = {
     "storage": "clear-disk-space",
 }
 
+# Only failure types that genuinely map to a single honest playbook.
 _FAILURE_TYPE_DEFAULTS: dict[str, str] = {
     "CrashLoopBackOff": "restart-nginx",
-    "ConfigError": "restart-nginx",
     "OOMKilled": "scale-up-workers",
     "StorageFull": "clear-disk-space",
-    "NetworkTimeout": "restart-nginx",
 }
 
 
-def _resolve_template(action: str, failure_type: str | None = None) -> str:
-    """Map a natural-language recommendation to the closest AAP job template."""
+def _resolve_template(action: str, failure_type: str | None = None) -> str | None:
+    """Map a natural-language recommendation to the closest AAP job template.
+
+    Returns None when no keyword matches and no failure-type default applies,
+    so callers escalate instead of fabricating a template name for AAP.
+    """
     lower = action.lower()
     for keyword, template in _TEMPLATE_KEYWORDS.items():
         if keyword in lower:
             return template
     if failure_type and failure_type in _FAILURE_TYPE_DEFAULTS:
         return _FAILURE_TYPE_DEFAULTS[failure_type]
-    return action
+    return None
 
 
 async def _launch_job(template: str, log_event, edge_site_id: str) -> dict:
@@ -122,9 +122,11 @@ def make_remediate_node(config: GraphConfig):
         rca = state.root_cause_analysis
 
         raw_action = rca.recommended_actions[0] if rca.recommended_actions else None
-        template = _resolve_template(raw_action, rca.failure_type) if raw_action else None
+        template = state.selected_template or (
+            _resolve_template(raw_action, rca.failure_type) if raw_action else None
+        )
         if not template:
-            logger.warning("No recommended actions in RCA")
+            logger.warning("No matching remediation template for RCA")
             return {
                 "should_retry": False,
                 "remediation_result": RemediationResult(
@@ -133,7 +135,7 @@ def make_remediate_node(config: GraphConfig):
                     success=False,
                     job_id="",
                     duration_seconds=0,
-                    output_summary="No recommended actions in RCA",
+                    output_summary="No matching remediation template for RCA",
                     timestamp=now_iso(),
                 ),
             }

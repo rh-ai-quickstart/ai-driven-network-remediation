@@ -136,6 +136,19 @@ ANALYZE_SYSTEM_PROMPT = os.getenv(
     ).format(failure_types=_FAILURE_TYPES),
 )
 
+DECIDE_MATCH_PROMPT = os.getenv(
+    "DECIDE_MATCH_PROMPT",
+    "You are a senior SRE deciding whether a PRE-BUILT remediation playbook will "
+    "actually fix a diagnosed incident. Reason step by step:\n"
+    "1. State the root cause from the analysis.\n"
+    "2. State what the candidate playbook does.\n"
+    "3. Decide if running it resolves THIS root cause, not just the symptom.\n"
+    "Choose NO_MATCH if the playbook is unrelated, only masks the symptom, or you "
+    "are unsure.\n"
+    "Respond ONLY with valid JSON matching the provided schema: "
+    '{"reasoning": "...", "verdict": "MATCH" | "NO_MATCH"}.',
+)
+
 # Behavior/tone only. The available-tools list is appended at runtime from the
 # _TOOLS definition in nodes/investigate.py so it never drifts from the real inventory.
 INVESTIGATE_SYSTEM_PROMPT = os.getenv(

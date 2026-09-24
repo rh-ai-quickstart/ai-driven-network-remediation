@@ -78,6 +78,11 @@ class FailedAttempt(TypedDict):
 class GraphConfig(BaseModel):
     remediate_threshold: float = 0.8
     escalate_threshold: float = 0.7
+    # On a NO_MATCH from the playbook guard, generate a bespoke playbook via
+    # lightspeed only when the agent is this confident about the root cause;
+    # otherwise escalate to a human.
+    lightspeed_threshold: float = 0.9
+    enable_match_guard: bool = True
     max_retries: int = 1
     job_timeout: float = 120.0
     tool_call_timeout: int = 10
@@ -91,6 +96,14 @@ class GraphConfig(BaseModel):
             env_val = os.getenv("INVESTIGATE_MAX_ITERATIONS")
             if env_val is not None:
                 values["investigate_max_iterations"] = int(env_val)
+        if "lightspeed_threshold" not in values:
+            env_val = os.getenv("LIGHTSPEED_THRESHOLD")
+            if env_val is not None:
+                values["lightspeed_threshold"] = float(env_val)
+        if "enable_match_guard" not in values:
+            env_val = os.getenv("ENABLE_MATCH_GUARD")
+            if env_val is not None:
+                values["enable_match_guard"] = env_val.strip().lower() in {"1", "true", "yes", "on"}
         return values
 
 
@@ -108,6 +121,7 @@ class IncidentState(BaseModel):
     analysis_tokens_used: int = 0
     analysis_latency_ms: float = 0.0
     decision: str = ""
+    selected_template: Optional[str] = None
     failed_attempts: list[FailedAttempt] = []
     should_retry: bool = False
     remediation_result: Optional[RemediationResult] = None

@@ -4,7 +4,7 @@ import pytest
 from helpers import make_log_event, make_rca, make_state
 
 from agent_service.models import GraphConfig
-from agent_service.nodes.remediate import _launch_job, make_remediate_node
+from agent_service.nodes.remediate import _launch_job, _resolve_template, make_remediate_node
 
 _LAUNCH_OK = {"success": True, "job_id": 99, "status": "pending"}
 _JOB_DONE = {
@@ -59,3 +59,37 @@ class TestClusterName:
             result = await node(state)
 
         assert result["remediation_result"].success is True
+
+
+class TestResolveTemplate:
+    def test_nginx_action_matches_restart_nginx(self):
+        assert _resolve_template("restart nginx", "CrashLoopBackOff") == "restart-nginx"
+
+    def test_crashloop_type_defaults_to_restart_nginx(self):
+        assert _resolve_template("investigate the pod", "CrashLoopBackOff") == "restart-nginx"
+
+    def test_unrelated_action_and_undefaulted_type_returns_none(self):
+        assert _resolve_template("reboot database", "AAPJobFailure") is None
+
+    def test_dropped_catchall_no_longer_collapses_to_nginx(self):
+        # "restart service" + NetworkTimeout used to resolve to restart-nginx via
+        # catch-all keyword/default entries; both are now removed.
+        assert _resolve_template("restart service", "NetworkTimeout") is None
+
+
+@pytest.mark.asyncio
+async def test_no_matching_template_returns_none_result():
+    config = GraphConfig()
+    node = make_remediate_node(config)
+    state = make_state(
+        root_cause_analysis=make_rca(
+            failure_type="AAPJobFailure",
+            recommended_actions=["reboot database"],
+        ),
+    )
+    with patch("agent_service.nodes.remediate._invoke_tool", AsyncMock()):
+        result = await node(state)
+
+    assert result["remediation_result"].action_taken == "none"
+    assert result["remediation_result"].success is False
+    assert result["should_retry"] is False

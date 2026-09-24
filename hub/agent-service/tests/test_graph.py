@@ -13,6 +13,7 @@ from agent_service.models import (
     RemediationResult,
     RootCauseAnalysis,
 )
+from agent_service.nodes.match_guard import MatchVerdict
 from agent_service.nodes.remediate import make_remediate_node
 
 
@@ -137,6 +138,10 @@ def _patch_graph_nodes():
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
         patch("agent_service.graph.analyze_node", _analyze_stub),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
+        patch(
+            "agent_service.nodes.decide.verify_playbook_match",
+            AsyncMock(return_value=MatchVerdict.MATCH),
+        ),
         patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke),
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://als-stub"),
         patch("agent_service.nodes.lightspeed._call_als", _als_mock),
@@ -299,6 +304,53 @@ class TestConditionalRouting:
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
+
+    async def test_guard_no_match_low_confidence_escalates(self, _patch_graph_nodes):
+        with patch(
+            "agent_service.nodes.decide.verify_playbook_match",
+            AsyncMock(return_value=MatchVerdict.NO_MATCH),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke({"raw_event": "test event"})
+
+        assert result["decision"] == "escalate"
+        assert result.get("remediation_result") is None
+
+    async def test_guard_no_match_high_confidence_routes_to_lightspeed(self, _patch_graph_nodes):
+        with patch(
+            "agent_service.nodes.decide.verify_playbook_match",
+            AsyncMock(return_value=MatchVerdict.NO_MATCH),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke(
+                {"raw_event": "test event", "confidence_override": 0.95}
+            )
+
+        assert result["decision"] == "lightspeed"
+        assert result["remediation_result"].generated_template_name is not None
+
+    async def test_guard_error_escalates_fail_closed(self, _patch_graph_nodes):
+        with patch(
+            "agent_service.nodes.decide.verify_playbook_match",
+            AsyncMock(return_value=MatchVerdict.ERROR),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke(
+                {"raw_event": "test event", "confidence_override": 0.95}
+            )
+
+        assert result["decision"] == "escalate"
+        assert result.get("remediation_result") is None
+
+    async def test_guard_disabled_routes_deterministically_to_remediate(self, _patch_graph_nodes):
+        guard = AsyncMock(return_value=MatchVerdict.NO_MATCH)
+        config = GraphConfig(enable_match_guard=False)
+        with patch("agent_service.nodes.decide.verify_playbook_match", guard):
+            graph = build_graph(config)
+            result = await graph.ainvoke({"raw_event": "test event"})
+
+        assert result["decision"] == "remediate"
+        guard.assert_not_awaited()
 
     async def test_lightspeed_failure_escalates(self, _patch_graph_nodes):
         als_fail = AsyncMock(side_effect=ConnectionError("ALS unreachable"))
