@@ -9,7 +9,8 @@
 # LokiStack uses the shared minio secret (created by the minio subchart) for S3 credentials.
 #
 # Environment overrides (use --set):
-#   --set lokistack.size=1x.medium
+#   --set lokistack.lokistack.size=1x.medium            (from network chart)
+#   --set network.lokistack.lokistack.size=1x.medium    (from umbrella chart)
 #   --set grafana.replicas=2
 
 # Cluster apps domain (auto-discovered on OpenShift, set manually for helm template or non-OpenShift)

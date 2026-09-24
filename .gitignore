@@ -91,7 +91,6 @@ scripts/ci/test-local.sh
 # Helm Chart deployment tgz files
 *.tgz
 */helm/tmpcharts*
-scripts/ci/test-local.sh
 .claude/
 
 # Agent-local Cursor rules / playbooks (not part of the shipped repo)

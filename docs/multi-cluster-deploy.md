@@ -444,7 +444,7 @@ Per-spoke proxy kubeconfigs default to `insecure-skip-tls-verify: true` (`multiC
 That path needs `CLUSTER_PROXY_URL` and `RHACM_HUB_TOKEN`. It is unrelated to fixing missing spokes. Leave it `false` unless you are wiring real AAP through the ACM proxy.
 
 **Hub helm --wait / LlamaStack Pending**  
-The chart lowers LlamaStack CPU/memory requests so ACM hub workers can schedule during `helm --wait`. Raise `llama-stack.resources` if you have spare capacity. The `ranAnomalyDetector` deploys with the Telco/O-RAN use case (`ENABLE_TELCO_ORAN=true`, the default); disable it with `ENABLE_TELCO_ORAN=false` or `--set global.telcoOran.enabled=false`.
+The chart lowers LlamaStack CPU/memory requests so ACM hub workers can schedule during `helm --wait`. Raise `llama-stack.resources` if you have spare capacity. The `ranAnomalyDetector` deploys with the Telco/O-RAN use case (`ENABLE_TELCO_ORAN=true`, the default); disable it with `ENABLE_TELCO_ORAN=false` or `--set telco.enabled=false`.
 
 ## Offline checks (no live ACM)
 
