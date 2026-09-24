@@ -896,7 +896,7 @@ unit-tests:
 	cd hub/telco-oran && uv sync --group dev && uv run pytest
 	cd hub/ran-anomaly-detector && uv sync --group dev && uv run pytest
 	cd hub/ran-rca-service && uv sync --group dev && uv run pytest
-	cd hub/ran-chatbot-service && uv sync --group dev && uv run pytest
+	cd hub/ran-chatbot-service && uv sync --group dev --reinstall && uv run pytest
 	cd hub/ran-remediation-service && uv sync --group dev && uv run pytest
 	cd edge/fast-path-healer && uv sync --group dev && uv run pytest
 
