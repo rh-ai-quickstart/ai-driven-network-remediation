@@ -23,10 +23,8 @@ spec:
           image: "{{ .Values.image.registry }}/{{ .Values.image.ranRemediationService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
-            - name: LLAMASTACK_HOST
-              value: {{ .Values.ranRemediationService.env.llamastackHost | quote }}
-            - name: LLAMASTACK_PORT
-              value: {{ .Values.ranRemediationService.env.llamastackPort | quote }}
+            - name: AAP_URL
+              value: {{ .Values.ranRemediationService.env.aapUrl | quote }}
             - name: KAFKA_BOOTSTRAP
               value: {{ .Values.ranRemediationService.env.kafkaBootstrap | quote }}
             - name: KAFKA_ENRICHED_TOPIC
@@ -52,6 +50,14 @@ spec:
                 secretKeyRef:
                   name: slack-secret
                   key: token
+                  optional: true
+            # Unset against aap-mock, which has no auth; a real AAP controller
+            # needs this secret to exist.
+            - name: AAP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: noc-aap-secret
+                  key: AAP_TOKEN
                   optional: true
           ports:
             - name: http

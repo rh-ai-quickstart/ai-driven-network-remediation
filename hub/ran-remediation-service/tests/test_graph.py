@@ -1,9 +1,11 @@
 """Integration tests for the full LangGraph pipeline."""
 
+from contextlib import ExitStack, contextmanager
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from ran_remediation_service.aap_client import AAPError
 from ran_remediation_service.graph import build_graph
 
 _ANTENNA_SAMPLE = {
@@ -37,18 +39,34 @@ _GENERIC_SAMPLE = {
 }
 
 
+@contextmanager
+def _patch_aap(job_id: int, output: str):
+    """Patch the aap_client calls for a job that launches and succeeds at once."""
+    values = {
+        "launch_job": job_id,
+        "get_job_status": {
+            "status": "successful",
+            "failed": False,
+            "elapsed": 1.0,
+            "finished": "2026-09-21T10:00:00Z",
+        },
+        "get_job_output": output,
+    }
+    with ExitStack() as stack:
+        for name, value in values.items():
+            stack.enter_context(
+                patch(f"ran_remediation_service.nodes.remediate.{name}", new_callable=AsyncMock, return_value=value)
+            )
+        yield
+
+
 @pytest.mark.asyncio
 async def test_graph_successful_remediation():
     graph = build_graph()
 
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool, \
+    with _patch_aap(10, "ok=2 changed=1"), \
          patch("ran_remediation_service.nodes.audit.publish_remediation_record", return_value=0), \
          patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", False):
-        mock_tool.side_effect = [
-            {"success": True, "job_id": 10},
-            {"status": "successful", "failed": False, "elapsed": 1.0, "finished": "2026-09-21T10:00:00Z"},
-            {"output": "ok=2 changed=1"},
-        ]
         result = await graph.ainvoke(_ANTENNA_SAMPLE)
 
     assert result["template_name"] == "ran-antenna-tilt-adjust"
@@ -60,14 +78,9 @@ async def test_graph_successful_remediation():
 async def test_graph_cell_outage_routes_to_recovery():
     graph = build_graph()
 
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool, \
+    with _patch_aap(20, "cell recovered"), \
          patch("ran_remediation_service.nodes.audit.publish_remediation_record", return_value=0), \
          patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", False):
-        mock_tool.side_effect = [
-            {"success": True, "job_id": 20},
-            {"status": "successful", "failed": False, "elapsed": 2.0, "finished": "2026-09-21T10:00:00Z"},
-            {"output": "cell recovered"},
-        ]
         result = await graph.ainvoke(_OUTAGE_SAMPLE)
 
     assert result["template_name"] == "ran-cell-recovery"
@@ -78,14 +91,9 @@ async def test_graph_cell_outage_routes_to_recovery():
 async def test_graph_unknown_root_cause_uses_generic_template():
     graph = build_graph()
 
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool, \
+    with _patch_aap(30, "generic ok"), \
          patch("ran_remediation_service.nodes.audit.publish_remediation_record", return_value=0), \
          patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", False):
-        mock_tool.side_effect = [
-            {"success": True, "job_id": 30},
-            {"status": "successful", "failed": False, "elapsed": 1.0, "finished": "2026-09-21T10:00:00Z"},
-            {"output": "generic ok"},
-        ]
         result = await graph.ainvoke(_GENERIC_SAMPLE)
 
     assert result["template_name"] == "ran-generic-remediation"
@@ -97,10 +105,10 @@ async def test_graph_failed_remediation_still_audits():
     graph = build_graph()
     audited = []
 
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool, \
+    with patch("ran_remediation_service.nodes.remediate.launch_job", new_callable=AsyncMock,
+               side_effect=AAPError("template not found")), \
          patch("ran_remediation_service.nodes.audit.publish_remediation_record", side_effect=lambda p, **kw: audited.append(p) or 0), \
          patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", False):
-        mock_tool.return_value = {"success": False, "error": "template not found"}
         result = await graph.ainvoke(_ANTENNA_SAMPLE)
 
     assert result["success"] is False

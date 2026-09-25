@@ -246,15 +246,16 @@ endif
 endif
 
 helm_mock_args = \
-	--set network.aapMock.enabled=$(ENABLE_AAP_MOCK) \
-	--set network.aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
-	--set network.aapMock.image.tag=$(VERSION) \
+	--set global.aapMock.enabled=$(ENABLE_AAP_MOCK) \
+	--set global.aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
+	--set global.aapMock.image.tag=$(VERSION) \
 	--set network.servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
 	--set network.servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
 	--set network.servicenowMock.image.tag=$(VERSION) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string telco.ranRemediationService.env.aapUrl=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string network.mcpSecrets.aap.token=mock,) \
 	$(if $(AAP_SECRET_NAME),--set network.mcpSecrets.aap.create=false,) \
 	$(if $(AAP_SECRET_NAME),--set-string network.mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
@@ -959,9 +960,11 @@ telco-integration-tests:
 	PF_LLAMASTACK_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID" EXIT; \
+	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/ran-ml-service-predictor 8009:80 & \
+	PF_RAN_ML_PID=$$!; \
+	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
+	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL=http://localhost:8009 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:
@@ -988,9 +991,11 @@ integration-tests:
 	PF_AGENT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID" EXIT; \
+	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/ran-ml-service-predictor 8009:80 & \
+	PF_RAN_ML_PID=$$!; \
+	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic $(if $(filter true,$(ENABLE_TELCO_ORAN)),tests/telco) $(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),tests/network)
+	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL=http://localhost:8009 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic $(if $(filter true,$(ENABLE_TELCO_ORAN)),tests/telco) $(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),tests/network)
 
 # ══════════════════════════════════════════════════════════════════════
 # ServiceNow PDI Bootstrap

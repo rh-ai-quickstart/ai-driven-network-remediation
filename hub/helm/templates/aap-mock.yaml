@@ -1,11 +1,11 @@
-{{- if .Values.aapMock.enabled }}
+{{- if and .Values.global.aapMock.enabled (or .Values.telco.enabled .Values.network.enabled) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: aap-mock
   labels:
     app: aap-mock
-    {{- include "network.labels" . | nindent 4 }}
+    {{- include "hub.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: aap-mock
-          image: "{{ .Values.aapMock.image.repository }}:{{ .Values.aapMock.image.tag }}"
+          image: "{{ .Values.global.aapMock.image.repository }}:{{ .Values.global.aapMock.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 8080
@@ -35,7 +35,7 @@ metadata:
   name: aap-mock
   labels:
     app: aap-mock
-    {{- include "network.labels" . | nindent 4 }}
+    {{- include "hub.labels" . | nindent 4 }}
 spec:
   selector:
     app: aap-mock

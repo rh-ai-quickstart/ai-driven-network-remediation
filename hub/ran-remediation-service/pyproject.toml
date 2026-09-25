@@ -1,7 +1,7 @@
 [project]
 name = "ran-remediation-service"
 version = "0.1.0"
-description = "Automated RAN anomaly remediation via LlamaStack MCP + AAP — Workflow 2 act layer"
+description = "Automated RAN anomaly remediation via AAP — Workflow 2 act layer"
 authors = [
     { name = "rh-ai-quickstart" }
 ]
@@ -47,7 +47,7 @@ dev = [
 [tool.coverage.run]
 source = ["ran_remediation_service"]
 omit = [
-    "*/ran_remediation_service/mcp_client.py",  # HTTP integration layer — covered by integration tests
+    "*/ran_remediation_service/aap_client.py",  # HTTP integration layer — covered by integration tests
     "*/ran_remediation_service/__init__.py",     # CLI entry point — not unit testable
 ]
 
