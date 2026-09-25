@@ -1,7 +1,7 @@
 """Integration tests for the ran-ml-service ML predictor.
 
 These run against a deployed ran-ml-service (via port-forward or direct URL).
-Set RAN_ML_SERVICE_URL env var to override the default http://localhost:8080.
+Set RAN_ML_SERVICE_URL env var to override the default http://localhost:8009.
 
 Validates:
 - Model loading and readiness
