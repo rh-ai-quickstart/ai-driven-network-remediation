@@ -30,12 +30,6 @@ gitea:
 # Mock services
 # ══════════════════════════════════════════════════════════════════════
 
-aapMock:
-  enabled: true
-  image:
-    repository: quay.io/rh-ai-quickstart/noc-aap-mock
-    tag: "0.1.0"
-
 servicenowMock:
   enabled: true
   image:

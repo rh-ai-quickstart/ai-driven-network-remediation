@@ -245,15 +245,16 @@ endif
 endif
 
 helm_mock_args = \
-	--set network.aapMock.enabled=$(ENABLE_AAP_MOCK) \
-	--set network.aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
-	--set network.aapMock.image.tag=$(VERSION) \
+	--set global.aapMock.enabled=$(ENABLE_AAP_MOCK) \
+	--set global.aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
+	--set global.aapMock.image.tag=$(VERSION) \
 	--set network.servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
 	--set network.servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
 	--set network.servicenowMock.image.tag=$(VERSION) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string telco.ranRemediationService.env.aapUrl=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string network.mcpSecrets.aap.token=mock,) \
 	$(if $(AAP_SECRET_NAME),--set network.mcpSecrets.aap.create=false,) \
 	$(if $(AAP_SECRET_NAME),--set-string network.mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \

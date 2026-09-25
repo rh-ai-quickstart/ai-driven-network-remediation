@@ -13,9 +13,7 @@ and publishes an audit record to `ran-remediation-results`.
 ran-rca-service
   → Kafka: ran-anomalies-enriched
   → ran-remediation-service (LangGraph: decide → remediate → notify → audit)
-      → LlamaStack /v1/tool-runtime/invoke
-          → mcp-aap server
-              → AAP / aap-mock (launch job, poll, get output)
+      → AAP / aap-mock (launch job, poll, get output)
       → Slack notification (optional)
       → Kafka: ran-remediation-results
 ```
@@ -82,16 +80,7 @@ Keywords are checked in priority order; the first match wins.
 
 ### How AAP is called (MCP pattern — same as Workflow 1)
 
-`ran-remediation-service` does **not** call AAP directly. It calls LlamaStack's
-`/v1/tool-runtime/invoke` endpoint, which routes the call to the `mcp-aap` server:
-
-```python
-# mcp_client.invoke_tool() — independent reimplementation of the same
-# pattern used by agent-service/utils.py, no cross-service imports.
-await invoke_tool("launch_job",     {"job_template_name": template, "extra_vars": {...}})
-await invoke_tool("get_job_status", {"job_id": job_id})
-await invoke_tool("get_job_output", {"job_id": job_id})
-```
+`ran-remediation-service` calls AAP directly. It calls the `mcp-aap` server:
 
 In local development the `aap-mock` service handles these calls, returning synthetic
 `"status": "successful"` responses without running any real playbook.

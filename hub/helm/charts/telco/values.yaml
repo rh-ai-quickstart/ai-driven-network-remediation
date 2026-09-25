@@ -128,8 +128,7 @@ ranRemediationService:
   enabled: true
   replicaCount: 1
   env:
-    llamastackHost: "llamastack-service"
-    llamastackPort: "8321"
+    aapUrl: "http://aap-mock:8080"
     kafkaBootstrap: "kafka:9092"
     kafkaEnrichedTopic: "ran-anomalies-enriched"
     kafkaRemediationTopic: "ran-remediation-results"

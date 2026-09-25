@@ -1,8 +1,8 @@
-"""Remediate node — launches and polls an AAP job via LlamaStack MCP tools.
+"""Remediate node — launches and polls an AAP job via the AAP controller API.
 
 Same pattern as agent-service nodes/remediate.py (Workflow 1) but adapted
-for RAN anomaly context. Uses invoke_tool() to call the mcp-aap server through
-LlamaStack's /v1/tool-runtime/invoke endpoint.
+for RAN anomaly context. decide_node already resolved the template name, so
+this calls AAP directly instead of going through an MCP tool layer.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from ran_remediation_service.config import (
     TERMINAL_STATUSES,
     now_iso,
 )
-from ran_remediation_service.mcp_client import invoke_tool
+from ran_remediation_service.aap_client import get_job_output, get_job_status, launch_job
 from ran_remediation_service.models import RemediationState
 
 
@@ -27,23 +27,11 @@ async def remediate_node(state: RemediationState) -> dict:
     logger.info("Remediate node invoked incident_id={} template={}", state.incident_id, state.template_name)
 
     try:
-        launch = await invoke_tool(
-            "launch_job",
-            {
-                "job_template_name": state.template_name,
-                "extra_vars": state.extra_vars,
-            },
-        )
+        job_id = await launch_job(state.template_name, state.extra_vars)
     except Exception as exc:
         logger.exception("Failed to launch AAP job for template '{}'", state.template_name)
         return _failure(state.template_name, str(exc))
 
-    if not launch.get("success"):
-        error = launch.get("error", "Unknown launch error")
-        logger.warning("AAP launch failed: {}", error)
-        return _failure(state.template_name, error)
-
-    job_id = launch["job_id"]
     logger.info("Launched AAP job {} template='{}' incident_id={}", job_id, state.template_name, state.incident_id)
 
     status = await _poll_job(job_id)
@@ -86,7 +74,7 @@ async def _poll_job(job_id: int) -> dict | None:
     deadline = time.monotonic() + JOB_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         try:
-            status = await invoke_tool("get_job_status", {"job_id": job_id})
+            status = await get_job_status(job_id)
         except Exception:
             logger.exception("Failed to poll job status job_id={}", job_id)
             return None
@@ -101,8 +89,7 @@ async def _poll_job(job_id: int) -> dict | None:
 
 async def _get_output(job_id: int) -> str:
     try:
-        result = await invoke_tool("get_job_output", {"job_id": job_id})
-        return result.get("output", "")
+        return await get_job_output(job_id)
     except Exception:
         logger.exception("Failed to get job output job_id={}", job_id)
         return ""
