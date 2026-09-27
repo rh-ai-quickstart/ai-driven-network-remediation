@@ -94,7 +94,7 @@ class TestConsumerLifecycle:
         assert kwargs["group_id"] == "dark-noc-agent"
         assert kwargs["auto_offset_reset"] == "latest"
         assert kwargs["max_poll_records"] == 1
-        assert kwargs["max_poll_interval_ms"] == 600_000
+        assert kwargs["max_poll_interval_ms"] == 1_920_000
         mock_consumer.close.assert_called()
 
     @patch("agent_service.kafka.consumer.KafkaConsumer")

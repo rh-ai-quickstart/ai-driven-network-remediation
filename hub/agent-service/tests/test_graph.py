@@ -142,6 +142,7 @@ def _patch_graph_nodes():
             "agent_service.nodes.decide.verify_playbook_match",
             AsyncMock(return_value=MatchVerdict.MATCH),
         ),
+        patch("agent_service.nodes._aap_job._invoke_tool", _mock_invoke_tool()),
         patch("agent_service.nodes.escalate._invoke_tool", _mock_escalate_invoke),
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "http://als-stub"),
         patch("agent_service.nodes.lightspeed._call_als", _als_mock),
@@ -439,6 +440,20 @@ class TestRouteAfterLightspeed:
         state = IncidentState(raw_event="test", remediation_result=result)
         assert _route_after_lightspeed(state) == "escalate"
 
+    def test_timeout_routes_to_escalate(self):
+        result = RemediationResult(
+            action_taken="generate-playbook",
+            tool_used="lightspeed",
+            success=False,
+            timed_out=True,
+            job_id="42",
+            duration_seconds=120.0,
+            output_summary="Job 42 timed out",
+            timestamp="2024-01-01T00:00:00Z",
+        )
+        state = IncidentState(raw_event="test", remediation_result=result)
+        assert _route_after_lightspeed(state) == "escalate"
+
     def test_no_result_routes_to_escalate(self):
         state = IncidentState(raw_event="test", remediation_result=None)
         assert _route_after_lightspeed(state) == "escalate"
@@ -467,9 +482,10 @@ class TestRemediateNode:
             log_event=_STUB_LOG_EVENT,
             root_cause_analysis=_STUB_RCA,
         )
-        with patch(
-            "agent_service.nodes.remediate._invoke_tool",
-            _mock_invoke_tool(),
+        mock = _mock_invoke_tool()
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", mock),
+            patch("agent_service.nodes._aap_job._invoke_tool", mock),
         ):
             result = await node(state)
 
@@ -490,9 +506,10 @@ class TestRemediateNode:
             ],
             should_retry=True,
         )
-        with patch(
-            "agent_service.nodes.remediate._invoke_tool",
-            _mock_invoke_tool(),
+        mock = _mock_invoke_tool()
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", mock),
+            patch("agent_service.nodes._aap_job._invoke_tool", mock),
         ):
             result = await node(state)
 
@@ -535,7 +552,10 @@ class TestRemediateNode:
                 "result_traceback": "task failed",
             }
         )
-        with patch("agent_service.nodes.remediate._invoke_tool", mock):
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", mock),
+            patch("agent_service.nodes._aap_job._invoke_tool", mock),
+        ):
             result = await node(state)
 
         assert result["remediation_result"].success is False
@@ -552,7 +572,8 @@ class TestRemediateNode:
         )
         with (
             patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
-            patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01),
+            patch("agent_service.nodes._aap_job._invoke_tool", _slow_invoke),
+            patch("agent_service.nodes._aap_job.POLL_INTERVAL_SECONDS", 0.01),
         ):
             result = await node(state)
 
@@ -575,7 +596,8 @@ class TestRemediateNode:
         )
         with (
             patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
-            patch("agent_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.01),
+            patch("agent_service.nodes._aap_job._invoke_tool", _slow_invoke),
+            patch("agent_service.nodes._aap_job.POLL_INTERVAL_SECONDS", 0.01),
         ):
             result = await node(state)
 

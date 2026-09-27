@@ -6,7 +6,7 @@ as set up by ``make integration-tests``.
 Kafka tests run before other integration tests (see ``pytest_collection_modifyitems`` in
 ``conftest.py``) because ``chatbot_service/test_bff.py`` also publishes a demo event via
 ``test_demo_trigger``. The agent consumer handles one alert at a time and can block for
-up to GRAPH_INVOKE_TIMEOUT_SECONDS (300s).
+up to GRAPH_INVOKE_TIMEOUT_SECONDS (derived from the workflow stage budgets).
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@ import httpx
 from langchain_openai import ChatOpenAI
 
 from agent_service.kafka.alerts import ALERT_TOPICS
-from agent_service.models import FailureType
+from agent_service.models import FailureType, GraphConfig
 
 _DEFAULT_CONSUME_TOPICS = ",".join(sorted(ALERT_TOPICS))
 
@@ -33,10 +33,6 @@ KAFKA_CONSUME_TOPICS = _env_csv("KAFKA_CONSUME_TOPICS", _DEFAULT_CONSUME_TOPICS)
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "dark-noc-agent")
 KAFKA_AUDIT_TOPIC = os.getenv("KAFKA_AUDIT_TOPIC", "incident-audit")
 KAFKA_CONSUMER_ENABLED = _env_bool("KAFKA_CONSUMER_ENABLED", True)
-
-# LangGraph invoke from Kafka consumer thread (seconds; demo target is under 5 minutes).
-# float (not int) so tests can use sub-second values like 0.01 with future.result(timeout=...).
-GRAPH_INVOKE_TIMEOUT_SECONDS = float(os.getenv("GRAPH_INVOKE_TIMEOUT_SECONDS", "300"))
 
 # LlamaStack
 LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
@@ -227,6 +223,16 @@ LIGHTSPEED_SKIP_AAP = _env_bool("LIGHTSPEED_SKIP_AAP", False)
 
 HTTP_TIMEOUT_SECONDS = 30
 LIGHTSPEED_TIMEOUT_SECONDS = int(os.getenv("LIGHTSPEED_TIMEOUT_SECONDS", "180"))
+AAP_PROJECT_SYNC_TIMEOUT_SECONDS = 60
+# Assume normal runs finish within this margin; revisit if valid runs hit it.
+_GRAPH_TIMEOUT_HEADROOM_FACTOR = 2
+_DEFAULT_GRAPH_TIMEOUT_SECONDS = _GRAPH_TIMEOUT_HEADROOM_FACTOR * (
+    GraphConfig().investigate_timeout
+    + LIGHTSPEED_TIMEOUT_SECONDS
+    + AAP_PROJECT_SYNC_TIMEOUT_SECONDS
+    + GraphConfig().job_timeout
+)
+GRAPH_INVOKE_TIMEOUT_SECONDS = float(os.getenv("GRAPH_INVOKE_TIMEOUT_SECONDS", str(_DEFAULT_GRAPH_TIMEOUT_SECONDS)))
 # Max chars of investigation evidence sent to the summarizer LLM (~10k tokens at 40k chars).
 LIGHTSPEED_MAX_SUMMARIZE_CHARS = int(os.getenv("LIGHTSPEED_MAX_SUMMARIZE_CHARS", "40000"))
 

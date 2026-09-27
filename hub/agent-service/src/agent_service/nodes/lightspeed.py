@@ -10,6 +10,7 @@ from loguru import logger
 
 from agent_service.config import (
     AAP_LIGHTSPEED_TEMPLATE,
+    AAP_PROJECT_SYNC_TIMEOUT_SECONDS,
     GITEA_PROJECT_NAME,
     LIGHTSPEED_MAX_SUMMARIZE_CHARS,
     LIGHTSPEED_PROMPT_TEMPLATE,
@@ -29,7 +30,8 @@ from agent_service.evidence import (
     get_pod_logs_for_attachment,
     get_structured_attachments,
 )
-from agent_service.models import RemediationResult
+from agent_service.models import GraphConfig, RemediationResult
+from agent_service.nodes._aap_job import evaluate_job
 from agent_service.nodes.rag_retrieval import store_generated_playbook
 from agent_service.playbook_sanitize import (
     fix_ansible_facts,
@@ -416,7 +418,7 @@ def _aap_step_failed(
 
 
 _SYNC_POLL_INTERVAL = 2
-_SYNC_POLL_TIMEOUT = 60
+_SYNC_POLL_TIMEOUT = AAP_PROJECT_SYNC_TIMEOUT_SECONDS
 
 
 async def _await_project_sync(update_id: int) -> bool:
@@ -536,10 +538,15 @@ async def _execute_in_aap(
 
     job_id = str(launch.get("job_id", ""))
     logger.info(f"AAP job launched: job_id={job_id} template='{name}'")
+
+    outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+    logger.info(f"AAP job {job_id} for '{name}' finished: success={outcome.success} timed_out={outcome.timed_out}")
     return result.model_copy(
         update={
             "job_id": job_id,
-            "output_summary": f"Launched AAP job {job_id} for {name} (pending)",
-            "timestamp": now_iso(),
+            "success": outcome.success,
+            "timed_out": outcome.timed_out,
+            "output_summary": outcome.output_summary,
+            "timestamp": outcome.timestamp,
         },
     )
