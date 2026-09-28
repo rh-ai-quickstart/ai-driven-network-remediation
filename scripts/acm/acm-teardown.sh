@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Tear down ACM hub-spoke ADNR resources (reverse of acm-deploy hub-spoke path).
+# Tear down ADNR topology resources (called by make teardown).
+# Hub-spoke path reverses the multi-cluster branch of make deploy.
 #
 # Order (hub-spoke): ACM policy → GitOpsCluster → Placement / ManagedClusterSet →
 #        ArgoCD apps (prune spokes) → spoke edge namespaces → ManifestWorks →
 #        optional Hive ClusterDeployments.
 # Order (single-cluster): delete local Argo edge AppSet/App/AppProject and/or
 #        helm edge release + EDGE_NAMESPACE; refuse if hub-spoke leftovers exist.
-# Caller (make acm-teardown) then runs hub helm-uninstall (skipped on --dry-run).
+# Caller (make teardown) then runs hub helm-uninstall (skipped on --dry-run).
 #
 # --dry-run        → print actions only; make also skips helm-uninstall
 #
@@ -76,8 +77,8 @@ case "${skip_raw}" in
     if [[ "${DRY_RUN}" -eq 1 ]]; then
       log "WARN: SKIP_OC_CHECK set; continuing dry-run plan only (no oc login)"
     else
-      log "WARN: SKIP_OC_CHECK set; acm-teardown live deletes skipped"
-      log "OK: acm-teardown skipped live oc (CLUSTER_COUNT=${CLUSTER_COUNT})"
+      log "WARN: SKIP_OC_CHECK set; teardown live deletes skipped"
+      log "OK: teardown skipped live oc (CLUSTER_COUNT=${CLUSTER_COUNT})"
       exit 0
     fi
     ;;
@@ -103,7 +104,7 @@ hub_spoke_artifacts_present() {
   if "${bin}" get gitopscluster.apps.open-cluster-management.io adnr-edge -n "${NAMESPACE}" >/dev/null 2>&1; then
     return 0
   fi
-  # Helm release still carries hub-spoke topology from a prior acm-deploy.
+  # Helm release still carries hub-spoke topology from a prior make deploy.
   if command -v helm >/dev/null 2>&1; then
     local mode
     mode="$(helm get values "${RELEASE}" -n "${NAMESPACE}" -o json 2>/dev/null \
@@ -188,16 +189,16 @@ if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
   if [[ -n "${oc_bin}" ]] && [[ "${DRY_RUN}" -eq 0 ]]; then
     adnr_require_hub_login "${oc_bin}"
     if hub_spoke_artifacts_present "${oc_bin}"; then
-      fail "CLUSTER_COUNT=1 but hub-spoke ADNR resources remain (ManagedClusterSet/Placement/GitOpsCluster or helm topology=hub-spoke). Re-run with the same CLUSTER_COUNT used for acm-deploy (for example CLUSTER_COUNT=2 make acm-teardown)."
+      fail "CLUSTER_COUNT=1 but hub-spoke ADNR resources remain (ManagedClusterSet/Placement/GitOpsCluster or helm topology=hub-spoke). Re-run with the same CLUSTER_COUNT used for deploy (for example CLUSTER_COUNT=2 make teardown)."
     fi
   elif [[ "${DRY_RUN}" -eq 1 ]]; then
     log "dry-run: single-cluster path (would refuse teardown if hub-spoke artifacts exist on a live cluster)"
   fi
   teardown_single_cluster_edge
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    log "OK: acm-teardown dry-run complete (single-cluster edge cleanup; make also skips helm-uninstall)"
+    log "OK: teardown dry-run complete (single-cluster edge cleanup; make also skips helm-uninstall)"
   else
-    log "OK: acm-teardown single-cluster edge cleanup done (run make helm-uninstall for hub chart)"
+    log "OK: teardown single-cluster edge cleanup done (run make helm-uninstall for hub chart)"
   fi
   exit 0
 fi
@@ -444,8 +445,8 @@ case "${create_raw}" in
 esac
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
-  log "OK: acm-teardown dry-run complete (make acm-teardown also skips helm-uninstall)"
+  log "OK: teardown dry-run complete (make teardown also skips helm-uninstall)"
 else
-  log "OK: acm-teardown ACM/ArgoCD + spoke edge cleanup done (run make helm-uninstall for hub chart)"
+  log "OK: teardown ACM/ArgoCD + spoke edge cleanup done (run make helm-uninstall for hub chart)"
 fi
 exit 0

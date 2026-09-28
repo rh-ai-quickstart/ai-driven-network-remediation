@@ -15,7 +15,7 @@ echo "Using NAMESPACE=${NAMESPACE}"
 echo "Using EDGE_NAMESPACE=${EDGE_NAMESPACE}"
 
 echo "Cleaning up existing deployment"
-CLUSTER_COUNT=1 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make acm-teardown
+CLUSTER_COUNT=1 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make teardown
 
 echo "Building images"
 REGISTRY="${REGISTRY}" VERSION="${VERSION}" ENABLE_TELCO_ORAN=false ENABLE_NETWORK_REMEDIATION=true make build-all-images

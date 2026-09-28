@@ -197,7 +197,7 @@ def test_acm_teardown_dry_run_logs_finalizer_strip():
     out = result.stdout + result.stderr
     assert result.returncode == 0, out
     assert "dry-run: would strip finalizers" in out
-    assert "OK: acm-teardown dry-run" in out
+    assert "OK: teardown dry-run" in out
 
 
 def test_acm_teardown_dry_run_single_cluster_edge_cleanup():
@@ -213,7 +213,7 @@ def test_acm_teardown_dry_run_single_cluster_edge_cleanup():
     assert "SKIP: acm-teardown ACM/ArgoCD steps" not in out
     assert "single-cluster" in out.lower() or "Single-cluster" in out
     assert "adnr-edge" in out
-    assert "OK: acm-teardown dry-run" in out
+    assert "OK: teardown dry-run" in out
 
 
 def test_distribute_kafka_certs_skips_single_cluster_when_clf_off():

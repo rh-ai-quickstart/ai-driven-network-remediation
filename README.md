@@ -246,7 +246,7 @@ For hub-spoke mode, admin access is also required on each edge cluster.
    make helm-install
    ```
 
-   Prefer `make acm-deploy` for single-cluster and hub-spoke topology. That installs the hub chart and the shared `edge/helm` edge workload (`CLUSTER_COUNT=1` or `>=2`). See the [Multi-cluster deployment guide](docs/multi-cluster-deploy.md).
+   Prefer `make deploy` for single-cluster and hub-spoke topology. Same command both ways: set `CLUSTER_COUNT` (default `1`). Single-cluster uses GitOps for `edge/helm` (no ACM). Multi-cluster (`CLUSTER_COUNT>=2`) uses ACM plus GitOps. See the [Multi-cluster deployment guide](docs/multi-cluster-deploy.md).
 
    With Langfuse observability (optional):
 
@@ -275,14 +275,14 @@ For hub-spoke mode, admin access is also required on each edge cluster.
 Single-cluster (`CLUSTER_COUNT=1`): removes edge GitOps/Helm ownership in `dark-noc-edge`, then the hub chart:
 
 ```bash
-CLUSTER_COUNT=1 make acm-teardown
+CLUSTER_COUNT=1 make teardown
 ```
 
 Hub + spokes (`CLUSTER_COUNT>=2`): tear down ArgoCD edge apps, ACM policy, spoke
 `dark-noc-edge` namespaces, then the hub chart:
 
 ```bash
-CLUSTER_COUNT=2 make acm-teardown
+CLUSTER_COUNT=2 make teardown
 ```
 
 Full topology, naming, verify, and teardown notes: [Multi-cluster deployment guide](docs/multi-cluster-deploy.md).

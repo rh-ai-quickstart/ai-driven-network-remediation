@@ -14,9 +14,11 @@ ROUTES_ENABLED  ?= true
 # shared/persistent clusters (see hub/frontend/FRONTEND.md "Access control").
 FRONTEND_AUTH_ENABLED ?= false
 
-# ── Multi-cluster topology (CLUSTER_COUNT) ───────────────────────
-# 1      = single-cluster dev (hub chart + simulated edge namespace)
-# N>=2   = hub + N spokes (edge-site-01 .. edge-site-NN via ACM/ArgoCD)
+# ── Topology (CLUSTER_COUNT) ─────────────────────────────────────
+# Canonical entry: make deploy / make teardown (same command both modes).
+# 1      = single-cluster (hub chart + edge/helm via Argo/GitOps; no ACM)
+# N>=2   = hub + N spokes (ACM hub-spoke + ArgoCD edge fan-out)
+# ACM is derived from CLUSTER_COUNT>=2; there is no separate "acm deploy".
 CLUSTER_COUNT      ?= 1
 SPOKE_NAME_PREFIX  ?= edge-site
 ACM_HUB_CLUSTER    ?= local-cluster
@@ -543,14 +545,16 @@ acm-wait-gitopscluster: validate-topology
 	GITOPSCLUSTER_WAIT_INTERVAL_SECONDS='$(GITOPSCLUSTER_WAIT_INTERVAL_SECONDS)' \
 	bash scripts/acm/wait-gitopscluster.sh
 
-# ── acm-deploy / acm-teardown (C7 orchestration) ─────────────────
-# CLUSTER_COUNT=1  → helm-install + edge/helm via Argo (or Helm fallback)
-# CLUSTER_COUNT>=2 → ACM prereq → optional Hive → label → hub helm →
-#                    kafka certs → placement → ArgoCD edge fan-out
-.PHONY: acm-deploy
-acm-deploy: validate-topology
+# ── deploy / teardown (topology orchestration) ───────────────────
+# Same entry point for both topologies. CLUSTER_COUNT selects the path:
+#   1    → helm-install + edge/helm via Argo (or Helm fallback); no ACM
+#   N>=2 → ACM prereq → optional Hive → label → hub helm →
+#          kafka certs → placement → ArgoCD edge fan-out
+# Legacy aliases: acm-deploy → deploy, acm-teardown → teardown.
+.PHONY: deploy
+deploy: validate-topology
 ifeq ($(CLUSTER_COUNT),1)
-	@echo "=== acm-deploy: single-cluster (CLUSTER_COUNT=1, EDGE_GITOPS=$(EDGE_GITOPS)) ==="
+	@echo "=== deploy: single-cluster (CLUSTER_COUNT=1, EDGE_GITOPS=$(EDGE_GITOPS); no ACM) ==="
 	$(MAKE) helm-install
 ifneq ($(filter true TRUE yes YES 1,$(CLUSTER_LOG_FORWARDER_ENABLED)),)
 	$(MAKE) acm-distribute-kafka-certs
@@ -581,9 +585,9 @@ endif
 		echo "ERROR: edge-deploy did not report EDGE_DELIVERY"; \
 		exit 1; \
 	fi
-	@echo "OK: acm-deploy single-cluster complete"
+	@echo "OK: deploy single-cluster complete"
 else
-	@echo "=== acm-deploy: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT), spokes=$(SPOKE_COUNT)) ==="
+	@echo "=== deploy: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT), spokes=$(SPOKE_COUNT); ACM + GitOps) ==="
 	$(MAKE) acm-prereq-check
 	$(MAKE) acm-create-clusters
 ifneq ($(filter true TRUE yes YES 1,$(CLUSTER_CREATE)),)
@@ -607,13 +611,13 @@ endif
 		$(MAKE) argocd-apply; \
 	fi
 	$(MAKE) argocd-wait-spokes
-	@echo "OK: acm-deploy hub-spoke complete ($(SPOKE_COUNT) spokes)"
+	@echo "OK: deploy hub-spoke complete ($(SPOKE_COUNT) spokes)"
 endif
 
-.PHONY: acm-teardown
-acm-teardown: validate-topology
+.PHONY: teardown
+teardown: validate-topology
 	@# Always invoke the script: it refuses CLUSTER_COUNT=1 when hub-spoke leftovers exist.
-	@echo "=== acm-teardown (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
+	@echo "=== teardown (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
 	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
 	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
@@ -634,7 +638,16 @@ else
 	$(MAKE) helm-uninstall
 endif
 endif
-	@echo "OK: acm-teardown complete"
+	@echo "OK: teardown complete"
+
+# Legacy aliases (prefer make deploy / make teardown).
+.PHONY: acm-deploy acm-teardown
+acm-deploy:
+	@echo "WARN: 'make acm-deploy' is deprecated; use 'make deploy' (ACM is used automatically when CLUSTER_COUNT>=2)"
+	$(MAKE) deploy
+acm-teardown:
+	@echo "WARN: 'make acm-teardown' is deprecated; use 'make teardown'"
+	$(MAKE) teardown
 
 .PHONY: helm-install
 helm-install: namespace helm-depend validate-topology
@@ -862,10 +875,10 @@ reinstall-all:
 
 EDGE_WORKLOAD_IMAGE ?= registry.k8s.io/pause:3.10
 
-# Legacy pause Deployment. Prefer `make acm-deploy` / `make edge-deploy` (edge/helm).
+# Legacy pause Deployment. Prefer `make deploy` / `make edge-deploy` (edge/helm).
 .PHONY: deploy-edge-workload
 deploy-edge-workload:
-	@echo "WARN: deploy-edge-workload is legacy (pause). Prefer: make edge-deploy or CLUSTER_COUNT=1 make acm-deploy"
+	@echo "WARN: deploy-edge-workload is legacy (pause). Prefer: make edge-deploy or CLUSTER_COUNT=1 make deploy"
 	oc create namespace $(EDGE_NAMESPACE) 2>/dev/null ||:
 	oc create deployment edge-worker --image=$(EDGE_WORKLOAD_IMAGE) --replicas=1 -n $(EDGE_NAMESPACE) 2>/dev/null \
 		|| echo "edge-worker deployment already exists, skipping"
