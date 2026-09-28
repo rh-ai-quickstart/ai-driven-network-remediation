@@ -460,10 +460,17 @@ acm-apply-placement: validate-topology
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/apply-placement.sh --step=remaining $(ACM_APPLY_ARGS)
 
-# ArgoCD edge fan-out (CLUSTER_COUNT>=2). Dry-run: ARGOCD_APPLY_ARGS=--dry-run
+# ArgoCD edge fan-out (N=1 local in-cluster; N>=2 spoke destinations).
+# Dry-run: ARGOCD_APPLY_ARGS=--dry-run
+# CLF default: off for single-cluster, on for hub-spoke (override with CLUSTER_LOG_FORWARDER_ENABLED).
 KAFKA_EXTERNAL_HOST ?=
 ARGOCD_NAMESPACE    ?=
 EDGE_SELF_HEAL      ?= true
+ifeq ($(CLUSTER_COUNT),1)
+  CLUSTER_LOG_FORWARDER_ENABLED ?= false
+else
+  CLUSTER_LOG_FORWARDER_ENABLED ?= true
+endif
 ARGOCD_APPLY_ARGS   ?=
 ACM_APPLY_ARGS      ?=
 ACM_CREATE_ARGS     ?=
@@ -486,6 +493,9 @@ argocd-apply: validate-topology
 	KAFKA_EXTERNAL_HOST='$(KAFKA_EXTERNAL_HOST)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
 	EDGE_SELF_HEAL='$(EDGE_SELF_HEAL)' \
+	REGISTRY='$(REGISTRY)' \
+	VERSION='$(VERSION)' \
+	CLUSTER_LOG_FORWARDER_ENABLED='$(CLUSTER_LOG_FORWARDER_ENABLED)' \
 	bash scripts/acm/argocd-apply.sh $(ARGOCD_APPLY_ARGS)
 
 .PHONY: argocd-wait-spokes
