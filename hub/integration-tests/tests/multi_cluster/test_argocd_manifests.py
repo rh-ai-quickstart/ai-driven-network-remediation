@@ -52,6 +52,9 @@ def test_applicationset_list_generator_and_site_id_params():
     assert "path: edge/helm" in text
     assert "name: siteId" in text
     assert 'value: "{{.siteId}}"' in text
+    assert "name: createNamespace" in text
+    assert 'value: "false"' in text
+    assert "CreateNamespace=true" in text
     assert "name: kafka.externalHost" in text
     assert "__KAFKA_EXTERNAL_HOST__" in text
     assert "name: fastPathHealer.image.repository" in text

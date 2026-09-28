@@ -147,11 +147,14 @@ if [[ -z "${oc_bin}" ]]; then
   fail "oc or kubectl not found on PATH"
 fi
 
+# Helm --create-namespace owns the release namespace. Disable the chart's Namespace
+# template so we do not double-create (Helm fails with "already exists").
 log "Deploying edge via Helm (${EDGE_HELM_RELEASE} in ${EDGE_NAMESPACE})..."
 helm_args=(
   upgrade --install "${EDGE_HELM_RELEASE}" edge/helm
   --namespace "${EDGE_NAMESPACE}"
   --create-namespace
+  --set "createNamespace=false"
   --set "siteId=${EDGE_SITE_ID}"
   --set "namespace=${EDGE_NAMESPACE}"
   --set "fastPathHealer.image.repository=${HEALER_REPO}"
