@@ -11,13 +11,15 @@
 #   b) ManifestWork on the ManagedCluster namespace (hub-only; no spoke API from laptop)
 #      Waits for ManifestWork Applied=True before returning (avoids ArgoCD/CLF race).
 #
-# CLUSTER_COUNT=1  → skip, exit 0
+# CLUSTER_COUNT=1  → local EDGE_NAMESPACE copy when CLF enabled; else skip
+# CLUSTER_COUNT>=2 → distribute to each spoke (Hive kubeconfig or ManifestWork)
 # --dry-run        → print plan; do not write secrets
 #
 # Env:
 #   SPOKES_GENERATED   default hub/helm/spokes.generated.yaml
 #   NAMESPACE          hub namespace (default hub) — source of kafka-client-tls
-#   EDGE_NAMESPACE     spoke target namespace (default dark-noc-edge)
+#   EDGE_NAMESPACE     spoke/local target namespace (default dark-noc-edge)
+#   CLUSTER_LOG_FORWARDER_ENABLED  when N=1: only distribute if true (default false)
 #   ACM_MANIFESTWORK_TIMEOUT_SECONDS   default 300
 #   ACM_MANIFESTWORK_INTERVAL_SECONDS  default 5
 #   SKIP_OC_CHECK=1    offline skip
@@ -32,6 +34,7 @@ SPOKES_GENERATED="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
 NAMESPACE="${NAMESPACE:-hub}"
 EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
 SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
+CLUSTER_LOG_FORWARDER_ENABLED="${CLUSTER_LOG_FORWARDER_ENABLED:-}"
 SECRET_NAME="kafka-client-certs"
 SOURCE_SECRET="kafka-client-tls"
 MANIFESTWORK_NAME="adnr-kafka-client-certs"
@@ -56,12 +59,68 @@ done
 log() { adnr_log "$@"; }
 fail() { adnr_fail "$@"; }
 
+clf_enabled() {
+  case "${CLUSTER_LOG_FORWARDER_ENABLED}" in
+    true|TRUE|yes|YES|1) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if ! [[ "${CLUSTER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${CLUSTER_COUNT}" -lt 1 ]]; then
   fail "CLUSTER_COUNT must be an integer >= 1 (got: ${CLUSTER_COUNT})"
 fi
 
+# Single-cluster: only copy certs into the local edge namespace when CLF is on.
 if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
-  log "SKIP: distribute-kafka-certs (single-cluster mode, CLUSTER_COUNT=1)"
+  if ! clf_enabled; then
+    log "SKIP: distribute-kafka-certs (single-cluster, clusterLogForwarder disabled)"
+    exit 0
+  fi
+
+  skip_raw="$(printf '%s' "${SKIP_OC_CHECK}" | tr '[:upper:]' '[:lower:]')"
+  case "${skip_raw}" in
+    1|true|yes)
+      log "WARN: SKIP_OC_CHECK set; would copy ${SOURCE_SECRET} → ${EDGE_NAMESPACE}/${SECRET_NAME} on local cluster"
+      log "OK: distribute-kafka-certs skipped live oc (CLUSTER_COUNT=1 local)"
+      exit 0
+      ;;
+  esac
+
+  oc_bin="$(adnr_resolve_oc)"
+  adnr_require_hub_login "${oc_bin}"
+
+  if ! "${oc_bin}" get secret "${SOURCE_SECRET}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+    fail "hub secret ${SOURCE_SECRET} not found in ${NAMESPACE}; run helm-install / make kafka-client-cert first"
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "dry-run: would create namespace ${EDGE_NAMESPACE} and secret ${SECRET_NAME} from ${SOURCE_SECRET}"
+    log "OK: distribute-kafka-certs dry-run (local single-cluster)"
+    exit 0
+  fi
+
+  tmpdir="$(mktemp -d)"
+  trap 'rm -rf "${tmpdir}"' EXIT
+  "${oc_bin}" get secret "${SOURCE_SECRET}" -n "${NAMESPACE}" \
+    -o jsonpath='{.data.ca\.crt}' | base64 -d > "${tmpdir}/ca.crt"
+  "${oc_bin}" get secret "${SOURCE_SECRET}" -n "${NAMESPACE}" \
+    -o jsonpath='{.data.client\.crt}' | base64 -d > "${tmpdir}/client.crt"
+  "${oc_bin}" get secret "${SOURCE_SECRET}" -n "${NAMESPACE}" \
+    -o jsonpath='{.data.client\.key}' | base64 -d > "${tmpdir}/client.key"
+  for f in ca.crt client.crt client.key; do
+    if [[ ! -s "${tmpdir}/${f}" ]]; then
+      fail "failed to extract ${f} from ${SOURCE_SECRET}"
+    fi
+  done
+
+  "${oc_bin}" create namespace "${EDGE_NAMESPACE}" 2>/dev/null || true
+  "${oc_bin}" create secret generic "${SECRET_NAME}" \
+    --from-file=ca.crt="${tmpdir}/ca.crt" \
+    --from-file=client.crt="${tmpdir}/client.crt" \
+    --from-file=client.key="${tmpdir}/client.key" \
+    -n "${EDGE_NAMESPACE}" \
+    --dry-run=client -o yaml | "${oc_bin}" apply -f -
+  log "OK: distribute-kafka-certs local copy → ${EDGE_NAMESPACE}/${SECRET_NAME}"
   exit 0
 fi
 

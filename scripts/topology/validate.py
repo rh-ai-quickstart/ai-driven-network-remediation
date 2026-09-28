@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Validate ADNR topology parameters before multi-cluster deploy.
 
-CLUSTER_COUNT=1 → single-cluster (no GitOps/oc requirements).
+CLUSTER_COUNT=1 → single-cluster; GitOps URL/revision required when
+EDGE_GITOPS is auto or argocd (default auto). EDGE_GITOPS=helm skips that.
 CLUSTER_COUNT>=2 → hub-spoke; requires GITOPS_REPO_URL, GITOPS_REVISION,
 and an oc login to the hub cluster (unless SKIP_OC_CHECK=1).
 """
@@ -44,6 +45,14 @@ def _parse_cluster_count(raw: str) -> int:
         raise ValueError("CLUSTER_COUNT must be an integer >= 1") from exc
 
 
+def _requires_gitops(cluster_count: int, edge_gitops: str) -> bool:
+    mode = (edge_gitops or "auto").strip().lower()
+    if cluster_count >= 2:
+        return True
+    # Single-cluster: GitOps path (Argo or auto→Argo) needs repo/revision.
+    return mode in {"auto", "argocd"}
+
+
 def validate_topology(
     *,
     cluster_count: int,
@@ -52,6 +61,7 @@ def validate_topology(
     edge_namespace: str = "dark-noc-edge",
     spoke_name_prefix: str = "edge-site",
     skip_oc_check: bool = False,
+    edge_gitops: str = "auto",
 ) -> tuple[bool, list[str], dict]:
     """Return (ok, messages, summary). messages include errors and info lines."""
     messages: list[str] = []
@@ -61,38 +71,45 @@ def validate_topology(
     except ValueError as exc:
         return False, [f"ERROR: {exc}"], {}
 
+    edge_gitops_norm = (edge_gitops or "auto").strip().lower() or "auto"
+    if edge_gitops_norm not in {"auto", "argocd", "helm"}:
+        return False, [f"ERROR: EDGE_GITOPS must be auto|argocd|helm (got: {edge_gitops})"], {}
+
     summary = {
         "clusterCount": cluster_count,
         "deploymentMode": mode,
         "spokeCount": spoke_count_for(cluster_count),
         "edgeNamespace": edge_namespace,
         "spokeNamePrefix": spoke_name_prefix,
+        "edgeGitops": edge_gitops_norm,
         "spokes": spokes,
     }
 
     messages.append(f"deploymentMode={mode}")
     messages.append(f"spokeCount={summary['spokeCount']}")
+    messages.append(f"edgeGitops={edge_gitops_norm}")
     if spokes:
         names = ", ".join(s["name"] for s in spokes)
         messages.append(f"spokes={names}")
     else:
         messages.append("spokes=(none)")
 
-    if cluster_count >= 2:
+    if _requires_gitops(cluster_count, edge_gitops_norm):
         missing = []
         if not gitops_repo_url:
             missing.append("GITOPS_REPO_URL")
         if not gitops_revision:
             missing.append("GITOPS_REVISION")
         if missing:
-            messages.append("ERROR: hub-spoke mode requires: " + ", ".join(missing))
+            label = "hub-spoke" if cluster_count >= 2 else f"single-cluster (EDGE_GITOPS={edge_gitops_norm})"
+            messages.append(f"ERROR: {label} mode requires: " + ", ".join(missing))
             return False, messages, summary
 
-        if not skip_oc_check:
-            oc_ok, oc_msg = _check_oc_hub()
-            messages.append(oc_msg)
-            if not oc_ok:
-                return False, messages, summary
+    if cluster_count >= 2 and not skip_oc_check:
+        oc_ok, oc_msg = _check_oc_hub()
+        messages.append(oc_msg)
+        if not oc_ok:
+            return False, messages, summary
 
     messages.append("OK: topology validation passed")
     return True, messages, summary
@@ -134,6 +151,7 @@ def main() -> int:
         edge_namespace=_env("EDGE_NAMESPACE", "dark-noc-edge"),
         spoke_name_prefix=_env("SPOKE_NAME_PREFIX", "edge-site"),
         skip_oc_check=skip_oc,
+        edge_gitops=_env("EDGE_GITOPS", "auto"),
     )
     for line in messages:
         print(line)

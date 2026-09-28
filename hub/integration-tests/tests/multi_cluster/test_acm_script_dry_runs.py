@@ -198,3 +198,76 @@ def test_acm_teardown_dry_run_logs_finalizer_strip():
     assert result.returncode == 0, out
     assert "dry-run: would strip finalizers" in out
     assert "OK: acm-teardown dry-run" in out
+
+
+def test_acm_teardown_dry_run_single_cluster_edge_cleanup():
+    result = _run_script(
+        "acm-teardown.sh",
+        "--dry-run",
+        cluster_count=1,
+        NAMESPACE="hub",
+        EDGE_HELM_RELEASE="adnr-edge",
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "SKIP: acm-teardown ACM/ArgoCD steps" not in out
+    assert "single-cluster" in out.lower() or "Single-cluster" in out
+    assert "adnr-edge" in out
+    assert "OK: acm-teardown dry-run" in out
+
+
+def test_distribute_kafka_certs_skips_single_cluster_when_clf_off():
+    result = _run_script(
+        "distribute-kafka-certs.sh",
+        "--dry-run",
+        cluster_count=1,
+        CLUSTER_LOG_FORWARDER_ENABLED="false",
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "SKIP:" in out
+    assert "clusterLogForwarder disabled" in out or "CLF" in out.upper() or "disabled" in out
+
+
+def test_distribute_kafka_certs_local_dry_run_when_clf_on():
+    result = _run_script(
+        "distribute-kafka-certs.sh",
+        "--dry-run",
+        cluster_count=1,
+        CLUSTER_LOG_FORWARDER_ENABLED="true",
+        SKIP_OC_CHECK="1",
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "local" in out.lower() or "would copy" in out.lower() or "SKIP_OC_CHECK" in out
+
+
+def test_edge_deploy_dry_run_helm_fallback_with_skip_oc():
+    result = _run_script(
+        "edge-deploy.sh",
+        "--dry-run",
+        cluster_count=1,
+        EDGE_GITOPS="auto",
+        SKIP_OC_CHECK="1",
+        REGISTRY="quay.io/example",
+        VERSION="1.2.3",
+        CLUSTER_LOG_FORWARDER_ENABLED="false",
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "EDGE_DELIVERY=helm" in out
+    assert "OK: edge-deploy dry-run" in out
+
+
+def test_edge_deploy_dry_run_force_argocd():
+    result = _run_script(
+        "edge-deploy.sh",
+        "--dry-run",
+        cluster_count=1,
+        EDGE_GITOPS="argocd",
+        SKIP_OC_CHECK="1",
+    )
+    out = result.stdout + result.stderr
+    assert result.returncode == 0, out
+    assert "EDGE_DELIVERY=argocd" in out
+    assert "argocd-apply" in out
