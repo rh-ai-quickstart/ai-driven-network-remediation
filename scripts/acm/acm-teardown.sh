@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Tear down ACM hub-spoke ADNR resources (reverse of acm-deploy hub-spoke path).
 #
-# Order: ACM policy (stop recreating edge ns) → GitOpsCluster → Placement /
-#        ManagedClusterSet → ArgoCD apps (prune spokes) → spoke edge namespaces →
-#        ManifestWorks → optional Hive ClusterDeployments.
+# Order (hub-spoke): ACM policy → GitOpsCluster → Placement / ManagedClusterSet →
+#        ArgoCD apps (prune spokes) → spoke edge namespaces → ManifestWorks →
+#        optional Hive ClusterDeployments.
+# Order (single-cluster): delete local Argo edge AppSet/App/AppProject and/or
+#        helm edge release + EDGE_NAMESPACE; refuse if hub-spoke leftovers exist.
 # Caller (make acm-teardown) then runs hub helm-uninstall (skipped on --dry-run).
 #
-# CLUSTER_COUNT=1  → skip ACM pieces (caller should still run helm-uninstall)
 # --dry-run        → print actions only; make also skips helm-uninstall
 #
 # Env:
 #   SPOKES_GENERATED, NAMESPACE, EDGE_NAMESPACE, CLUSTER_CREATE, ARGOCD_NAMESPACE
 #   RELEASE          helm release name (default hub) for topology discovery
+#   EDGE_HELM_RELEASE helm edge release (default adnr-edge) for N=1 cleanup
 #   SKIP_OC_CHECK=1  offline skip
 #   ACM_TEARDOWN_APP_TIMEOUT_SECONDS  wait for ArgoCD app prune (default 300)
 set -euo pipefail
@@ -26,6 +28,7 @@ NAMESPACE="${NAMESPACE:-hub}"
 EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
 CLUSTER_CREATE="${CLUSTER_CREATE:-false}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-}"
+EDGE_HELM_RELEASE="${EDGE_HELM_RELEASE:-adnr-edge}"
 SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 MANIFESTWORK_NAME="adnr-kafka-client-certs"
 APP_TIMEOUT_SECONDS="${ACM_TEARDOWN_APP_TIMEOUT_SECONDS:-300}"
@@ -40,7 +43,7 @@ for arg in "$@"; do
   case "${arg}" in
     --dry-run) DRY_RUN=1 ;;
     -h|--help)
-      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
@@ -73,10 +76,6 @@ case "${skip_raw}" in
     if [[ "${DRY_RUN}" -eq 1 ]]; then
       log "WARN: SKIP_OC_CHECK set; continuing dry-run plan only (no oc login)"
     else
-      if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
-        log "SKIP: acm-teardown ACM/ArgoCD steps (single-cluster mode + SKIP_OC_CHECK)"
-        exit 0
-      fi
       log "WARN: SKIP_OC_CHECK set; acm-teardown live deletes skipped"
       log "OK: acm-teardown skipped live oc (CLUSTER_COUNT=${CLUSTER_COUNT})"
       exit 0
@@ -94,15 +93,14 @@ fi
 hub_spoke_artifacts_present() {
   local bin="${1:-}"
   [[ -n "${bin}" ]] || return 1
+  # ApplicationSet alone is NOT hub-spoke (single-cluster GitOps also uses it).
   if "${bin}" get managedclusterset adnr-edge >/dev/null 2>&1; then
     return 0
   fi
-  local argo_ns
-  argo_ns="$(detect_argocd_namespace 2>/dev/null || true)"
-  if [[ -n "${argo_ns}" ]] && "${bin}" get "${ARGOCD_APPSET_RESOURCE}" adnr-edge -n "${argo_ns}" >/dev/null 2>&1; then
+  if "${bin}" get placement adnr-edge-spokes -n "${NAMESPACE}" >/dev/null 2>&1; then
     return 0
   fi
-  if "${bin}" get placement adnr-edge-spokes -n "${NAMESPACE}" >/dev/null 2>&1; then
+  if "${bin}" get gitopscluster.apps.open-cluster-management.io adnr-edge -n "${NAMESPACE}" >/dev/null 2>&1; then
     return 0
   fi
   # Helm release still carries hub-spoke topology from a prior acm-deploy.
@@ -138,16 +136,69 @@ detect_argocd_namespace() {
   printf '%s' ""
 }
 
+teardown_single_cluster_edge() {
+  local argocd_ns
+  argocd_ns="$(detect_argocd_namespace)"
+
+  log "Single-cluster: removing edge GitOps / Helm ownership..."
+
+  if [[ -n "${argocd_ns}" ]]; then
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+      log "dry-run: would delete ApplicationSet/Application/AppProject adnr-edge* in ${argocd_ns}"
+    else
+      if [[ -n "${oc_bin}" ]]; then
+        # Delete ApplicationSet first so it cannot recreate Applications.
+        "${oc_bin}" delete "${ARGOCD_APPSET_RESOURCE}" adnr-edge -n "${argocd_ns}" --ignore-not-found || true
+        "${oc_bin}" delete "${ARGOCD_APP_RESOURCE}" adnr-edge-in-cluster -n "${argocd_ns}" --ignore-not-found --wait=false || true
+        # Brief wait for prune; strip finalizers if stuck.
+        local deadline=$((SECONDS + 60))
+        while [[ "${SECONDS}" -lt "${deadline}" ]]; do
+          if ! "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" adnr-edge-in-cluster -n "${argocd_ns}" >/dev/null 2>&1; then
+            break
+          fi
+          sleep 5
+        done
+        if "${oc_bin}" get "${ARGOCD_APP_RESOURCE}" adnr-edge-in-cluster -n "${argocd_ns}" >/dev/null 2>&1; then
+          log "WARN: stripping finalizers from adnr-edge-in-cluster"
+          "${oc_bin}" patch "${ARGOCD_APP_RESOURCE}" adnr-edge-in-cluster -n "${argocd_ns}" --type=merge \
+            -p '{"metadata":{"finalizers":null}}' >/dev/null 2>&1 || true
+          "${oc_bin}" delete "${ARGOCD_APP_RESOURCE}" adnr-edge-in-cluster -n "${argocd_ns}" --ignore-not-found --wait=false || true
+        fi
+        "${oc_bin}" delete "${ARGOCD_APPPROJECT_RESOURCE}" adnr-edge -n "${argocd_ns}" --ignore-not-found || true
+      fi
+    fi
+  else
+    log "WARN: ArgoCD namespace not found; skipping ApplicationSet/AppProject delete"
+  fi
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "dry-run: would helm uninstall ${EDGE_HELM_RELEASE} -n ${EDGE_NAMESPACE}"
+    log "dry-run: would delete namespace ${EDGE_NAMESPACE}"
+  else
+    if command -v helm >/dev/null 2>&1; then
+      helm uninstall "${EDGE_HELM_RELEASE}" -n "${EDGE_NAMESPACE}" 2>/dev/null || true
+    fi
+    if [[ -n "${oc_bin}" ]]; then
+      "${oc_bin}" delete namespace "${EDGE_NAMESPACE}" --ignore-not-found --wait=false || true
+    fi
+  fi
+}
+
 if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
   if [[ -n "${oc_bin}" ]] && [[ "${DRY_RUN}" -eq 0 ]]; then
     adnr_require_hub_login "${oc_bin}"
     if hub_spoke_artifacts_present "${oc_bin}"; then
-      fail "CLUSTER_COUNT=1 but hub-spoke ADNR resources remain (ManagedClusterSet/Placement/ApplicationSet or helm topology=hub-spoke). Re-run with the same CLUSTER_COUNT used for acm-deploy (for example CLUSTER_COUNT=2 make acm-teardown)."
+      fail "CLUSTER_COUNT=1 but hub-spoke ADNR resources remain (ManagedClusterSet/Placement/GitOpsCluster or helm topology=hub-spoke). Re-run with the same CLUSTER_COUNT used for acm-deploy (for example CLUSTER_COUNT=2 make acm-teardown)."
     fi
   elif [[ "${DRY_RUN}" -eq 1 ]]; then
     log "dry-run: single-cluster path (would refuse teardown if hub-spoke artifacts exist on a live cluster)"
   fi
-  log "SKIP: acm-teardown ACM/ArgoCD steps (single-cluster mode); use make helm-uninstall"
+  teardown_single_cluster_edge
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    log "OK: acm-teardown dry-run complete (single-cluster edge cleanup; make also skips helm-uninstall)"
+  else
+    log "OK: acm-teardown single-cluster edge cleanup done (run make helm-uninstall for hub chart)"
+  fi
   exit 0
 fi
 

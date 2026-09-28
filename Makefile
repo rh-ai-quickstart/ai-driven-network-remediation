@@ -393,6 +393,7 @@ validate-topology:
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	SPOKE_NAME_PREFIX='$(SPOKE_NAME_PREFIX)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	EDGE_GITOPS='$(EDGE_GITOPS)' \
 	python3 scripts/topology/validate.py
 	$(MAKE) render-spokes
 
@@ -437,6 +438,7 @@ acm-distribute-kafka-certs: validate-topology
 	NAMESPACE='$(NAMESPACE)' \
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	CLUSTER_LOG_FORWARDER_ENABLED='$(CLUSTER_LOG_FORWARDER_ENABLED)' \
 	ACM_MANIFESTWORK_TIMEOUT_SECONDS='$(ACM_MANIFESTWORK_TIMEOUT_SECONDS)' \
 	ACM_MANIFESTWORK_INTERVAL_SECONDS='$(ACM_MANIFESTWORK_INTERVAL_SECONDS)' \
 	bash scripts/acm/distribute-kafka-certs.sh $(ACM_DISTRIBUTE_ARGS)
@@ -463,9 +465,13 @@ acm-apply-placement: validate-topology
 # ArgoCD edge fan-out (N=1 local in-cluster; N>=2 spoke destinations).
 # Dry-run: ARGOCD_APPLY_ARGS=--dry-run
 # CLF default: off for single-cluster, on for hub-spoke (override with CLUSTER_LOG_FORWARDER_ENABLED).
+# EDGE_GITOPS: auto|argocd|helm — single-cluster edge delivery (default auto).
 KAFKA_EXTERNAL_HOST ?=
 ARGOCD_NAMESPACE    ?=
 EDGE_SELF_HEAL      ?= true
+EDGE_GITOPS         ?= auto
+EDGE_HELM_RELEASE   ?= adnr-edge
+EDGE_SITE_ID        ?= edge-site-01
 ifeq ($(CLUSTER_COUNT),1)
   CLUSTER_LOG_FORWARDER_ENABLED ?= false
 else
@@ -476,6 +482,7 @@ ACM_APPLY_ARGS      ?=
 ACM_CREATE_ARGS     ?=
 ACM_DISTRIBUTE_ARGS ?=
 ACM_TEARDOWN_ARGS   ?=
+EDGE_DEPLOY_ARGS    ?=
 ACM_WAIT_TIMEOUT_SECONDS  ?=
 ACM_WAIT_INTERVAL_SECONDS ?=
 GITOPSCLUSTER_WAIT_TIMEOUT_SECONDS  ?=
@@ -498,11 +505,31 @@ argocd-apply: validate-topology
 	CLUSTER_LOG_FORWARDER_ENABLED='$(CLUSTER_LOG_FORWARDER_ENABLED)' \
 	bash scripts/acm/argocd-apply.sh $(ARGOCD_APPLY_ARGS)
 
+.PHONY: edge-deploy
+edge-deploy: validate-topology
+	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+	EDGE_GITOPS='$(EDGE_GITOPS)' \
+	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+	EDGE_HELM_RELEASE='$(EDGE_HELM_RELEASE)' \
+	EDGE_SITE_ID='$(EDGE_SITE_ID)' \
+	REGISTRY='$(REGISTRY)' \
+	VERSION='$(VERSION)' \
+	CLUSTER_LOG_FORWARDER_ENABLED='$(CLUSTER_LOG_FORWARDER_ENABLED)' \
+	KAFKA_EXTERNAL_HOST='$(KAFKA_EXTERNAL_HOST)' \
+	EDGE_SELF_HEAL='$(EDGE_SELF_HEAL)' \
+	GITOPS_REPO_URL='$(GITOPS_REPO_URL)' \
+	GITOPS_REVISION='$(GITOPS_REVISION)' \
+	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	ARGOCD_APPLY_ARGS='$(ARGOCD_APPLY_ARGS)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+	bash scripts/acm/edge-deploy.sh $(EDGE_DEPLOY_ARGS)
+
 .PHONY: argocd-wait-spokes
 argocd-wait-spokes: validate-topology
 	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/argocd-wait-spokes.sh
 
 .PHONY: acm-wait-gitopscluster
@@ -515,15 +542,42 @@ acm-wait-gitopscluster: validate-topology
 	bash scripts/acm/wait-gitopscluster.sh
 
 # ── acm-deploy / acm-teardown (C7 orchestration) ─────────────────
-# CLUSTER_COUNT=1  → helm-install + simulated edge workload
+# CLUSTER_COUNT=1  → helm-install + edge/helm via Argo (or Helm fallback)
 # CLUSTER_COUNT>=2 → ACM prereq → optional Hive → label → hub helm →
 #                    kafka certs → placement → ArgoCD edge fan-out
 .PHONY: acm-deploy
 acm-deploy: validate-topology
 ifeq ($(CLUSTER_COUNT),1)
-	@echo "=== acm-deploy: single-cluster (CLUSTER_COUNT=1) ==="
+	@echo "=== acm-deploy: single-cluster (CLUSTER_COUNT=1, EDGE_GITOPS=$(EDGE_GITOPS)) ==="
 	$(MAKE) helm-install
-	$(MAKE) deploy-edge-workload
+ifneq ($(filter true TRUE yes YES 1,$(CLUSTER_LOG_FORWARDER_ENABLED)),)
+	$(MAKE) acm-distribute-kafka-certs
+endif
+	@delivery=$$( \
+		CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+		EDGE_GITOPS='$(EDGE_GITOPS)' \
+		EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
+		EDGE_HELM_RELEASE='$(EDGE_HELM_RELEASE)' \
+		EDGE_SITE_ID='$(EDGE_SITE_ID)' \
+		REGISTRY='$(REGISTRY)' \
+		VERSION='$(VERSION)' \
+		CLUSTER_LOG_FORWARDER_ENABLED='$(CLUSTER_LOG_FORWARDER_ENABLED)' \
+		KAFKA_EXTERNAL_HOST='$(KAFKA_EXTERNAL_HOST)' \
+		EDGE_SELF_HEAL='$(EDGE_SELF_HEAL)' \
+		GITOPS_REPO_URL='$(GITOPS_REPO_URL)' \
+		GITOPS_REVISION='$(GITOPS_REVISION)' \
+		ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
+		ARGOCD_APPLY_ARGS='$(ARGOCD_APPLY_ARGS)' \
+		SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
+		bash scripts/acm/edge-deploy.sh $(EDGE_DEPLOY_ARGS) \
+		| tee /dev/stderr | sed -n 's/^EDGE_DELIVERY=//p' | tail -1 \
+	); \
+	if [ "$$delivery" = "argocd" ]; then \
+		$(MAKE) argocd-wait-spokes; \
+	elif [ -z "$$delivery" ]; then \
+		echo "ERROR: edge-deploy did not report EDGE_DELIVERY"; \
+		exit 1; \
+	fi
 	@echo "OK: acm-deploy single-cluster complete"
 else
 	@echo "=== acm-deploy: hub-spoke (CLUSTER_COUNT=$(CLUSTER_COUNT), spokes=$(SPOKE_COUNT)) ==="
@@ -564,6 +618,7 @@ acm-teardown: validate-topology
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	ARGOCD_NAMESPACE='$(ARGOCD_NAMESPACE)' \
 	RELEASE='$(RELEASE)' \
+	EDGE_HELM_RELEASE='$(EDGE_HELM_RELEASE)' \
 	SKIP_OC_CHECK='$(SKIP_OC_CHECK)' \
 	bash scripts/acm/acm-teardown.sh $(ACM_TEARDOWN_ARGS)
 # --dry-run must skip helm-uninstall; otherwise ACM dry-run still wipes the hub chart.
@@ -804,8 +859,10 @@ reinstall-all:
 
 EDGE_WORKLOAD_IMAGE ?= registry.k8s.io/pause:3.10
 
+# Legacy pause Deployment. Prefer `make acm-deploy` / `make edge-deploy` (edge/helm).
 .PHONY: deploy-edge-workload
 deploy-edge-workload:
+	@echo "WARN: deploy-edge-workload is legacy (pause). Prefer: make edge-deploy or CLUSTER_COUNT=1 make acm-deploy"
 	oc create namespace $(EDGE_NAMESPACE) 2>/dev/null ||:
 	oc create deployment edge-worker --image=$(EDGE_WORKLOAD_IMAGE) --replicas=1 -n $(EDGE_NAMESPACE) 2>/dev/null \
 		|| echo "edge-worker deployment already exists, skipping"

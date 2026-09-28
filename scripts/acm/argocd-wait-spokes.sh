@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Wait until ADNR edge Applications are Synced and Healthy for each spoke.
+# Wait until ADNR edge Applications are Synced and Healthy.
 #
-# CLUSTER_COUNT=1  → skip, exit 0
-# CLUSTER_COUNT>=2 → poll Applications adnr-edge-<spoke-name> in ArgoCD namespace
+# CLUSTER_COUNT=1  → wait for Application adnr-edge-in-cluster (local GitOps)
+# CLUSTER_COUNT>=2 → wait for adnr-edge-<spoke-name> from spokes.generated.yaml
 #
 # Env:
 #   SPOKES_GENERATED   default hub/helm/spokes.generated.yaml
 #   ARGOCD_NAMESPACE   optional (else detect openshift-gitops|argocd)
 #   ARGOCD_WAIT_TIMEOUT_SECONDS  default 600
 #   ARGOCD_WAIT_INTERVAL_SECONDS default 10
+#   SKIP_OC_CHECK=1    offline skip (exit 0)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,6 +21,7 @@ SPOKES_GENERATED="${SPOKES_GENERATED:-hub/helm/spokes.generated.yaml}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-}"
 TIMEOUT_SECONDS="${ARGOCD_WAIT_TIMEOUT_SECONDS:-600}"
 INTERVAL_SECONDS="${ARGOCD_WAIT_INTERVAL_SECONDS:-10}"
+SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 
 log() { adnr_log "$@"; }
 fail() { adnr_fail "$@"; }
@@ -28,21 +30,32 @@ if ! [[ "${CLUSTER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${CLUSTER_COUNT}" -lt 1 ]]; the
   fail "CLUSTER_COUNT must be an integer >= 1 (got: ${CLUSTER_COUNT})"
 fi
 
+skip_raw="$(printf '%s' "${SKIP_OC_CHECK}" | tr '[:upper:]' '[:lower:]')"
+case "${skip_raw}" in
+  1|true|yes)
+    log "SKIP: argocd-wait-spokes (SKIP_OC_CHECK set)"
+    exit 0
+    ;;
+esac
+
+spokes=()
 if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
-  log "SKIP: argocd-wait-spokes (single-cluster mode, CLUSTER_COUNT=1)"
-  exit 0
-fi
+  # Matches argocd-apply.sh local element name (destination in-cluster).
+  spokes=("in-cluster")
+  log "mode: single-cluster (wait adnr-edge-in-cluster)"
+else
+  adnr_require_spokes_file
+  adnr_load_spoke_names
+  spokes=("${ADNR_SPOKE_NAMES[@]}")
 
-adnr_require_spokes_file
-adnr_load_spoke_names
-spokes=("${ADNR_SPOKE_NAMES[@]}")
+  if [[ "${#spokes[@]}" -eq 0 ]]; then
+    fail "no spokes listed in ${SPOKES_GENERATED}"
+  fi
 
-if [[ "${#spokes[@]}" -eq 0 ]]; then
-  fail "no spokes listed in ${SPOKES_GENERATED}"
-fi
-
-if [[ "${#spokes[@]}" -ne "${CLUSTER_COUNT}" ]]; then
-  fail "spoke count mismatch: file has ${#spokes[@]}, CLUSTER_COUNT=${CLUSTER_COUNT}"
+  if [[ "${#spokes[@]}" -ne "${CLUSTER_COUNT}" ]]; then
+    fail "spoke count mismatch: file has ${#spokes[@]}, CLUSTER_COUNT=${CLUSTER_COUNT}"
+  fi
+  log "mode: hub-spoke (wait ${#spokes[@]} Application(s))"
 fi
 
 oc_bin="$(adnr_resolve_oc)"
