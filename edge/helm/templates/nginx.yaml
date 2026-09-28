@@ -42,20 +42,21 @@ spec:
               protocol: TCP
           resources:
             {{- toYaml .Values.nginx.resources | nindent 12 }}
-          # Official nginx image needs writable cache/run dirs under OpenShift SCC.
+          # Writable dirs for OpenShift arbitrary UIDs (image files are owned by 101).
+          # Do not empty-mount conf.d: nginx-unprivileged ships default.conf on :8080.
           volumeMounts:
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
               mountPath: /var/run
-            - name: nginx-conf-d
-              mountPath: /etc/nginx/conf.d
+            - name: nginx-tmp
+              mountPath: /tmp
       volumes:
         - name: nginx-cache
           emptyDir: {}
         - name: nginx-run
           emptyDir: {}
-        - name: nginx-conf-d
+        - name: nginx-tmp
           emptyDir: {}
 ---
 apiVersion: v1
