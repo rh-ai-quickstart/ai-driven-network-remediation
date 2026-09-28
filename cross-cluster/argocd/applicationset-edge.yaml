@@ -59,6 +59,9 @@ spec:
               value: "{{.siteId}}"
             - name: namespace
               value: "{{.namespace}}"
+            # SyncOption CreateNamespace owns the destination NS; skip chart Namespace.
+            - name: createNamespace
+              value: "false"
             - name: kafka.externalHost
               value: "__KAFKA_EXTERNAL_HOST__"
             - name: fastPathHealer.image.repository
