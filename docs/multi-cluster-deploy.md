@@ -8,7 +8,7 @@ For single-cluster-only installs without ACM orchestration, see [manual-deploy.m
 
 | Role | When | What runs |
 |------|------|-----------|
-| **All-in-one** | `CLUSTER_COUNT=1` | Full hub chart on one cluster, plus a simulated edge namespace (`dark-noc-edge`) |
+| **All-in-one** | `CLUSTER_COUNT=1` | Full hub chart on one cluster, plus `edge/helm` in `dark-noc-edge` (Argo CD `in-cluster`, or Helm when GitOps is missing) |
 | **Hub** | `CLUSTER_COUNT>=2` | Agent, Kafka, LLM stack, MCP, chatbot, frontend on the hub only |
 | **Spoke** | `CLUSTER_COUNT>=2` | Edge chart via ArgoCD: nginx demo workload, ClusterLogForwarder → hub Kafka, Kafka client certs |
 
@@ -158,15 +158,17 @@ make acm-prereq-check CLUSTER_COUNT=2
 |----------|---------|---------|
 | `CLUSTER_COUNT` | `1` | `1` = single-cluster; `>=2` = hub + that many spokes |
 | `NAMESPACE` | `hub` | Hub install namespace |
-| `EDGE_NAMESPACE` | `dark-noc-edge` | Edge namespace (sim or each spoke) |
+| `EDGE_NAMESPACE` | `dark-noc-edge` | Edge namespace (local SC edge chart or each spoke) |
 | `SPOKE_NAME_PREFIX` | `edge-site` | ManagedCluster names: `edge-site-01`, … |
 | `ACM_HUB_CLUSTER` | `local-cluster` | Hub ManagedCluster name (wired into GitOpsCluster) |
 | `CLUSTER_CREATE` | `false` | Provision spokes with Hive when `true` |
-| `GITOPS_REPO_URL` | upstream repo | ArgoCD source for `edge/helm` |
+| `GITOPS_REPO_URL` | upstream repo | ArgoCD source for `edge/helm` (required for SC when `EDGE_GITOPS=auto` or `argocd`) |
 | `GITOPS_REVISION` | `main` | Branch/tag/commit for ArgoCD (use your feature branch before merge) |
-| `KAFKA_EXTERNAL_HOST` | auto from route | Hub Kafka route host for spoke CLF; `acm-deploy` detects `kafka-external` if unset |
-| `REGISTRY` / `VERSION` | Quay published images | Override for custom builds |
+| `EDGE_GITOPS` | `auto` | SC only: `auto` (Argo if ApplicationSet CRD present, else Helm), `argocd`, or `helm`. Hub-spoke always uses Argo. |
+| `KAFKA_EXTERNAL_HOST` | auto from route | Hub Kafka route host for CLF; required when CLF is on. `acm-deploy` detects `kafka-external` if unset |
+| `REGISTRY` / `VERSION` | Quay published images | Override for custom builds (hub images and edge healer) |
 | `EDGE_SELF_HEAL` | `true` | ArgoCD selfHeal for edge apps; set `false` so AI remediation patches persist |
+| `CLUSTER_LOG_FORWARDER_ENABLED` | `false` (SC) / `true` (MC) | Edge chart CLF. SC default stays off (no Logging prereq). |
 | `ENABLE_MULTICLUSTER` | `false` | AAP ACM proxy credential (not topology) |
 | `multiClusterCreds.insecureSkipTlsVerify` | `true` (Helm) | Lab default for cluster-proxy kubeconfigs; set `false` to pin CA |
 
@@ -178,7 +180,22 @@ Offline / CI dry-runs: set `SKIP_OC_CHECK=1` so topology and ACM scripts skip li
 
 ## Scenario A: Single cluster (`CLUSTER_COUNT=1`)
 
-Uses the full hub chart and a simulated edge namespace (pause workload). No ACM spoke fan-out.
+Uses the full hub chart and the shared `edge/helm` chart in `dark-noc-edge` (nginx + fast-path healer). No ACM Placement, ManagedClusters, or Hive.
+
+Edge delivery:
+
+- **OpenShift with GitOps** (`EDGE_GITOPS=auto` or `argocd`): ApplicationSet with one list element, destination `in-cluster`, siteId `edge-site-01`.
+- **No GitOps / Kind** (`EDGE_GITOPS=auto` falls back, or set `EDGE_GITOPS=helm`): `helm upgrade --install` of the same chart and value contract.
+
+ClusterLogForwarder stays **off** by default on single-cluster (matches prior SC behavior; no Logging operator prereq). Set `CLUSTER_LOG_FORWARDER_ENABLED=true` only if you also install Logging and distribute kafka client certs.
+
+### Prerequisites (Scenario A)
+
+- Hub operators from the README (RHOAI / Llama Stack, etc.)
+- **Recommended:** OpenShift GitOps (ApplicationSet CRD) for Argo delivery
+- Without GitOps: Helm-only edge install still works (`EDGE_GITOPS=auto` logs a WARN and falls back)
+
+ACM is **not** required for `CLUSTER_COUNT=1`.
 
 ```bash
 export ADNR_LLM_ID=... ADNR_LLM_URL=... ADNR_LLM_TOKEN=...
@@ -188,25 +205,35 @@ CLUSTER_COUNT=1 make acm-deploy
 make integration-tests
 ```
 
+Force Helm edge delivery (Kind-style):
+
+```bash
+CLUSTER_COUNT=1 EDGE_GITOPS=helm make acm-deploy
+```
+
 What ran:
 
 1. `validate-topology` (spokeCount=0, deploymentMode=single-cluster)
 2. `helm-install` (edgeRbac follows `ROUTES_ENABLED`)
-3. `deploy-edge-workload` into `dark-noc-edge`
+3. `edge-deploy` → Argo ApplicationSet (`in-cluster`) or Helm `adnr-edge` release
+4. `argocd-wait-spokes` when delivery is Argo (waits for `adnr-edge-in-cluster`)
 
 Checks:
 
 ```bash
 oc get pods -n hub
-oc get ns dark-noc-edge
+oc get deploy,pods -n dark-noc-edge
+# Expect edge-nginx and (by default) edge-fast-path-runner / edge-fast-path-watcher
 oc get secret noc-openshift-edge-kubeconfig -n hub
+
+# If EDGE_GITOPS used Argo:
+oc get applications.argoproj.io -n openshift-gitops | grep adnr-edge
 ```
 
-Teardown:
+Teardown (removes edge Argo apps and/or Helm edge release, then the hub chart):
 
 ```bash
 CLUSTER_COUNT=1 make acm-teardown
-# equivalent: make helm-uninstall
 ```
 
 ## Scenario B: Hub + spokes (`CLUSTER_COUNT=2`)
