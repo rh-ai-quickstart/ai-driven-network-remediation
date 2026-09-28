@@ -38,7 +38,7 @@ spec:
   template:
     metadata:
       name: "adnr-edge-{{.name}}"
-      # Cascade-prune edge resources when the Application is deleted (acm-teardown).
+      # Cascade-prune edge resources when the Application is deleted (make teardown).
       finalizers:
         - resources-finalizer.argocd.argoproj.io
       labels:

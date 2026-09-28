@@ -53,7 +53,7 @@ runs:
     - name: Install edge chart (nginx + healer, CLF off)
       run: |
         # Kind has no OpenShift GitOps / Logging. Use the same edge/helm chart as
-        # acm-deploy via Helm (EDGE_GITOPS=helm). Disable healer when network
+        # edge via Helm (EDGE_GITOPS=helm), same chart as make deploy. Disable healer when network
         # images were not built (telco-only Kind runs).
         HEALER_ENABLED=true
         if [ "${ENABLE_NETWORK_REMEDIATION:-true}" = "false" ]; then
