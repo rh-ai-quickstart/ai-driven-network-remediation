@@ -26,6 +26,7 @@ EDGE_SITE_ID="${EDGE_SITE_ID:-edge-site-01}"
 REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
 VERSION="${VERSION:-0.1.5}"
 CLUSTER_LOG_FORWARDER_ENABLED="${CLUSTER_LOG_FORWARDER_ENABLED:-false}"
+EDGE_HEALER_ENABLED="${EDGE_HEALER_ENABLED:-true}"
 KAFKA_EXTERNAL_HOST="${KAFKA_EXTERNAL_HOST:-}"
 SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 
@@ -111,7 +112,7 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "dry-run: would run argocd-apply.sh (destination in-cluster)"
   else
     log "dry-run: would helm upgrade --install ${EDGE_HELM_RELEASE} edge/helm -n ${EDGE_NAMESPACE}"
-    log "dry-run:   siteId=${EDGE_SITE_ID} clf=${CLUSTER_LOG_FORWARDER_ENABLED} image=${HEALER_REPO}:${VERSION}"
+    log "dry-run:   siteId=${EDGE_SITE_ID} clf=${CLUSTER_LOG_FORWARDER_ENABLED} healer=${EDGE_HEALER_ENABLED} image=${HEALER_REPO}:${VERSION}"
   fi
   log "EDGE_DELIVERY=${delivery}"
   log "OK: edge-deploy dry-run"
@@ -155,6 +156,7 @@ helm_args=(
   --set "namespace=${EDGE_NAMESPACE}"
   --set "fastPathHealer.image.repository=${HEALER_REPO}"
   --set "fastPathHealer.image.tag=${VERSION}"
+  --set "fastPathHealer.enabled=${EDGE_HEALER_ENABLED}"
   --set "clusterLogForwarder.enabled=${CLUSTER_LOG_FORWARDER_ENABLED}"
   --wait --timeout 5m
 )
