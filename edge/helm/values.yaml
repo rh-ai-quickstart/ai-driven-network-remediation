@@ -11,8 +11,11 @@ nginx:
   enabled: true
   name: edge-nginx
   replicas: 1
+  # Unprivileged image (UID 101, listen 8080): satisfies runAsNonRoot on Kind
+  # and OpenShift restricted SCC. Official nginx:alpine runs as root and fails
+  # kubelet runAsNonRoot checks outside OpenShift.
   image:
-    repository: nginx
+    repository: nginxinc/nginx-unprivileged
     tag: "1.27-alpine"
     pullPolicy: IfNotPresent
   # Low memory limit so OOMKill demos are reliable on spokes.
@@ -24,7 +27,7 @@ nginx:
       cpu: 100m
       memory: 64Mi
   ports:
-    http: 80
+    http: 8080
 
 kafka:
   # Hostname only (no scheme). Used to build tls://host:port/topic for CLF.

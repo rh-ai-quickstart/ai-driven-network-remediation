@@ -66,7 +66,8 @@ runs:
           REGISTRY=localhost:5001 \
           VERSION="${VERSION:-0.1.5}" \
           CLUSTER_LOG_FORWARDER_ENABLED=false \
-          EDGE_HEALER_ENABLED="${HEALER_ENABLED}"
+          EDGE_HEALER_ENABLED="${HEALER_ENABLED}" \
+          EDGE_NETWORK_POLICY_ENABLED=false
         oc wait --for=condition=available deployment/edge-nginx -n dark-noc-edge --timeout=120s
         if [ "${HEALER_ENABLED}" = "true" ]; then
           oc wait --for=condition=available deployment/edge-fast-path-runner -n dark-noc-edge --timeout=120s

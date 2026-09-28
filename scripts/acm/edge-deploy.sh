@@ -11,7 +11,8 @@
 # Env (also forwarded to argocd-apply / helm):
 #   EDGE_NAMESPACE, REGISTRY, VERSION, CLUSTER_LOG_FORWARDER_ENABLED,
 #   KAFKA_EXTERNAL_HOST, EDGE_SELF_HEAL, GITOPS_*, ARGOCD_*, EDGE_HELM_RELEASE,
-#   EDGE_SITE_ID (default edge-site-01), SKIP_OC_CHECK
+#   EDGE_SITE_ID (default edge-site-01), EDGE_NETWORK_POLICY_ENABLED (default true),
+#   SKIP_OC_CHECK
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +28,8 @@ REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
 VERSION="${VERSION:-0.1.5}"
 CLUSTER_LOG_FORWARDER_ENABLED="${CLUSTER_LOG_FORWARDER_ENABLED:-false}"
 EDGE_HEALER_ENABLED="${EDGE_HEALER_ENABLED:-true}"
+# Kind/kindnet often blocks kubelet probes when runner ingress is watcher-only.
+EDGE_NETWORK_POLICY_ENABLED="${EDGE_NETWORK_POLICY_ENABLED:-true}"
 KAFKA_EXTERNAL_HOST="${KAFKA_EXTERNAL_HOST:-}"
 SKIP_OC_CHECK="${SKIP_OC_CHECK:-}"
 
@@ -112,7 +115,7 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
     log "dry-run: would run argocd-apply.sh (destination in-cluster)"
   else
     log "dry-run: would helm upgrade --install ${EDGE_HELM_RELEASE} edge/helm -n ${EDGE_NAMESPACE}"
-    log "dry-run:   siteId=${EDGE_SITE_ID} clf=${CLUSTER_LOG_FORWARDER_ENABLED} healer=${EDGE_HEALER_ENABLED} image=${HEALER_REPO}:${VERSION}"
+    log "dry-run:   siteId=${EDGE_SITE_ID} clf=${CLUSTER_LOG_FORWARDER_ENABLED} healer=${EDGE_HEALER_ENABLED} networkPolicy=${EDGE_NETWORK_POLICY_ENABLED} image=${HEALER_REPO}:${VERSION}"
   fi
   log "EDGE_DELIVERY=${delivery}"
   log "OK: edge-deploy dry-run"
@@ -147,6 +150,20 @@ if [[ -z "${oc_bin}" ]]; then
   fail "oc or kubectl not found on PATH"
 fi
 
+dump_edge_namespace() {
+  log "=== edge deploy failure dump (${EDGE_NAMESPACE}) ==="
+  "${oc_bin}" get deploy,pods,svc,networkpolicy -n "${EDGE_NAMESPACE}" -o wide 2>&1 || true
+  "${oc_bin}" get events -n "${EDGE_NAMESPACE}" --sort-by='.lastTimestamp' 2>&1 | tail -40 || true
+  for dep in edge-nginx edge-fast-path-runner edge-fast-path-watcher; do
+    log "--- describe deploy/${dep} ---"
+    "${oc_bin}" describe deploy "${dep}" -n "${EDGE_NAMESPACE}" 2>&1 | tail -50 || true
+  done
+  for pod in $("${oc_bin}" get pods -n "${EDGE_NAMESPACE}" -o name 2>/dev/null || true); do
+    log "--- logs ${pod} ---"
+    "${oc_bin}" logs -n "${EDGE_NAMESPACE}" "${pod}" --all-containers --tail=40 2>&1 || true
+  done
+}
+
 # Helm --create-namespace owns the release namespace. Disable the chart's Namespace
 # template so we do not double-create (Helm fails with "already exists").
 log "Deploying edge via Helm (${EDGE_HELM_RELEASE} in ${EDGE_NAMESPACE})..."
@@ -160,6 +177,7 @@ helm_args=(
   --set "fastPathHealer.image.repository=${HEALER_REPO}"
   --set "fastPathHealer.image.tag=${VERSION}"
   --set "fastPathHealer.enabled=${EDGE_HEALER_ENABLED}"
+  --set "fastPathHealer.networkPolicy.enabled=${EDGE_NETWORK_POLICY_ENABLED}"
   --set "clusterLogForwarder.enabled=${CLUSTER_LOG_FORWARDER_ENABLED}"
   --wait --timeout 5m
 )
@@ -169,7 +187,10 @@ elif [[ "${CLUSTER_LOG_FORWARDER_ENABLED}" == "true" || "${CLUSTER_LOG_FORWARDER
   fail "KAFKA_EXTERNAL_HOST required when clusterLogForwarder.enabled=true for Helm edge install"
 fi
 
-helm "${helm_args[@]}"
+if ! helm "${helm_args[@]}"; then
+  dump_edge_namespace
+  fail "helm edge install failed (see dump above)"
+fi
 log "EDGE_DELIVERY=helm"
 log "OK: edge-deploy via Helm"
 exit 0
