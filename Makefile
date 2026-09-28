@@ -94,7 +94,7 @@ RAN_REMEDIATION_CONTEXT         := hub
 ENABLE_HUB             ?= true
 ENABLE_KAFKA           ?= true
 ENABLE_KAFKA_UI        ?= false
-ENABLE_MINIO           ?= true
+ENABLE_S4              ?= true
 ENABLE_LOKISTACK       ?= false
 ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
@@ -152,7 +152,6 @@ LANGFUSE_PORT          := 3000
 KAFKA_PORT             := 9092
 LOKISTACK_NAME         ?= logging-loki
 LOKISTACK_NAMESPACE    ?= $(NAMESPACE)
-MINIO_PORT             ?= 9000
 
 # ── AAP / ServiceNow Mock images ──────────────────────────────────
 AAP_MOCK_IMG           := $(REGISTRY)/noc-aap-mock:$(VERSION)
@@ -320,8 +319,8 @@ helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 	--set kafka.kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
-	--set minio.enabled=$(ENABLE_MINIO) \
-	--set minio.route.enabled=$(ROUTES_ENABLED) \
+	--set s4.enabled=$(ENABLE_S4) \
+	--set s4.route.enabled=$(ROUTES_ENABLED) \
 	--set gitea.enabled=$(ENABLE_GITEA)
 
 # network.topology.* comes solely from -f $(SPOKES_GENERATED) (see helm-install).
@@ -595,7 +594,7 @@ helm-erase-hub:
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
-	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc s4-data --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc data-gitea-0 --namespace $(NAMESPACE) --ignore-not-found
 
 .PHONY: helm-uninstall
@@ -604,7 +603,7 @@ ifeq ($(ENABLE_HUB),true)
 	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
-	oc delete pvc minio-data-minio-0 --namespace $(NAMESPACE) --ignore-not-found
+	oc delete pvc s4-data --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc data-gitea-0 --namespace $(NAMESPACE) --ignore-not-found
 
 ifeq ($(ENABLE_LANGFUSE),true)

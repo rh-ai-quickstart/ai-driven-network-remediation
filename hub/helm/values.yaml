@@ -101,16 +101,25 @@ kafka:
   kafkaUI:
     enabled: false
 
-# ── MinIO (subchart: charts/minio) ────────────────────────────────
-# Defaults live in charts/minio/values.yaml; only overrides and parent references here.
-minio:
+# ── s4 (subchart: charts/s4) ──────────────────────────────────────
+# Vendored from github.com/rh-aiservices-bu/s4 @ v0.3.2.
+s4:
   enabled: true
+  fullnameOverride: s4
+  image:
+    # Pinned: an unpinned storage image has cost us helm install timeouts in CI.
+    tag: "0.3.2"
+    pullPolicy: IfNotPresent
+  # Same credentials for the console and S3, as the minio console used.
+  auth:
+    username: s4admin
+    password: s4secret
   route:
     enabled: true
   # Parent chart references (used by hub templates for ingestion-pipeline)
-  host: minio
-  port: "9000"
-  secretName: minio
+  host: s4
+  port: "7480"
+  secretName: s4-credentials
 
 gitea:
   enabled: true

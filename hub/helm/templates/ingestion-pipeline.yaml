@@ -19,19 +19,21 @@ spec:
     spec:
       {{- if .Values.ingestionPipeline.waitForDeps }}
       initContainers:
-        - name: wait-for-minio
+        - name: wait-for-storage
           image: {{ $.Values.waitImage | quote }}
           command: ["sh", "-c"]
           args:
             - |
               retries=0
-              until curl -sf http://{{ .Values.minio.host }}:{{ .Values.minio.port }}/minio/health/ready; do
+              # No -f: RGW answers an unauthenticated GET / with 403, which still
+              # means it is serving.
+              until curl -s -o /dev/null http://{{ .Values.s4.host }}:{{ .Values.s4.port }}/; do
                 retries=$((retries + 1))
                 if [ $retries -ge 40 ]; then
-                  echo "MinIO not ready after 40 attempts — proceeding anyway"
+                  echo "Object storage not ready after 40 attempts — proceeding anyway"
                   exit 0
                 fi
-                echo "Waiting for MinIO... ($retries/40)"
+                echo "Waiting for object storage... ($retries/40)"
                 sleep 3
               done
         - name: wait-for-llamastack
@@ -80,16 +82,16 @@ spec:
             - name: CHUNK_OVERLAP_TOKENS
               value: {{ .Values.ingestionPipeline.chunkOverlapTokens | quote }}
             - name: MINIO_ENDPOINT
-              value: {{ printf "%s:%s" .Values.minio.host .Values.minio.port | quote }}
+              value: {{ printf "%s:%s" .Values.s4.host .Values.s4.port | quote }}
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.minio.secretName | quote }}
+                  name: {{ .Values.s4.secretName | quote }}
                   key: user
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.minio.secretName | quote }}
+                  name: {{ .Values.s4.secretName | quote }}
                   key: password
             - name: MINIO_BUCKET
               value: {{ .Values.ingestionPipeline.minio.bucket | quote }}

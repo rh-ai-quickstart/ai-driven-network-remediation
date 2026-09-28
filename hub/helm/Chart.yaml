@@ -27,10 +27,10 @@ dependencies:
     version: 0.1.0
     repository: "file://charts/kafka"
     condition: kafka.enabled
-  - name: minio
-    version: 0.5.5
-    repository: "file://charts/minio"
-    condition: minio.enabled
+  - name: s4
+    version: 0.1.0
+    repository: "file://charts/s4"
+    condition: s4.enabled
   - name: gitea
     version: 0.1.0
     repository: "file://charts/gitea"

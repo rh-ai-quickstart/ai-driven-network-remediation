@@ -360,10 +360,10 @@ lokistack:
   namespace: ""
   clusterDomain: ""
   minio:
-    endpoint: "http://minio:9000"
+    endpoint: "http://s4:7480"
     bucketName: loki
     existingSecret:
-      name: minio
+      name: s4-credentials
       userKey: user
       passwordKey: password
     bucketJobImage:
@@ -390,7 +390,7 @@ lokistack:
         replicas: 1
     storage:
       secret:
-        name: minio
+        name: s4-credentials
         type: s3
       schemas:
         - version: v13

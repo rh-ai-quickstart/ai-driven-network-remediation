@@ -14,11 +14,11 @@ dependencies:
 - name: kafka
   repository: file://charts/kafka
   version: 0.1.0
-- name: minio
-  repository: file://charts/minio
-  version: 0.5.5
+- name: s4
+  repository: file://charts/s4
+  version: 0.1.0
 - name: gitea
   repository: file://charts/gitea
   version: 0.1.0
-digest: sha256:b63530d8e4d7abeed571da9604fbe11902b1bcd68bdf2a0a76966cc274d0c2c1
-generated: "2026-09-07T16:57:50.226967+02:00"
+digest: sha256:bc86fe8164d37641edf261f50a3dec7ce725c3cfa7e19d9c665aa2969016d1ad
+generated: "2026-09-28T14:49:44.602204+02:00"
