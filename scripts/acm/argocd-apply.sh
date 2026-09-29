@@ -315,6 +315,41 @@ if ! "${oc_bin}" get namespace "${argocd_ns}" >/dev/null 2>&1; then
   fail "ArgoCD namespace not found: ${argocd_ns}"
 fi
 
+# OpenShift GitOps only grants the application-controller write access in namespaces
+# labeled argocd.argoproj.io/managed-by=<gitops-ns>. CreateNamespace alone leaves
+# Applications Healthy but OutOfSync (forbidden create on Deployments/Services).
+ensure_in_cluster_edge_namespace_rbac() {
+  local ns="${EDGE_NAMESPACE}"
+  local managed_by="${argocd_ns}"
+  local deadline
+  log "Ensuring ${ns} exists and is managed by OpenShift GitOps (${managed_by})..."
+  if ! "${oc_bin}" get namespace "${ns}" >/dev/null 2>&1; then
+    "${oc_bin}" create namespace "${ns}"
+  fi
+  "${oc_bin}" label namespace "${ns}" "argocd.argoproj.io/managed-by=${managed_by}" --overwrite
+
+  deadline=$((SECONDS + 120))
+  while (( SECONDS < deadline )); do
+    if "${oc_bin}" get rolebinding -n "${ns}" -o jsonpath='{range .items[*]}{.subjects[*].name}{"\n"}{end}' 2>/dev/null \
+      | grep -q 'argocd-application-controller'; then
+      log "OK: application-controller RoleBinding present in ${ns}"
+      return 0
+    fi
+    sleep 3
+  done
+  log "WARN: timed out waiting for GitOps operator RoleBinding in ${ns}; applying admin RoleBinding fallback"
+  # Fallback when the operator does not reconcile managed-by quickly (or custom installs).
+  "${oc_bin}" create rolebinding "adnr-argocd-application-controller" \
+    --namespace="${ns}" \
+    --clusterrole=admin \
+    --serviceaccount="${managed_by}:openshift-gitops-argocd-application-controller" \
+    --dry-run=client -o yaml | "${oc_bin}" apply -f -
+}
+
+if [[ "${CLUSTER_COUNT}" -eq 1 ]]; then
+  ensure_in_cluster_edge_namespace_rbac
+fi
+
 log "Applying AppProject + ApplicationSet to ${argocd_ns}..."
 printf '%s\n' "${rendered}" | "${oc_bin}" apply -f -
 log "OK: argocd-apply applied edge fan-out for ${expected_element_count} element(s)"
