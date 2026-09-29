@@ -14,7 +14,10 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 @pytest.fixture
 def client():
-    with patch("ran_ml_service.model.predictor._loaded", True):
+    with (
+        patch("ran_ml_service.model.predictor._loaded", True),
+        patch("ran_ml_service.model.predictor.load"),
+    ):
         from ran_ml_service.server import app
 
         with TestClient(app) as test_client:
@@ -23,7 +26,10 @@ def client():
 
 @pytest.fixture
 def unloaded_client():
-    with patch("ran_ml_service.model.predictor._loaded", False):
+    with (
+        patch("ran_ml_service.model.predictor._loaded", False),
+        patch("ran_ml_service.model.predictor.load"),
+    ):
         from ran_ml_service.server import app
 
         with TestClient(app) as test_client:
