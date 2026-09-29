@@ -1,0 +1,52 @@
+name: RAN ML Notebook Parity
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "model-serving/ran-ml-service/**"
+      - ".github/workflows/pr-ran-ml-parity.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  notebook-parity:
+    name: Notebook/service parity
+    runs-on: ubuntu-latest
+    env:
+      MODEL_DIR: ${{ runner.temp }}/ran-ml-models
+      MANTIS_MODEL_PATH: ${{ runner.temp }}/ran-ml-models/mantis_pretrained_ad.pt
+      HF_HUB_OFFLINE: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: model-serving/ran-ml-service/uv.lock
+
+      - name: Install test dependencies
+        working-directory: model-serving/ran-ml-service
+        run: uv sync --locked --group dev
+
+      - name: Download pinned model artifacts
+        working-directory: model-serving/ran-ml-service
+        env:
+          HF_HUB_OFFLINE: "0"
+        run: |
+          mkdir -p "${MODEL_DIR}"
+          curl --fail --location --retry 3 \
+            --output "${MANTIS_MODEL_PATH}" \
+            "https://huggingface.co/TomerG2/mantis-ad-telecomts/resolve/9f1ff8a3f59f3f2d74ce001d7f0dbb6695676ec4/mantis_pretrained_ad.pt"
+          echo "9b00f1a5705c196d218110bf7c39027bedf811675aada74e8742f8d0c953a078  ${MANTIS_MODEL_PATH}" | sha256sum --check
+          backbone_path=$(uv run python -c "from huggingface_hub import snapshot_download; print(snapshot_download('paris-noah/Mantis-8M', revision='bc7d5ab40c02133386a28e2c127f35c17c86901d'))")
+          echo "MANTIS_CHECKPOINT=${backbone_path}" >> "${GITHUB_ENV}"
+
+      - name: Run notebook parity and unit tests
+        working-directory: model-serving/ran-ml-service
+        run: uv run pytest
