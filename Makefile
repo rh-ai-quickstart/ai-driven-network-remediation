@@ -748,6 +748,11 @@ _check-lightspeed-operator: _require-aap-operator
 edge-rbac-teardown:
 	sed 's/EDGE_NAMESPACE_PLACEHOLDER/$(EDGE_NAMESPACE)/g' hub/mcp-servers/mcp-openshift/deploy/edge-rbac.yaml \
 		| oc delete -n $(EDGE_NAMESPACE) --ignore-not-found -f -
+	# Helm edge-rbac Job scopes ClusterRole(Binding) as noc-openshift-mcp-<ns>
+	oc delete clusterrolebinding noc-openshift-mcp-$(EDGE_NAMESPACE) --ignore-not-found
+	oc delete clusterrole noc-openshift-mcp-$(EDGE_NAMESPACE) --ignore-not-found
+	oc delete clusterrolebinding hub-edge-rbac-hub --ignore-not-found
+	oc delete clusterrole hub-edge-rbac-hub --ignore-not-found
 	oc delete secret noc-openshift-edge-kubeconfig -n $(NAMESPACE) --ignore-not-found
 
 # ══════════════════════════════════════════════════════════════════════
