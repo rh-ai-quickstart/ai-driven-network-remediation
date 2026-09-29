@@ -13,7 +13,7 @@ AutoRAG is an OpenShift AI (3.4) feature that automatically finds the best RAG c
 | Data Science Pipelines enabled | `spec.components.aipipelines.managementState: Managed` |
 | Dashboard enabled | `spec.components.dashboard.managementState: Managed` |
 | Foundation model endpoint (Granite/vLLM) | Set `ADNR_LLM_ID`, `ADNR_LLM_URL`, `ADNR_LLM_TOKEN` env vars |
-| MinIO deployed | Included in `make helm-install` (minio subchart) |
+| s4 deployed | Included in `make helm-install` (s4 subchart) |
 
 ## Architecture
 
@@ -40,7 +40,7 @@ The operator automatically provisions the required `run-config` ConfigMap and `l
   │           │                                            │
   │           ▼                                            │
   │  ┌──────────────────┐    ┌─────────────────────────┐  │
-  │  │  pgvector         │    │  MinIO (runbooks S3)    │  │
+  │  │  pgvector         │    │  s4 (runbooks S3)       │  │
   │  │  (metadata store) │    └─────────────────────────┘  │
   │  └──────────────────┘                                  │
   └────────────────────────────────────────────────────────┘
@@ -54,7 +54,7 @@ export ADNR_LLM_ID="granite-3.3-8b-instruct"
 export ADNR_LLM_URL="https://your-vllm-endpoint/v1"
 export ADNR_LLM_TOKEN="your-token"
 
-# Deploy everything (includes AutoRAG, MinIO, Kafka — all in parallel)
+# Deploy everything (includes AutoRAG, s4, Kafka — all in parallel)
 make helm-install
 ```
 
@@ -89,7 +89,7 @@ remediation runbooks.
 3. Click **Create optimization run**
 4. Configure:
    - **Llama Stack connection**: `http://llamastack-service:8321` (the operator-managed LSD)
-   - **Documents**: Upload from MinIO bucket or select the runbooks folder
+   - **Documents**: Upload from the s4 bucket or select the runbooks folder
    - **Test data**: Upload `hub/autorag/test-data.json`
    - **Optimization metric**: "Context correctness" (recommended for retrieval-focused RAG)
    - **Embedding model**: BAAI/bge-m3 (auto-discovered from the LSD)

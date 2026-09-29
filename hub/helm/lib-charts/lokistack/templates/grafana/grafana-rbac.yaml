@@ -12,6 +12,41 @@ metadata:
   name: {{ .Values.grafana.rbac.lokiReader.serviceAccountName }}
   namespace: {{ include "lokistack.namespace" . }}
 ---
+# Self-contained ClusterRole granting access to LokiStack tenants via the gateway OPA policy.
+# The gateway performs a SubjectAccessReview for "get application.loki.grafana.com" (resourceName
+# "logs") before allowing queries. This role ensures that check passes regardless of whether the
+# operator-managed cluster-logging-*-reader ClusterRoles exist on this cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.grafana.rbac.lokiReader.serviceAccountName }}
+rules:
+  - apiGroups: ["loki.grafana.com"]
+    resources: ["application", "infrastructure", "audit"]
+    resourceNames: ["logs"]
+    verbs: ["get"]
+  - apiGroups: ["project.openshift.io"]
+    resources: ["projects"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Values.grafana.rbac.lokiReader.serviceAccountName }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.grafana.rbac.lokiReader.serviceAccountName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.grafana.rbac.lokiReader.serviceAccountName }}
+    namespace: {{ include "lokistack.namespace" . }}
+---
+# Fallback bindings to operator-managed ClusterRoles for clusters that enforce the
+# cluster-logging-* roles in their OPA policies.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:

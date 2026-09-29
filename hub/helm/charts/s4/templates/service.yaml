@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "s4.fullname" . }}
+  labels:
+    {{- include "s4.labels" . | nindent 4 }}
+  {{- with (include "s4.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: s3-api
+      port: {{ .Values.service.s3Port }}
+      targetPort: 7480
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort.s3Port }}
+      nodePort: {{ .Values.service.nodePort.s3Port }}
+      {{- end }}
+    - name: web-ui
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.server.port }}
+      protocol: TCP
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort.webPort }}
+      nodePort: {{ .Values.service.nodePort.webPort }}
+      {{- end }}
+  selector:
+    {{- include "s4.selectorLabels" . | nindent 4 }}
+{{- if .Values.service.nodePort.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "s4.fullname" . }}-nodeport
+  labels:
+    {{- include "s4.labels" . | nindent 4 }}
+  {{- with (include "s4.annotations" .) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
+spec:
+  type: NodePort
+  ports:
+    - name: s3-api
+      port: {{ .Values.service.s3Port }}
+      targetPort: 7480
+      protocol: TCP
+      {{- if .Values.service.nodePort.s3Port }}
+      nodePort: {{ .Values.service.nodePort.s3Port }}
+      {{- end }}
+    - name: web-ui
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.server.port }}
+      protocol: TCP
+      {{- if .Values.service.nodePort.webPort }}
+      nodePort: {{ .Values.service.nodePort.webPort }}
+      {{- end }}
+  selector:
+    {{- include "s4.selectorLabels" . | nindent 4 }}
+{{- end }}

@@ -87,7 +87,7 @@ See [Graph Nodes](graph-nodes.md) for the full pipeline diagram and per-node ref
 ## Data Persistence
 
 - **Incident state** - PostgreSQL (LangGraph checkpoint)
-- **Runbooks** - MinIO object storage + PostgreSQL/pgvector (RAG)
+- **Runbooks** - s4 object storage + PostgreSQL/pgvector (RAG)
 - **Traces** - Langfuse (observability)
 - **Playbook definitions** - AAP (Ansible)
 - **Logs** - Kafka (event stream)

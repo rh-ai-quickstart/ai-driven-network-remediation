@@ -6,7 +6,7 @@
 #
 # Usage: helm install lokistack ./chart -n <namespace>
 #
-# LokiStack uses the shared minio secret (created by the minio subchart) for S3 credentials.
+# LokiStack uses the shared s4-credentials secret (created by the hub chart) for S3 credentials.
 #
 # Environment overrides (use --set):
 #   --set lokistack.size=1x.medium
@@ -16,10 +16,10 @@
 clusterDomain: ""
 
 minio:
-  endpoint: "http://minio:9000"
+  endpoint: "http://s4:7480"
   bucketName: loki
   existingSecret:
-    name: minio
+    name: s4-credentials
     userKey: user
     passwordKey: password
   bucketJobImage:
@@ -58,7 +58,7 @@ lokistack:
 
   storage:
     secret:
-      name: minio
+      name: s4-credentials
       type: s3
 
     schemas:
