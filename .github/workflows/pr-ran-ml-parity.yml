@@ -17,10 +17,13 @@ jobs:
     name: Notebook/service parity
     runs-on: ubuntu-latest
     env:
-      MODEL_DIR: ${{ runner.temp }}/ran-ml-models
-      MANTIS_MODEL_PATH: ${{ runner.temp }}/ran-ml-models/mantis_pretrained_ad.pt
       HF_HUB_OFFLINE: "1"
     steps:
+      - name: Set model paths
+        run: |
+          echo "MODEL_DIR=${{ runner.temp }}/ran-ml-models" >> "${GITHUB_ENV}"
+          echo "MANTIS_MODEL_PATH=${{ runner.temp }}/ran-ml-models/mantis_pretrained_ad.pt" >> "${GITHUB_ENV}"
+
       - name: Checkout repository
         uses: actions/checkout@v5
 
