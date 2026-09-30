@@ -24,7 +24,8 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.evidence import build_evidence_prompt, build_grounding_text, get_pod_logs_for_attachment, get_structured_attachments
-from agent_service.models import RemediationResult
+from agent_service.models import GraphConfig, RemediationResult
+from agent_service.nodes._aap_job import evaluate_job
 from agent_service.nodes.rag_retrieval import store_generated_playbook
 from agent_service.playbook_sanitize import fix_ansible_facts, quote_jinja, sanitize_playbook
 from agent_service.utils import (
@@ -521,10 +522,15 @@ async def _execute_in_aap(
 
     job_id = str(launch.get("job_id", ""))
     logger.info(f"AAP job launched: job_id={job_id} template='{name}'")
+
+    outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+    logger.info(f"AAP job {job_id} for '{name}' finished: success={outcome.success} timed_out={outcome.timed_out}")
     return result.model_copy(
         update={
             "job_id": job_id,
-            "output_summary": f"Launched AAP job {job_id} for {name} (pending)",
-            "timestamp": now_iso(),
+            "success": outcome.success,
+            "timed_out": outcome.timed_out,
+            "output_summary": outcome.output_summary,
+            "timestamp": outcome.timestamp,
         },
     )

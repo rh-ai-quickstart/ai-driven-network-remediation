@@ -5,10 +5,12 @@ import httpx
 import pytest
 from helpers import make_log_event, make_rca
 
+from agent_service.graph import _route_after_lightspeed
 from agent_service.models import (
     IncidentState,
     RemediationResult,
 )
+from agent_service.nodes._aap_job import JobOutcome
 from agent_service.nodes.lightspeed import (
     _build_attachments,
     _build_playbook_name,
@@ -83,6 +85,18 @@ _SYNC_STATUS_OK = {
     "finished": "2026-07-28T12:00:00Z",
 }
 
+_JOB_STATUS_OK = {
+    "success": True,
+    "job_id": 42,
+    "status": "successful",
+    "elapsed": 3.5,
+    "finished": "2026-07-28T12:01:00Z",
+    "failed": False,
+    "result_traceback": "",
+}
+
+_JOB_OUTPUT_OK = {"success": True, "output": "PLAY RECAP ok=1 changed=1 failed=0", "job_id": 42}
+
 
 async def _default_invoke(tool_name, kwargs):
     if tool_name == "commit_playbook":
@@ -97,6 +111,10 @@ async def _default_invoke(tool_name, kwargs):
         return _SYNC_STATUS_OK
     if tool_name == "upsert_job_template":
         return _UPSERT_OK
+    if tool_name == "get_job_status":
+        return _JOB_STATUS_OK
+    if tool_name == "get_job_output":
+        return _JOB_OUTPUT_OK
     if tool_name == "get_pod_spec":
         return {
             "success": True,
@@ -133,6 +151,7 @@ async def _run_node(
         patch("agent_service.nodes.lightspeed.LIGHTSPEED_URL", "https://als-stub"),
         patch("agent_service.nodes.lightspeed._call_als", als_mock),
         patch("agent_service.nodes.lightspeed._invoke_tool", invoke_mock),
+        patch("agent_service.nodes._aap_job._invoke_tool", invoke_mock),
         patch("agent_service.nodes.lightspeed._summarize_evidence", summarize_mock),
     ):
         result = await lightspeed_node(_state(**state_kw))
@@ -307,8 +326,8 @@ class TestLightspeedNodeSuccess:
         assert "```" not in rr.generated_playbook_preview
         assert rr.duration_seconds >= 0
         # No retargeting in the default flow, so get_pod_spec is skipped:
-        # commit, sync, poll-status, upsert, launch.
-        assert invoke_mock.call_count == 5
+        # commit, sync, poll-status, upsert, launch, get_job_status, get_job_output.
+        assert invoke_mock.call_count == 7
 
     async def test_passes_prompt_and_attachments_to_als(self):
         _, mock, _ = await _run_node(als_return=_ALS_RESPONSE)
@@ -781,6 +800,68 @@ class TestPlaybookStorage:
             await lightspeed_node(_state())
             await asyncio.sleep(0)
         store_mock.assert_not_called()
+
+    async def test_store_called_after_job_success(self):
+        store_mock = AsyncMock()
+        with patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock):
+            result, _, invoke_mock = await _run_node(als_return=_ALS_RESPONSE)
+            await asyncio.sleep(0)
+
+        rr = result["remediation_result"]
+        assert rr.success is True
+        assert rr.timed_out is False
+        assert "get_job_status" in [c[0][0] for c in invoke_mock.call_args_list]
+        store_mock.assert_called_once()
+
+    async def test_store_not_called_on_job_failure(self):
+        async def job_fails(tool_name, kwargs):
+            if tool_name == "get_job_status":
+                return {
+                    "success": True,
+                    "job_id": 42,
+                    "status": "failed",
+                    "elapsed": 1.0,
+                    "finished": "2026-07-28T12:01:00Z",
+                    "failed": True,
+                    "result_traceback": "fatal: task failed",
+                }
+            return await _default_invoke(tool_name, kwargs)
+
+        store_mock = AsyncMock()
+        with patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock):
+            result, _, _ = await _run_node(als_return=_ALS_RESPONSE, invoke_fn=job_fails)
+            await asyncio.sleep(0)
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        assert "fatal: task failed" in rr.output_summary
+        store_mock.assert_not_called()
+        state = IncidentState(raw_event="x", remediation_result=rr)
+        assert _route_after_lightspeed(state) == "escalate"
+
+    async def test_store_not_called_on_job_timeout(self):
+        timed_out = JobOutcome(
+            success=False,
+            timed_out=True,
+            elapsed=120.0,
+            timestamp="2026-07-28T12:02:00Z",
+            output_summary="Job 42 timed out",
+            output_text="",
+        )
+        store_mock = AsyncMock()
+        with (
+            patch("agent_service.nodes.lightspeed.store_generated_playbook", store_mock),
+            patch("agent_service.nodes.lightspeed.evaluate_job", AsyncMock(return_value=timed_out)),
+        ):
+            result, _, _ = await _run_node(als_return=_ALS_RESPONSE)
+            await asyncio.sleep(0)
+
+        rr = result["remediation_result"]
+        assert rr.success is False
+        assert rr.timed_out is True
+        store_mock.assert_not_called()
+        state = IncidentState(raw_event="x", remediation_result=rr)
+        assert _route_after_lightspeed(state) == "escalate"
 
 
 # -- Evidence summarization --
