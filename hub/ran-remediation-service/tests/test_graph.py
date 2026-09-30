@@ -12,6 +12,7 @@ _ANTENNA_SAMPLE = {
     "application":     "File",
     "ad_label":        "anomalous",
     "ad_confidence":   0.9995,
+    "root_cause_category": "antenna_misalignment",
     "root_cause":      "Signal degradation consistent with antenna misalignment.",
     "recommended_fix": "Adjust antenna tilt per vendor guide Section 4.3.2.",
 }
@@ -22,6 +23,7 @@ _OUTAGE_SAMPLE = {
     "application":     "Twitch",
     "ad_label":        "anomalous",
     "ad_confidence":   0.9999,
+    "root_cause_category": "cell_failure",
     "root_cause":      "Cell failure detected — outage and restart required.",
     "recommended_fix": "Run cell recovery procedure.",
 }
@@ -32,6 +34,7 @@ _GENERIC_SAMPLE = {
     "application":     "YouTube",
     "ad_label":        "anomalous",
     "ad_confidence":   0.88,
+    "root_cause_category": "unknown",
     "root_cause":      "Undetermined anomaly — no specific pattern matched.",
     "recommended_fix": "Check system logs.",
 }
@@ -160,5 +163,4 @@ def test_audit_node_kafka_failure_does_not_raise():
     with sync_patch("ran_remediation_service.nodes.audit.publish_remediation_record", side_effect=Exception("kafka down")):
         result = audit_node(state)
     assert "total_duration_ms" in result
-
 

@@ -1,8 +1,8 @@
 # RAN Remediation Service
 
 Automated remediation for ML-detected RAN anomalies. Consumes enriched anomaly records
-produced by `ran-rca-service`, selects an AAP job template by keyword-matching the LLM's
-`root_cause`, executes the remediation via LlamaStack MCP + AAP, sends a Slack notification,
+produced by `ran-rca-service`, maps the `root_cause_category` to an AAP job template,
+executes the remediation via LlamaStack MCP + AAP, sends a Slack notification,
 and publishes an audit record to `ran-remediation-results`.
 
 ---
@@ -27,21 +27,11 @@ This is the "act" layer that completes the **detect → explain → act → conf
 
 ## Input contract (`ran-anomalies-enriched` topic)
 
-Consumes the same enriched records produced by `ran-rca-service`
-(see `contracts/ran-anomaly-enriched.schema.json`):
+Consumes the enriched records produced by `ran-rca-service`. The authoritative
+field list is [`contracts/ran-anomaly-enriched.schema.json`](../contracts/ran-anomaly-enriched.schema.json),
+enforced by `tests/test_contract.py` — it is deliberately not duplicated here.
 
-```json
-{
-  "incident_id": "a3f7c2d1",
-  "zone": "A",
-  "application": "File",
-  "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
-  "ad_label": "anomalous",
-  "ad_confidence": 0.9995,
-  "root_cause": "Signal degradation consistent with antenna misalignment...",
-  "recommended_fix": "Verify antenna tilt per vendor guide Section 4.3.2..."
-}
-```
+The field this service routes on is `root_cause_category`.
 
 ---
 
@@ -51,9 +41,8 @@ Consumes the same enriched records produced by `ran-rca-service`
 START → decide → remediate → notify → audit → END
 ```
 
-- **`decide`** — keyword-matches `root_cause` (and `recommended_fix`) to select an AAP job
-  template name and builds the `extra_vars` payload (incident_id, zone, application,
-  root_cause, recommended_fix, etc.)
+- **`decide`** — maps `root_cause_category` to an AAP job template name and builds the
+  `extra_vars` payload (incident_id, zone, application, root_cause, recommended_fix, etc.)
 - **`remediate`** — calls AAP via LlamaStack MCP tools (`launch_job`, `get_job_status`,
   `get_job_output`); polls until the job reaches a terminal state; same pattern as
   Workflow 1's `agent-service/nodes/remediate.py`
@@ -64,21 +53,18 @@ START → decide → remediate → notify → audit → END
 
 ### Root cause → template mapping (`decide` node)
 
-Since ML-based detection produces typeless anomalies (no `anomaly_type` field), the `decide`
-node keyword-matches the LLM-generated `root_cause` and `recommended_fix` text to select the
-most appropriate AAP template:
+ML-based detection produces typeless anomalies (no `anomaly_type` field), so `ran-rca-service`
+classifies each one into a `root_cause_category` from a closed enum. The `decide` node is then
+a plain lookup from that category to an AAP job template, falling back to
+`ran-generic-remediation` for `unknown` or any unrecognized value.
 
-| Keywords in `root_cause` / `recommended_fix` | AAP template | What the Ansible job does |
-|---|---|---|
-| "antenna", "tilt", "RSRP", "signal strength", "misalignment" | `ran-antenna-tilt-adjust` | Adjusts antenna downtilt/azimuth |
-| "interference", "SINR", "noise", "beam" | `ran-interference-mitigation` | Power/beam adjustment to reduce interference |
-| "throughput", "scheduler", "rate", "latency", "MCS" | `ran-scheduler-optimize` | Tunes RAN scheduler parameters |
-| "load", "UE", "congestion", "offload", "handover" | `ran-load-balance` | Redistributes load across adjacent cells |
-| "capacity", "PRB", "utilization", "expansion" | `ran-capacity-expand` | Expands PRB allocation or triggers offload |
-| "failure", "outage", "recovery", "restart", "down" | `ran-cell-recovery` | Cell restart and recovery sequence |
-| *(no keyword match)* | `ran-generic-remediation` | Generic fallback remediation |
-
-Keywords are checked in priority order; the first match wins.
+The mapping itself is a single dict, `_CATEGORY_TO_TEMPLATE` in
+[`nodes/decide.py`](../hub/ran-remediation-service/src/ran_remediation_service/nodes/decide.py) —
+read it there rather than from a table here. The category enum is defined in
+[`contracts/ran-anomaly-enriched.schema.json`](../contracts/ran-anomaly-enriched.schema.json)
+and the template names must match the seeds in
+[`hub/infra/aap-mock/main.py`](../hub/infra/aap-mock/main.py); adding a category means
+touching all three.
 
 ### How AAP is called (MCP pattern — same as Workflow 1)
 
@@ -161,9 +147,11 @@ processed **exactly once** even across replicas.
 
 ---
 
-## What was reused vs. what is new
+## Reused patterns (no code shared — independent reimplementation)
 
-### Reused patterns (no code shared — independent reimplementation)
+Where this service mirrors an existing one, it reimplements the pattern rather than
+importing it. That is deliberate: hub services stay independently deployable and do not
+take cross-service Python dependencies on each other.
 
 | Pattern | Source | Notes |
 |---|---|---|
@@ -174,16 +162,6 @@ processed **exactly once** even across replicas.
 | Slack Block Kit notify | `agent-service/nodes/notify.py` | RAN-specific fields (incident_id/zone/application vs. pod/namespace) |
 | Kafka audit publish | `agent-service/nodes/audit.py` | RAN fields, `ran-remediation-results` topic |
 | Two-stage `uv` Containerfile with `hub/` context | `ran-rca-service` | Same build pattern |
-
-### Newly built in this service
-
-| Component | Why new |
-|---|---|
-| `mcp_client.py` | Independent copy of `invoke_tool` — no cross-service imports |
-| `nodes/decide.py` | Root cause keyword → AAP template mapping (ML-schema aware) |
-| `ran-remediation-results` Kafka topic | New audit topic for Workflow 2 |
-| `ranRemediationService` Helm block | New `enabled` toggle in telco chart |
-| 7 AAP seed templates in `aap-mock` | RAN-specific job templates added to existing mock |
 
 ---
 

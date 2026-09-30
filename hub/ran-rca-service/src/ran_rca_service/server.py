@@ -13,6 +13,8 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
+from shared.kafka import TopicConsumer
+
 from ran_rca_service.config import (
     KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
@@ -22,7 +24,6 @@ from ran_rca_service.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_rca_service.graph import build_graph
-from shared.kafka import TopicConsumer
 
 EnrichedBuffer = deque[dict[str, Any]]
 
@@ -53,9 +54,9 @@ def _handle_anomaly_message(
     try:
         loop = _get_consumer_loop()
         result = loop.run_until_complete(graph.ainvoke(anomaly))
-    except Exception:
+    except Exception:  # noqa: BLE001 - Kafka consumption must survive graph failures.
         logger.exception("Graph invocation failed, forwarding anomaly unenriched")
-        result = {**anomaly, "root_cause": "", "recommended_fix": ""}
+        result = {**anomaly, "root_cause_category": "unknown", "root_cause": "", "recommended_fix": ""}
 
     enriched = {
         "incident_id": result.get("incident_id", ""),
@@ -64,6 +65,7 @@ def _handle_anomaly_message(
         "kpi_window": result.get("kpi_window", []),
         "ad_label": result.get("ad_label", "anomalous"),
         "ad_confidence": result.get("ad_confidence", 0.0),
+        "root_cause_category": result.get("root_cause_category", "unknown"),
         "root_cause": result.get("root_cause", ""),
         "recommended_fix": result.get("recommended_fix", ""),
     }

@@ -15,9 +15,15 @@ const QUICK_ASKS = [
 
 function parseStructuredReply(text) {
   if (!text || typeof text !== "string") return null;
+
+  // Extract category tag if present (e.g., "[Interference] Summary:")
+  const categoryMatch = text.match(/^\[([^\]]+)\]\s*/);
+  const categoryTag = categoryMatch ? categoryMatch[1] : null;
+  const cleanText = categoryMatch ? text.slice(categoryMatch[0].length) : text;
+
   const sections = [];
   let current = null;
-  for (const raw of text.split("\n")) {
+  for (const raw of cleanText.split("\n")) {
     const line = raw.trim();
     if (!line) continue;
     const header = REPLY_HEADERS.find((h) => line === `${h}:`);
@@ -29,7 +35,7 @@ function parseStructuredReply(text) {
     if (current) current.lines.push(line);
   }
   if (sections.length < 2) return null;
-  return sections;
+  return { categoryTag, sections };
 }
 
 export function ChatPanel({ baseUrl }) {
@@ -133,7 +139,12 @@ export function ChatPanel({ baseUrl }) {
               <strong>{item.role === "user" ? "You" : "RAN Assistant"}</strong>
               {parsed ? (
                 <div className="exec-reply">
-                  {parsed.map((section) => (
+                  {parsed.categoryTag && (
+                    <div className="category-tag-badge">
+                      <span className="category-tag">[{parsed.categoryTag}]</span>
+                    </div>
+                  )}
+                  {parsed.sections.map((section) => (
                     <section key={section.title} className="exec-section">
                       <h4>{section.title}</h4>
                       <ul>

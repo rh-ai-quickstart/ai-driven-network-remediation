@@ -13,9 +13,12 @@ from ran_rca_service.server import _handle_anomaly_message, app
 
 @pytest.fixture
 def client():
-    with patch("ran_rca_service.server.TopicConsumer"), patch("ran_rca_service.server.KafkaProducer"):
-        with TestClient(app) as test_client:
-            yield test_client
+    with (
+        patch("ran_rca_service.server.TopicConsumer"),
+        patch("ran_rca_service.server.KafkaProducer"),
+        TestClient(app) as test_client,
+    ):
+        yield test_client
 
 
 class TestHealthEndpoint:
@@ -100,6 +103,7 @@ class TestHandleAnomalyMessage:
                 **SAMPLE_ANOMALY,
                 "context_snippets": [],
                 "rag_query_used": "5G anomaly detection",
+                "root_cause_category": "antenna_misalignment",
                 "root_cause": "stub root cause",
                 "recommended_fix": "stub fix",
             }
@@ -112,6 +116,7 @@ class TestHandleAnomalyMessage:
 
         graph.ainvoke.assert_awaited_once_with(SAMPLE_ANOMALY)
         assert len(buffer) == 1
+        assert buffer[0]["root_cause_category"] == "antenna_misalignment"
         assert buffer[0]["root_cause"] == "stub root cause"
 
     def test_publishes_enriched_to_kafka(self):
@@ -123,6 +128,7 @@ class TestHandleAnomalyMessage:
                 **SAMPLE_ANOMALY,
                 "context_snippets": [],
                 "rag_query_used": "",
+                "root_cause_category": "antenna_misalignment",
                 "root_cause": "cause",
                 "recommended_fix": "fix",
             }
@@ -137,6 +143,7 @@ class TestHandleAnomalyMessage:
         topic, payload = producer.send.call_args[0]
         assert topic == "ran-anomalies-enriched"
         enriched = json.loads(payload)
+        assert enriched["root_cause_category"] == "antenna_misalignment"
         assert enriched["root_cause"] == "cause"
         assert enriched["recommended_fix"] == "fix"
 
@@ -185,6 +192,7 @@ class TestHandleAnomalyMessage:
 
         assert len(buffer) == 1
         assert buffer[0]["incident_id"] == "test-001"
+        assert buffer[0]["root_cause_category"] == "unknown"
         assert buffer[0]["root_cause"] == ""
         assert buffer[0]["recommended_fix"] == ""
 

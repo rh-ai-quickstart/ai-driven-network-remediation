@@ -17,6 +17,7 @@ class RCAState(BaseModel):
     ad_confidence: float = 0.0
     context_snippets: list[str] = Field(default_factory=list)
     rag_query_used: str = ""
+    root_cause_category: str = "unknown"
     root_cause: str = ""
     recommended_fix: str = ""
 

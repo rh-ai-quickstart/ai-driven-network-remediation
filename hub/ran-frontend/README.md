@@ -111,8 +111,8 @@ hub/ran-frontend/
         ├── HeaderMetrics.jsx  # Anomalies tracked, cells affected, Kafka status
         ├── DemoTrigger.jsx    # Demo Mode: inject a synthetic reading into the real pipeline
         ├── AnomalyTable.jsx   # Recent anomalies + "Clear" button (DELETE /api/anomalies)
-        └── ChatPanel.jsx      # RAN chat, parses the reply's Summary/Root Cause/
-                                #   Recommended Fix/Model Output sections
+        └── ChatPanel.jsx      # RAN chat; splits the reply's leading [Category]
+                                #   tag and section headings into rendered cards
 ```
 
 ## Build & Deploy

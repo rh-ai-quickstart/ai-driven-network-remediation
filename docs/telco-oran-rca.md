@@ -15,40 +15,25 @@ ran-anomaly-detector (ML-detected anomaly)
 
 - **`rag_retrieval`** — queries the `telco_oran_docs` vector store via LlamaStack for
   relevant documentation snippets, using zone + application + AD confidence as context
-- **`analyze`** — sends anomaly context to Granite LLM, returns structured
-  `root_cause` and `recommended_fix`; falls back to empty fields on LLM failure
+- **`analyze`** — sends anomaly context to Granite LLM, returns a structured
+  `root_cause_category`, `root_cause`, and `recommended_fix`; falls back to
+  `unknown` and empty fields on LLM failure
 
-## Input contract (`ran-anomalies` topic)
+## Contracts
 
-Each message is a typeless ML-detected anomaly (see `contracts/ran-anomalies.schema.json`):
+| Topic | Direction | Schema |
+|---|---|---|
+| `ran-anomalies` | Consumed | [`contracts/ran-anomalies.schema.json`](../contracts/ran-anomalies.schema.json) |
+| `ran-anomalies-enriched` | Produced | [`contracts/ran-anomaly-enriched.schema.json`](../contracts/ran-anomaly-enriched.schema.json) |
 
-```json
-{
-  "incident_id": "a3f7c2d1",
-  "zone": "A",
-  "application": "Twitch",
-  "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
-  "ad_label": "anomalous",
-  "ad_confidence": 0.9995
-}
-```
+The output is the input record plus the three fields this service adds:
+`root_cause_category`, `root_cause`, and `recommended_fix`. The schemas are the
+authoritative field lists and are validated in `tests/test_analyze.py` and
+`tests/test_graph.py`, so they are deliberately not duplicated here.
 
-## Output contract (`ran-anomalies-enriched` topic)
-
-The same record plus LLM enrichment (see `contracts/ran-anomaly-enriched.schema.json`):
-
-```json
-{
-  "incident_id": "a3f7c2d1",
-  "zone": "A",
-  "application": "Twitch",
-  "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
-  "ad_label": "anomalous",
-  "ad_confidence": 0.9995,
-  "root_cause": "Signal degradation consistent with antenna misalignment...",
-  "recommended_fix": "Verify antenna tilt per vendor guide Section 4.3.2..."
-}
-```
+`root_cause_category` is a closed enum — `ran-remediation-service` maps it
+directly to an AAP job template, so adding a value requires a matching template
+on the remediation side.
 
 ## Endpoints
 

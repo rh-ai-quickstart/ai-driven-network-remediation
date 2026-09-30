@@ -132,12 +132,14 @@ def format_chat_reply(
     anomalies: list[EnrichedAnomaly],
 ) -> str:
     """Format LLM output into a structured reply, or generate a deterministic fallback."""
+    category_tag = ""
     if not anomalies:
         anomaly_line = "- No RAN anomalies currently detected."
         root_cause = "n/a"
         recommended_fix = "n/a"
     else:
         latest = anomalies[-1]
+        category_tag = f"[{latest.root_cause_category.replace('_', ' ').title()}] "
         anomaly_line = (
             f"- Latest anomaly: Incident {latest.incident_id} "
             f"(zone={latest.zone}, app={latest.application}) "
@@ -152,7 +154,8 @@ def format_chat_reply(
         model_insight = "Live model unavailable; using deterministic operational fallback."
 
     return (
-        "Summary:\n"
+        category_tag
+        + "Summary:\n"
         f"- Anomalies detected: {len(anomalies)}\n"
         f"{anomaly_line}\n"
         f"- Request: {user_message}\n\n"

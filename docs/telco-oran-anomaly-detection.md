@@ -145,13 +145,13 @@ A presenter clicks "Antenna Failure" in the webapp's Demo Mode panel. Here's wha
 
 5. **`ran-rca-service`** consumes this, queries the `telco_oran_docs` vector store for relevant
    vendor documentation, sends the context to Granite LLM, and publishes an enriched record with
-   `root_cause` and `recommended_fix` to `ran-anomalies-enriched`.
+   `root_cause_category`, `root_cause`, and `recommended_fix` to `ran-anomalies-enriched`.
 
 6. **`ran-chatbot-service`** picks it up in its background consumer, buffers it, and the webapp
    displays it with the LLM's diagnosis.
 
-7. **`ran-remediation-service`** independently consumes the same enriched record, keyword-matches
-   the `root_cause` to select an AAP job template, executes the remediation via LlamaStack MCP +
+7. **`ran-remediation-service`** independently consumes the same enriched record, maps the
+   `root_cause_category` to an AAP job template, executes the remediation via LlamaStack MCP +
    AAP, and publishes an audit record to `ran-remediation-results`.
 
 If the presenter clicks "Normal Traffic" instead, step 3 returns `label=normal` and step 4
@@ -187,10 +187,10 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 |---|---|
 | **`ran-ml-service`** | Self-contained ML predictor (lives in `model-serving/ran-ml-service/`, decoupled from the hub chart). Serves the Mantis AD model via `POST /v1/detect` (128×18 kpi_window → `anomalous`/`normal` + confidence). Deployed as a KServe `InferenceService` or standalone container. `/ready` requires model loaded. |
 | **`ran-anomaly-detector`** | Kafka consumer + orchestrator. Deserializes JSON samples, calls the predictor, publishes only anomalous windows. `/ready` requires both Kafka and predictor. |
-| **`ran-rca-service`** | LangGraph pipeline (rag_retrieval → analyze). Adds `root_cause` + `recommended_fix` via RAG + Granite LLM. |
+| **`ran-rca-service`** | LangGraph pipeline (rag_retrieval → analyze). Adds `root_cause_category` + `root_cause` + `recommended_fix` via RAG + Granite LLM. |
 | **`ran-chatbot-service`** | Thin BFF. Buffers enriched anomalies, exposes `/api/chat` + `/api/anomalies` + `/api/demo/trigger`. |
 | **`ran-frontend`** | React webapp. Scenario buttons, anomaly table, chat panel. |
-| **`ran-remediation-service`** | LangGraph pipeline (decide → remediate → notify → audit). Keyword-matches `root_cause` to an AAP template, executes via LlamaStack MCP + AAP, sends Slack notification, publishes to `ran-remediation-results`. |
+| **`ran-remediation-service`** | LangGraph pipeline (decide → remediate → notify → audit). Maps `root_cause_category` to an AAP template, executes via LlamaStack MCP + AAP, sends Slack notification, publishes to `ran-remediation-results`. |
 | **`telco-oran` (fixture catalog)** | Checked-in TelecomTS samples for reproducible demos. No live HuggingFace fetch at click time. |
 | **Kafka topics** | `ran-combined-metrics` (input), `ran-anomalies` (detector → RCA), `ran-anomalies-enriched` (RCA → chatbot + remediation), `ran-remediation-results` (remediation audit) |
 

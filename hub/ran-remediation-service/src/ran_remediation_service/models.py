@@ -14,6 +14,7 @@ class RemediationState(BaseModel):
     application: str = ""
     ad_label: str = ""
     ad_confidence: float = 0.0
+    root_cause_category: str = "unknown"
     root_cause: str = ""
     recommended_fix: str = ""
 
