@@ -52,4 +52,6 @@ jobs:
 
       - name: Run notebook parity and unit tests
         working-directory: model-serving/ran-ml-service
-        run: uv run pytest
+        env:
+          HF_HUB_OFFLINE: "0"
+        run: uv run pytest -o "addopts="
