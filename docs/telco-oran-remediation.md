@@ -2,7 +2,7 @@
 
 Automated remediation for ML-detected RAN anomalies. Consumes enriched anomaly records
 produced by `ran-rca-service`, selects an AAP job template by keyword-matching the LLM's
-`root_cause`, executes the remediation via LlamaStack MCP + AAP, sends a Slack notification,
+`root_cause`, executes the remediation via AAP, sends a Slack notification,
 and publishes an audit record to `ran-remediation-results`.
 
 ---
@@ -52,9 +52,8 @@ START → decide → remediate → notify → audit → END
 - **`decide`** — keyword-matches `root_cause` (and `recommended_fix`) to select an AAP job
   template name and builds the `extra_vars` payload (incident_id, zone, application,
   root_cause, recommended_fix, etc.)
-- **`remediate`** — calls AAP via LlamaStack MCP tools (`launch_job`, `get_job_status`,
-  `get_job_output`); polls until the job reaches a terminal state; same pattern as
-  Workflow 1's `agent-service/nodes/remediate.py`
+- **`remediate`** — calls AAP directly (`launch_job`, `get_job_status`,
+  `get_job_output`); polls until the job reaches a terminal state
 - **`notify`** — sends a Slack Block Kit message (color-coded green/red); same pattern
   as Workflow 1's `agent-service/nodes/notify.py`; gated by `SLACK_BOT_TOKEN`
 - **`audit`** — publishes a structured record to `ran-remediation-results` Kafka topic;
@@ -78,9 +77,9 @@ most appropriate AAP template:
 
 Keywords are checked in priority order; the first match wins.
 
-### How AAP is called (MCP pattern — same as Workflow 1)
+### How AAP is called
 
-`ran-remediation-service` calls AAP directly. It calls the `mcp-aap` server:
+`ran-remediation-service` calls AAP directly via `aap_client.py`.
 
 In local development the `aap-mock` service handles these calls, returning synthetic
 `"status": "successful"` responses without running any real playbook.
@@ -134,8 +133,8 @@ processed **exactly once** even across replicas.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `LLAMASTACK_HOST` | `llamastack-service` | LlamaStack MCP gateway |
-| `LLAMASTACK_PORT` | `8321` | |
+| `AAP_URL` | `http://aap-mock:8080` | AAP controller base URL (mock by default) |
+| `AAP_TOKEN` | *(empty)* | AAP auth token; unset against the mock |
 | `KAFKA_BOOTSTRAP` | `kafka:9092` | |
 | `KAFKA_ENRICHED_TOPIC` | `ran-anomalies-enriched` | Input topic |
 | `KAFKA_REMEDIATION_TOPIC` | `ran-remediation-results` | Output/audit topic |
@@ -156,7 +155,6 @@ processed **exactly once** even across replicas.
 
 | Pattern | Source | Notes |
 |---|---|---|
-| MCP tool invocation via LlamaStack | `agent-service/utils.py` | Same HTTP call, own `mcp_client.py` |
 | LangGraph `StateGraph` + Pydantic state | `agent-service`, `ran-rca-service` | Same library, typed `RemediationState` |
 | `TopicConsumer` background thread | `shared.kafka` | Identical usage to `ran-rca-service` |
 | FastAPI `/health` + `/ready` probes | All hub services | Same convention |
@@ -168,7 +166,7 @@ processed **exactly once** even across replicas.
 
 | Component | Why new |
 |---|---|
-| `mcp_client.py` | Independent copy of `invoke_tool` — no cross-service imports |
+| `aap_client.py` | Direct AAP HTTP client — no MCP indirection |
 | `nodes/decide.py` | Root cause keyword → AAP template mapping (ML-schema aware) |
 | `ran-remediation-results` Kafka topic | New audit topic for Workflow 2 |
 | `ranRemediationService` Helm block | New `enabled` toggle in telco chart |
@@ -209,7 +207,7 @@ curl http://localhost:8004/remediation-results
 |---|---|
 | Service source | [`hub/ran-remediation-service/`](../hub/ran-remediation-service/) |
 | LangGraph graph | [`hub/ran-remediation-service/src/ran_remediation_service/graph.py`](../hub/ran-remediation-service/src/ran_remediation_service/graph.py) |
-| MCP client | [`hub/ran-remediation-service/src/ran_remediation_service/mcp_client.py`](../hub/ran-remediation-service/src/ran_remediation_service/mcp_client.py) |
+| AAP client | [`hub/ran-remediation-service/src/ran_remediation_service/aap_client.py`](../hub/ran-remediation-service/src/ran_remediation_service/aap_client.py) |
 | Decide node (root cause mapping) | [`hub/ran-remediation-service/src/ran_remediation_service/nodes/decide.py`](../hub/ran-remediation-service/src/ran_remediation_service/nodes/decide.py) |
 | AAP mock (seed templates) | [`hub/infra/aap-mock/main.py`](../hub/infra/aap-mock/main.py) |
 | Kafka topic definition | [`hub/helm/charts/kafka/values.yaml`](../hub/helm/charts/kafka/values.yaml) |
