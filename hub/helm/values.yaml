@@ -33,6 +33,16 @@ global:
     # than whichever we hardcoded. Override with --set global.frontendAuth.image=...
     # if you want to pin to a tag matching a specific cluster.
     image: "quay.io/openshift/origin-oauth-proxy:latest"
+  # aap-mock is shared infrastructure, not network-specific: the network pipeline
+  # reaches it through mcp-aap and the telco pipeline through
+  # ran-remediation-service, so a telco-only deployment must still get it. It
+  # lives at the umbrella (templates/aap-mock.yaml) and is global so the network
+  # subchart can keep reading it (charts/network/templates/mcp-secrets.yaml).
+  aapMock:
+    enabled: true
+    image:
+      repository: quay.io/rh-ai-quickstart/noc-aap-mock
+      tag: "0.1.0"
 
 # ══════════════════════════════════════════════════════════════════════
 # Remote subcharts

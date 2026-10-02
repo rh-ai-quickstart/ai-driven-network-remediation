@@ -1,0 +1,31 @@
+{
+  "notebook": "model-serving/ran-ml-service/notebooks/telecomts_model_evaluation.ipynb",
+  "notebook_sha256": "7710e3fbd47e8a7237ac1cef1629b8c844d08b855012d837daef64de320c3cc4",
+  "dataset": {
+    "repository": "AliMaatouk/TelecomTS",
+    "revision": "1b3a88a440f4922edfcd1e230e42c003c0e13bdf",
+    "fixture_generator_seed": 42
+  },
+  "checkpoint": {
+    "repository": "TomerG2/mantis-ad-telecomts",
+    "revision": "9f1ff8a3f59f3f2d74ce001d7f0dbb6695676ec4",
+    "filename": "mantis_pretrained_ad.pt",
+    "sha256": "9b00f1a5705c196d218110bf7c39027bedf811675aada74e8742f8d0c953a078"
+  },
+  "cases": [
+    {
+      "fixture": "antenna_failure.json",
+      "label": "anomalous",
+      "class_index": 1,
+      "confidence": 0.9995,
+      "logits": [-4.032979965209961, 3.6217939853668213]
+    },
+    {
+      "fixture": "normal_traffic.json",
+      "label": "normal",
+      "class_index": 0,
+      "confidence": 0.9986,
+      "logits": [2.492539405822754, -4.045213222503662]
+    }
+  ]
+}

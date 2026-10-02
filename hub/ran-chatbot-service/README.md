@@ -13,7 +13,7 @@ through chat; `DELETE /api/anomalies` to clear that list for a clean demo/UI sta
 |---|---|---|
 | `/health` | GET | Liveness probe |
 | `/ready` | GET | Readiness (Kafka + LLM dependency status, always returns 200) |
-| `/api/chat` | POST | Conversational reply grounded in recently detected anomalies |
+| `/api/chat` | POST | Conversational reply grounded in recently detected anomalies and their remediation outcomes |
 | `/api/anomalies` | GET | Recent enriched anomalies (in-memory buffer), newest first |
 | `/api/anomalies` | DELETE | Clear the in-memory anomaly buffer |
 | `/api/demo/trigger` | POST | Publish a synthetic RAN KPI reading to `ran-combined-metrics` for demos |
@@ -28,11 +28,15 @@ plus always-on nginx rate limiting that's stricter for `POST /api/demo/trigger` 
 another way (e.g. a direct Route, or from outside the cluster), it would need that same protection
 applied at that new entry point too, since none of it lives in this service's own code.
 
-This service is a **thin channel layer**: it does not detect anomalies or perform root cause
-analysis itself. That domain logic lives in [`ran-anomaly-detector`](../ran-anomaly-detector)
-(ML-based detection via [`ran-ml-service`](../ran-ml-service)) and the upstream `ran-rca-service`
-(LLM root cause analysis + RAG recommended fix retrieval). This service only builds a conversational
-prompt from already-enriched anomaly data and formats the LLM's reply.
+This service is a **thin channel layer**: it does not detect anomalies, perform root cause
+analysis, or run remediations itself. That domain logic lives in
+[`ran-anomaly-detector`](../ran-anomaly-detector) (ML-based detection via
+[`ran-ml-service`](../ran-ml-service)), the upstream `ran-rca-service` (LLM root cause analysis +
+RAG recommended fix retrieval), and `ran-remediation-service` (AAP job execution). This service
+only builds a conversational prompt from already-enriched anomaly data plus buffered remediation
+results (`recent_remediations`, filled by `RemediationConsumer` from `ran-remediation-results` —
+see below) and formats the LLM's reply, so operators can ask things like "was the fix for
+incident X successful?" without checking `/api/anomalies` separately.
 
 This is an independent workflow/deployment from `hub/chatbot-service` (the network remediation
 NOC chatbot): different domain, different Kafka topics, different persona/prompt, and it can be

@@ -15,7 +15,7 @@ from ran_chatbot_service.models import ModelSource
 
 class TestBuildChatContext:
     def test_includes_anomaly_details(self, sample_anomalies):
-        prompt = build_chat_context("What's happening?", sample_anomalies, [])
+        prompt = build_chat_context("What's happening?", sample_anomalies, [], [])
         assert "test-001" in prompt
         assert "zone=A" in prompt
         assert "Twitch" in prompt
@@ -25,28 +25,68 @@ class TestBuildChatContext:
         assert "What's happening?" in prompt
 
     def test_handles_no_anomalies(self):
-        prompt = build_chat_context("Any issues?", [], [])
+        prompt = build_chat_context("Any issues?", [], [], [])
         assert "No recent RAN anomalies detected." in prompt
 
     def test_includes_recent_conversation_history(self):
         history = [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}]
-        prompt = build_chat_context("next question", [], history)
+        prompt = build_chat_context("next question", [], [], history)
         assert "user: hello" in prompt
         assert "assistant: hi" in prompt
 
     def test_blank_root_cause_and_fix_render_as_na(self, sample_anomaly):
         anomaly = sample_anomaly.model_copy(update={"root_cause": "", "recommended_fix": ""})
-        prompt = build_chat_context("What's wrong?", [anomaly], [])
+        prompt = build_chat_context("What's wrong?", [anomaly], [], [])
         assert "Root cause: n/a" in prompt
         assert "Recommended fix: n/a" in prompt
 
     def test_uses_the_five_most_recent_anomalies(self, sample_anomaly):
         anomalies = [sample_anomaly.model_copy(update={"incident_id": f"inc-{i}"}) for i in range(7)]
-        prompt = build_chat_context("Status?", anomalies, [])
+        prompt = build_chat_context("Status?", anomalies, [], [])
         for i in range(2, 7):
             assert f"inc-{i}" in prompt
         for i in range(0, 2):
             assert f"Incident inc-{i} " not in prompt
+
+    def test_includes_remediation_details(self, sample_remediations):
+        prompt = build_chat_context("Was the fix successful?", [], sample_remediations, [])
+        assert "test-001" in prompt
+        assert "successful" in prompt
+        assert "ran-antenna-tilt-adjust" in prompt
+        assert "PLAY RECAP: ok=3 changed=2" in prompt
+
+    def test_handles_no_remediations(self):
+        prompt = build_chat_context("Any fixes applied?", [], [], [])
+        assert "No recent remediation results." in prompt
+
+    def test_remediation_failed_status_is_labeled_failed(self, sample_remediation):
+        failed = {**sample_remediation, "success": False, "job_status": "failed"}
+        prompt = build_chat_context("Did it fail?", [], [failed], [])
+        assert "test-001: failed" in prompt
+        assert "job_status=failed" in prompt
+
+    def test_uses_the_five_most_recent_remediations(self, sample_remediation):
+        remediations = [{**sample_remediation, "incident_id": f"inc-{i}"} for i in range(7)]
+        prompt = build_chat_context("Status?", [], remediations, [])
+        for i in range(2, 7):
+            assert f"inc-{i}" in prompt
+        for i in range(0, 2):
+            assert f"Incident inc-{i}:" not in prompt
+
+    def test_remediation_missing_success_key_is_labeled_pending_not_failed(self, sample_remediation):
+        """RemediationConsumer doesn't schema-validate, so a malformed/older-schema
+        record could be missing `success` entirely — that must read as "pending"
+        (unknown outcome), not be silently reported as a definite "failed"."""
+        unknown = {k: v for k, v in sample_remediation.items() if k != "success"}
+        prompt = build_chat_context("What's the status?", [], [unknown], [])
+        assert "test-001: pending" in prompt
+        assert "test-001: failed" not in prompt
+
+    def test_remediation_missing_timed_out_key_renders_as_false_not_none(self, sample_remediation):
+        no_timed_out = {k: v for k, v in sample_remediation.items() if k != "timed_out"}
+        prompt = build_chat_context("Did it time out?", [], [no_timed_out], [])
+        assert "timed_out=False" in prompt
+        assert "timed_out=None" not in prompt
 
 
 class TestCallModel:

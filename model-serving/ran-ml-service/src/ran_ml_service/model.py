@@ -11,6 +11,7 @@ and fine-tuned task weights from a local .pt checkpoint.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import torch
@@ -32,6 +33,7 @@ KPI_CHANNELS = [
 ]
 
 PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2}
+PROTOCOL_CHANNELS = frozenset({"UL_Protocol", "DL_Protocol"})
 
 AD_LABELS = ["normal", "anomalous"]
 RCA_LABELS = [
@@ -46,6 +48,34 @@ RCA_LABELS = [
     "High Network Congestion (Gradual Buildup)",
     "High Network Congestion (Sudden Spike)",
 ]
+
+
+class InvalidKpiWindowError(ValueError):
+    """Raised when a kpi_window is missing required fields or contains null numeric KPIs."""
+
+
+def _encode_channel(channel: str, value: Any, timestep: int) -> float:
+    """Encode one KPI value. Protocol None/"None" is valid; numeric null is not."""
+    if channel in PROTOCOL_CHANNELS:
+        if isinstance(value, str) or value is None:
+            if value not in PROTOCOL_MAP:
+                raise InvalidKpiWindowError(
+                    f"invalid {channel} {value!r} at timestep {timestep}"
+                )
+            return float(PROTOCOL_MAP[value])
+    elif value is None:
+        raise InvalidKpiWindowError(f"null KPI {channel!r} at timestep {timestep}")
+
+    try:
+        encoded = float(value)
+    except (TypeError, ValueError) as exc:
+        raise InvalidKpiWindowError(
+            f"non-numeric KPI {channel!r} at timestep {timestep}: {value!r}"
+        ) from exc
+
+    if encoded != encoded:  # NaN
+        raise InvalidKpiWindowError(f"NaN KPI {channel!r} at timestep {timestep}")
+    return encoded
 
 
 class PretrainedMantisEncoder(nn.Module):
@@ -141,16 +171,16 @@ class MantisPredictor:
         """Convert JSON kpi_window (128 timesteps x 18 channels) to model input tensor.
 
         AD preprocessing: Protocol encoding only, NO z-score normalization.
+        Missing keys and null numeric KPIs are rejected; 0 is a real measurement.
         Returns tensor of shape [1, 128, 18].
         """
         rows = []
-        for timestep in kpi_window:
+        for t, timestep in enumerate(kpi_window):
             row = []
             for ch in KPI_CHANNELS:
-                val = timestep.get(ch, 0)
-                if ch in ("UL_Protocol", "DL_Protocol"):
-                    val = PROTOCOL_MAP.get(val, val) if isinstance(val, str) else float(val)
-                row.append(float(val))
+                if ch not in timestep:
+                    raise InvalidKpiWindowError(f"missing KPI {ch!r} at timestep {t}")
+                row.append(_encode_channel(ch, timestep[ch], t))
             rows.append(row)
 
         x = np.array(rows, dtype=np.float32)  # [128, 18]

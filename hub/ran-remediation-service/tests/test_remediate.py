@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from ran_remediation_service.aap_client import AAPError
 from ran_remediation_service.models import RemediationState
 from ran_remediation_service.nodes.remediate import remediate_node
 
@@ -22,14 +23,27 @@ def _state(template="ran-antenna-tilt-adjust"):
     )
 
 
+def _patch_aap(job_id, status, output=""):
+    """Patch the three aap_client calls the node makes, in call order."""
+    return (
+        patch("ran_remediation_service.nodes.remediate.launch_job", new_callable=AsyncMock, return_value=job_id),
+        patch("ran_remediation_service.nodes.remediate.get_job_status", new_callable=AsyncMock, return_value=status),
+        patch("ran_remediation_service.nodes.remediate.get_job_output", new_callable=AsyncMock, return_value=output),
+    )
+
+
+def _patch_launch_error(exc):
+    return patch("ran_remediation_service.nodes.remediate.launch_job", new_callable=AsyncMock, side_effect=exc)
+
+
 @pytest.mark.asyncio
 async def test_successful_remediation():
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool:
-        mock_tool.side_effect = [
-            {"success": True, "job_id": 99},
-            {"status": "successful", "failed": False, "elapsed": 1.5, "finished": "2026-09-21T10:00:00Z"},
-            {"output": "PLAY RECAP ok=2 changed=1"},
-        ]
+    launch, status, output = _patch_aap(
+        99,
+        {"status": "successful", "failed": False, "elapsed": 1.5, "finished": "2026-09-21T10:00:00Z"},
+        "PLAY RECAP ok=2 changed=1",
+    )
+    with launch, status, output:
         result = await remediate_node(_state())
 
     assert result["success"] is True
@@ -40,22 +54,26 @@ async def test_successful_remediation():
 
 @pytest.mark.asyncio
 async def test_launch_failure():
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool:
-        mock_tool.return_value = {"success": False, "error": "Template not found"}
+    with _patch_launch_error(AAPError("Job template 'ran-antenna-tilt-adjust' not found")):
         result = await remediate_node(_state())
 
     assert result["success"] is False
-    assert "Template not found" in result["output_summary"]
+    assert "not found" in result["output_summary"]
 
 
 @pytest.mark.asyncio
 async def test_job_failure():
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool:
-        mock_tool.side_effect = [
-            {"success": True, "job_id": 5},
-            {"status": "failed", "failed": True, "elapsed": 2.0, "finished": "2026-09-21T10:00:00Z", "result_traceback": "error occurred"},
-            {"output": ""},
-        ]
+    launch, status, output = _patch_aap(
+        5,
+        {
+            "status": "failed",
+            "failed": True,
+            "elapsed": 2.0,
+            "finished": "2026-09-21T10:00:00Z",
+            "result_traceback": "error occurred",
+        },
+    )
+    with launch, status, output:
         result = await remediate_node(_state())
 
     assert result["success"] is False
@@ -64,13 +82,10 @@ async def test_job_failure():
 
 @pytest.mark.asyncio
 async def test_job_timeout():
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", new_callable=AsyncMock) as mock_tool, \
+    launch, status, output = _patch_aap(7, {"status": "running"})
+    with launch, status, output, \
          patch("ran_remediation_service.nodes.remediate.JOB_TIMEOUT_SECONDS", 0.01), \
          patch("ran_remediation_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.001):
-        mock_tool.side_effect = [
-            {"success": True, "job_id": 7},
-            {"status": "running"},
-        ]
         result = await remediate_node(_state())
 
     assert result["success"] is False
@@ -79,7 +94,7 @@ async def test_job_timeout():
 
 @pytest.mark.asyncio
 async def test_launch_exception_returns_failure():
-    with patch("ran_remediation_service.nodes.remediate.invoke_tool", side_effect=RuntimeError("network error")):
+    with _patch_launch_error(RuntimeError("network error")):
         result = await remediate_node(_state())
 
     assert result["success"] is False

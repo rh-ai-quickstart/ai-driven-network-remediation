@@ -128,8 +128,10 @@ ranRemediationService:
   enabled: true
   replicaCount: 1
   env:
-    llamastackHost: "llamastack-service"
-    llamastackPort: "8321"
+    # Default points to the mock because the ran-* job templates only exist as
+    # seed rows there; a real AAP controller needs them provisioned first.
+    # Override with --set-string when deploying against a real controller.
+    aapUrl: "http://aap-mock:8080"
     kafkaBootstrap: "kafka:9092"
     kafkaEnrichedTopic: "ran-anomalies-enriched"
     kafkaRemediationTopic: "ran-remediation-results"

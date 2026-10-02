@@ -68,3 +68,8 @@ def sample_anomalies(sample_anomaly) -> list[EnrichedAnomaly]:
 @pytest.fixture()
 def sample_remediation() -> dict:
     return dict(SAMPLE_REMEDIATION_DICT)
+
+
+@pytest.fixture()
+def sample_remediations(sample_remediation) -> list[dict]:
+    return [sample_remediation]

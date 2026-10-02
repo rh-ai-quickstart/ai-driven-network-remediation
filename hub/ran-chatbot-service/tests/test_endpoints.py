@@ -170,9 +170,10 @@ def test_demo_trigger_kafka_failure_reported_as_502(mock_build, mock_publish, cl
 
 
 @patch("ran_chatbot_service.call_model", new_callable=AsyncMock)
-def test_chat(mock_model, client, sample_anomalies):
+def test_chat(mock_model, client, sample_anomalies, sample_remediations):
     mock_model.return_value = ("Incident test-001 shows signal degradation in zone A.", "live")
     client.app.state.recent_anomalies.extend(sample_anomalies)
+    client.app.state.recent_remediations.extend(sample_remediations)
     client.app.state.kafka_consumer.is_connected = True
 
     resp = client.post("/api/chat", json={"message": "What's wrong?"})
@@ -182,6 +183,7 @@ def test_chat(mock_model, client, sample_anomalies):
     assert "reply" in data
     assert data["model"]["source"] == "live"
     assert data["context"]["anomaly_count"] > 0
+    assert data["context"]["remediation_count"] > 0
 
 
 @patch("ran_chatbot_service.call_model", new_callable=AsyncMock)

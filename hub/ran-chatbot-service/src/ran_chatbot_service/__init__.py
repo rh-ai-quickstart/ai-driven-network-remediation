@@ -260,12 +260,14 @@ async def chat(req: ChatRequest, request: Request) -> dict:
         del chat_sessions[oldest]
     history = chat_sessions.setdefault(session_id, [])
 
-    # The background AnomaliesConsumer keeps this buffer filled, so reading it here
-    # is an instant in-memory operation — no Kafka I/O on the request path at all.
+    # The background AnomaliesConsumer/RemediationConsumer keep these buffers filled,
+    # so reading them here is an instant in-memory operation — no Kafka I/O on the
+    # request path at all.
     anomalies = list(request.app.state.recent_anomalies)
+    remediations = list(request.app.state.recent_remediations)
     kafka_ok = request.app.state.kafka_consumer.is_connected
 
-    prompt = build_chat_context(msg, anomalies, history)
+    prompt = build_chat_context(msg, anomalies, remediations, history)
     raw_reply, model_source = await call_model(prompt, request.app.state.http_client)
     reply = format_chat_reply(msg, raw_reply, anomalies)
 
@@ -291,6 +293,7 @@ async def chat(req: ChatRequest, request: Request) -> dict:
         },
         "context": {
             "anomaly_count": len(anomalies),
+            "remediation_count": len(remediations),
         },
     }
 

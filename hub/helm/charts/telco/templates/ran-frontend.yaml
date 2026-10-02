@@ -31,6 +31,10 @@ spec:
               protocol: TCP
           {{- if .Values.global.frontendAuth.enabled }}
           env:
+            # Bind nginx to loopback only, so it's reachable exclusively from
+            # the oauth-proxy sidecar sharing this pod's network namespace --
+            # otherwise any in-cluster client could hit this pod's IP on 8080
+            # directly and skip OAuth entirely. See nginx.conf.template.
             - name: NGINX_LISTEN_ADDRESS
               value: "127.0.0.1"
           {{- end }}

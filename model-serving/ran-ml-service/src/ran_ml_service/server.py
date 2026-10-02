@@ -11,7 +11,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from .config import PORT, TASK
-from .model import predictor
+from .model import InvalidKpiWindowError, predictor
 
 
 @asynccontextmanager
@@ -69,6 +69,9 @@ def detect(req: DetectRequest) -> DetectResponse:
     try:
         result = predictor.predict(req.kpi_window)
         return DetectResponse(**result)
+    except InvalidKpiWindowError as exc:
+        logger.warning("Rejecting malformed kpi_window: {}", exc)
+        return JSONResponse({"error": str(exc)}, status_code=422)
     except Exception:
         logger.exception("Inference failed")
         return JSONResponse(
