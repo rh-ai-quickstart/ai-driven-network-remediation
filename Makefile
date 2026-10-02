@@ -698,6 +698,7 @@ build-push-ran-ml-service: build-ran-ml-service-image
 
 ML_AUTHCONFIG_TEMPLATE := model-serving/ran-ml-service/deploy/authconfig.yaml
 ML_AUTHCONFIG_NS       := model-serving
+RAN_ML_SVC_NAME        = $(if $(ADNR_DETECT_INFERENCE_URL),$(shell printf '%s' '$(ADNR_DETECT_INFERENCE_URL)' | sed -E 's|https?://([^.]+)\..*|\1|'),ran-ml-service-predictor)
 
 .PHONY: deploy-ml-authconfig
 deploy-ml-authconfig:
@@ -959,7 +960,7 @@ telco-integration-tests:
 	PF_LLAMASTACK_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/ran-ml-service-predictor 8009:80 & \
+	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	PF_RAN_ML_PID=$$!; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
@@ -990,7 +991,7 @@ integration-tests:
 	PF_AGENT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/ran-ml-service-predictor 8009:80 & \
+	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	PF_RAN_ML_PID=$$!; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
