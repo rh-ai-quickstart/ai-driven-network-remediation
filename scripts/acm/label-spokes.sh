@@ -8,7 +8,7 @@
 #
 # The exclusive ManagedClusterSet is created by make acm-apply-placement. Role
 # labels can be applied earlier; clusterset membership is applied when
-# ManagedClusterSet/adnr-edge is present (acm-deploy calls this target again
+# ManagedClusterSet/adnr-edge is present (make deploy calls this target again
 # after placement).
 #
 # Env:

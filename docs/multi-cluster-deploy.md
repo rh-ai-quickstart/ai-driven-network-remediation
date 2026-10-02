@@ -1,22 +1,26 @@
 # Multi-cluster deployment guide
 
-Deploy AI-Driven Network Remediation (ADNR) on a single OpenShift cluster, or as an ACM hub with edge spokes. The entry point is `make acm-deploy`. Topology is controlled by `CLUSTER_COUNT`.
+Deploy AI-Driven Network Remediation (ADNR) with one standard command: `make deploy`. Topology is controlled by `CLUSTER_COUNT`. ACM is used automatically when you deploy multi-cluster (`CLUSTER_COUNT>=2`). Single-cluster (`CLUSTER_COUNT=1`) uses Argo CD / GitOps for the edge chart and does not require ACM.
 
-For single-cluster-only installs without ACM orchestration, see [manual-deploy.md](manual-deploy.md). For AAP playbook routing through the ACM cluster proxy, see [RHACM multicluster (ACM hub proxy)](../README.md#rhacm-multicluster-acm-hub-proxy) in the README. That flag is separate from topology (details below).
+For hub-only Helm installs without edge orchestration, see [manual-deploy.md](manual-deploy.md). For AAP playbook routing through the ACM cluster proxy, see [RHACM multicluster (ACM hub proxy)](../README.md#rhacm-multicluster-acm-hub-proxy) in the README. That flag is separate from topology (details below).
 
 ## Overview
 
 | Role | When | What runs |
 |------|------|-----------|
-| **All-in-one** | `CLUSTER_COUNT=1` | Full hub chart on one cluster, plus a simulated edge namespace (`dark-noc-edge`) |
-| **Hub** | `CLUSTER_COUNT>=2` | Agent, Kafka, LLM stack, MCP, chatbot, frontend on the hub only |
+| **All-in-one** | `CLUSTER_COUNT=1` | Full hub chart on one cluster, plus `edge/helm` in `dark-noc-edge` (Argo CD `in-cluster`, or Helm when GitOps is missing). No ACM. |
+| **Hub** | `CLUSTER_COUNT>=2` | Agent, Kafka, LLM stack, MCP, chatbot, frontend on the hub only (ACM manages spokes) |
 | **Spoke** | `CLUSTER_COUNT>=2` | Edge chart via ArgoCD: nginx demo workload, ClusterLogForwarder → hub Kafka, Kafka client certs |
 
 ```
-CLUSTER_COUNT=1  →  single-cluster (0 spokes, 1 physical cluster)
-CLUSTER_COUNT=2  →  hub + 2 spokes (edge-site-01, edge-site-02; 3 physical clusters)
-CLUSTER_COUNT=N  →  hub + N spokes (N >= 2; N + 1 physical clusters)
+make deploy / make teardown   ← always the same entry points
+
+CLUSTER_COUNT=1  →  single-cluster (GitOps edge; no ACM)
+CLUSTER_COUNT=2  →  hub + 2 spokes (ACM + GitOps; edge-site-01, edge-site-02)
+CLUSTER_COUNT=N  →  hub + N spokes (N >= 2; ACM + GitOps)
 ```
+
+`make acm-deploy` / `make acm-teardown` still work as legacy aliases of `deploy` / `teardown`. Prefer the new names.
 
 Hub-spoke log path: spoke ClusterLogForwarder ships Warning/Error app logs to the hub Kafka external route (mTLS). Hub LokiStack stays hub-local.
 
@@ -47,7 +51,7 @@ Demo trigger: always use `site=edge-01` (not `edge-site-01`).
 
 ## Prerequisites
 
-Complete this section before `make acm-deploy`. The hub chart also expects the broader operator set listed in the [README minimum software requirements](../README.md#minimum-software-requirements) (RHOAI, Llama Stack, optional AAP/Logging on the hub). Defaults use the AAP mock (`ENABLE_AAP_MOCK=true`), so a real AAP controller is optional for topology bring-up.
+Complete this section before `make deploy`. The hub chart also expects the broader operator set listed in the [README minimum software requirements](../README.md#minimum-software-requirements) (RHOAI, Llama Stack, optional AAP/Logging on the hub). Defaults use the AAP mock (`ENABLE_AAP_MOCK=true`), so a real AAP controller is optional for topology bring-up.
 
 ### Tools and access
 
@@ -66,13 +70,21 @@ See the README [minimum hardware requirements](../README.md#minimum-hardware-req
 
 ### Hub operators (install before deploy)
 
-Install on the **hub** in this order. Wait for each layer before starting the next.
+What you need depends on `CLUSTER_COUNT`:
 
-1. **ACM:** MultiClusterHub until Ready (`local-cluster` Available)
+| Operator | `CLUSTER_COUNT=1` | `CLUSTER_COUNT>=2` |
+|----------|-------------------|--------------------|
+| **RHOAI 3.4** (Llama Stack) | Required | Required |
+| **OpenShift GitOps** | Recommended (Helm edge fallback if missing) | Required |
+| **ACM** (MultiClusterHub) | Not used | Required |
+
+For hub-spoke, install on the **hub** in this order. Wait for each layer before starting the next.
+
+1. **ACM:** MultiClusterHub until Ready (`local-cluster` Available) — multi-cluster only
 2. **OpenShift GitOps:** Application + ApplicationSet CRDs present
 3. **RHOAI 3.4:** DataScienceCluster with `llamastackoperator=Managed`
 
-#### 1. ACM (MultiClusterHub)
+#### 1. ACM (MultiClusterHub) — required only when `CLUSTER_COUNT>=2`
 
 Install the Advanced Cluster Management operator and create a `MultiClusterHub` instance. Wait until the hub reports Ready and the local hub cluster is Available:
 
@@ -104,7 +116,7 @@ oc label namespace openshift-gitops \
   apps.open-cluster-management.io/gitops-argo-namespace=true --overwrite
 ```
 
-`make acm-deploy` applies this automatically during `acm-apply-placement` (before `GitOpsCluster` is created). Without it, `GitOpsCluster/adnr-edge` stays `ArgoServerVerified=False` and edge Applications remain `Unknown`.
+`make deploy` (hub-spoke path) applies this automatically during `acm-apply-placement` (before `GitOpsCluster` is created). Without it, `GitOpsCluster/adnr-edge` stays `ArgoServerVerified=False` and edge Applications remain `Unknown`.
 
 #### 3. RHOAI 3.4 (Llama Stack)
 
@@ -158,15 +170,17 @@ make acm-prereq-check CLUSTER_COUNT=2
 |----------|---------|---------|
 | `CLUSTER_COUNT` | `1` | `1` = single-cluster; `>=2` = hub + that many spokes |
 | `NAMESPACE` | `hub` | Hub install namespace |
-| `EDGE_NAMESPACE` | `dark-noc-edge` | Edge namespace (sim or each spoke) |
+| `EDGE_NAMESPACE` | `dark-noc-edge` | Edge namespace (local SC edge chart or each spoke) |
 | `SPOKE_NAME_PREFIX` | `edge-site` | ManagedCluster names: `edge-site-01`, … |
 | `ACM_HUB_CLUSTER` | `local-cluster` | Hub ManagedCluster name (wired into GitOpsCluster) |
 | `CLUSTER_CREATE` | `false` | Provision spokes with Hive when `true` |
-| `GITOPS_REPO_URL` | upstream repo | ArgoCD source for `edge/helm` |
+| `GITOPS_REPO_URL` | upstream repo | ArgoCD source for `edge/helm` (required for SC when `EDGE_GITOPS=auto` or `argocd`) |
 | `GITOPS_REVISION` | `main` | Branch/tag/commit for ArgoCD (use your feature branch before merge) |
-| `KAFKA_EXTERNAL_HOST` | auto from route | Hub Kafka route host for spoke CLF; `acm-deploy` detects `kafka-external` if unset |
-| `REGISTRY` / `VERSION` | Quay published images | Override for custom builds |
+| `EDGE_GITOPS` | `auto` | SC only: `auto` (Argo if ApplicationSet CRD present, else Helm), `argocd`, or `helm`. Hub-spoke always uses Argo. |
+| `KAFKA_EXTERNAL_HOST` | auto from route | Hub Kafka route host for CLF; required when CLF is on. `make deploy` detects `kafka-external` if unset |
+| `REGISTRY` / `VERSION` | Quay published images | Override for custom builds (hub images and edge healer) |
 | `EDGE_SELF_HEAL` | `true` | ArgoCD selfHeal for edge apps; set `false` so AI remediation patches persist |
+| `CLUSTER_LOG_FORWARDER_ENABLED` | `false` (SC) / `true` (MC) | Edge chart CLF. SC default stays off (no Logging prereq). |
 | `ENABLE_MULTICLUSTER` | `false` | AAP ACM proxy credential (not topology) |
 | `multiClusterCreds.insecureSkipTlsVerify` | `true` (Helm) | Lab default for cluster-proxy kubeconfigs; set `false` to pin CA |
 
@@ -178,40 +192,65 @@ Offline / CI dry-runs: set `SKIP_OC_CHECK=1` so topology and ACM scripts skip li
 
 ## Scenario A: Single cluster (`CLUSTER_COUNT=1`)
 
-Uses the full hub chart and a simulated edge namespace (pause workload). No ACM spoke fan-out.
+Uses the full hub chart and the shared `edge/helm` chart in `dark-noc-edge` (nginx + fast-path healer). No ACM Placement, ManagedClusters, or Hive.
+
+Edge delivery:
+
+- **OpenShift with GitOps** (`EDGE_GITOPS=auto` or `argocd`): ApplicationSet with one list element, destination `in-cluster`, siteId `edge-site-01`.
+- **No GitOps / Kind** (`EDGE_GITOPS=auto` falls back, or set `EDGE_GITOPS=helm`): `helm upgrade --install` of the same chart and value contract.
+
+ClusterLogForwarder stays **off** by default on single-cluster (matches prior SC behavior; no Logging operator prereq). Set `CLUSTER_LOG_FORWARDER_ENABLED=true` only if you also install Logging and distribute kafka client certs.
+
+### Prerequisites (Scenario A)
+
+- Hub operators from the README (RHOAI / Llama Stack, etc.)
+- **Recommended:** OpenShift GitOps (ApplicationSet CRD) for Argo delivery
+- Without GitOps: Helm-only edge install still works (`EDGE_GITOPS=auto` logs a WARN and falls back)
+
+ACM is **not** required for `CLUSTER_COUNT=1`.
 
 ```bash
 export ADNR_LLM_ID=... ADNR_LLM_URL=... ADNR_LLM_TOKEN=...
 oc login --token=$TOKEN --server=https://$API:6443
 
-CLUSTER_COUNT=1 make acm-deploy
+CLUSTER_COUNT=1 make deploy
 make integration-tests
+```
+
+Force Helm edge delivery (Kind-style):
+
+```bash
+CLUSTER_COUNT=1 EDGE_GITOPS=helm make deploy
 ```
 
 What ran:
 
 1. `validate-topology` (spokeCount=0, deploymentMode=single-cluster)
 2. `helm-install` (edgeRbac follows `ROUTES_ENABLED`)
-3. `deploy-edge-workload` into `dark-noc-edge`
+3. `edge-deploy` → Argo ApplicationSet (`in-cluster`) or Helm `adnr-edge` release
+4. `argocd-wait-spokes` when delivery is Argo (waits for `adnr-edge-in-cluster`)
 
 Checks:
 
 ```bash
 oc get pods -n hub
-oc get ns dark-noc-edge
+oc get deploy,pods -n dark-noc-edge
+# Expect edge-nginx and (by default) edge-fast-path-runner / edge-fast-path-watcher
 oc get secret noc-openshift-edge-kubeconfig -n hub
+
+# If EDGE_GITOPS used Argo:
+oc get applications.argoproj.io -n openshift-gitops | grep adnr-edge
 ```
 
-Teardown:
+Teardown (removes edge Argo apps and/or Helm edge release, then the hub chart):
 
 ```bash
-CLUSTER_COUNT=1 make acm-teardown
-# equivalent: make helm-uninstall
+CLUSTER_COUNT=1 make teardown
 ```
 
 ## Scenario B: Hub + spokes (`CLUSTER_COUNT=2`)
 
-Example: hub plus two imported spokes. Replace `REGISTRY` / `VERSION` if you use custom images.
+Example: hub plus two imported spokes. Same `make deploy` entry point; ACM runs because `CLUSTER_COUNT>=2`. Replace `REGISTRY` / `VERSION` if you use custom images.
 
 ```bash
 export ADNR_LLM_ID=... ADNR_LLM_URL=... ADNR_LLM_TOKEN=...
@@ -221,7 +260,7 @@ oc login --token=$TOKEN --server=https://$HUB_API:6443
 export GITOPS_REPO_URL=https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
 export GITOPS_REVISION=main
 
-CLUSTER_COUNT=2 CLUSTER_CREATE=false make acm-deploy \
+CLUSTER_COUNT=2 CLUSTER_CREATE=false make deploy \
   REGISTRY=quay.io/rh-ai-quickstart \
   VERSION=0.1.5
 ```
@@ -300,10 +339,10 @@ Pass criteria:
 
 ## Scenario C: Teardown
 
-Use the **same** `CLUSTER_COUNT` (and preferably the same `NAMESPACE` / `EDGE_NAMESPACE`) you used for deploy. A bare `make acm-teardown` defaults to `CLUSTER_COUNT=1` and will refuse to proceed if hub-spoke resources are still present.
+Use the **same** `CLUSTER_COUNT` (and preferably the same `NAMESPACE` / `EDGE_NAMESPACE`) you used for deploy. A bare `make teardown` defaults to `CLUSTER_COUNT=1` and will refuse to proceed if hub-spoke resources are still present.
 
 ```bash
-CLUSTER_COUNT=2 make acm-teardown
+CLUSTER_COUNT=2 make teardown
 ```
 
 Hub-spoke teardown removes ArgoCD edge apps (cascade-prune spoke resources), ACM placement/policy pieces, spoke `dark-noc-edge` namespaces (via GitOps/policy cleanup), then runs hub `helm-uninstall`.
@@ -311,15 +350,15 @@ Hub-spoke teardown removes ArgoCD edge apps (cascade-prune spoke resources), ACM
 Dry-run (no deletes, skips helm-uninstall):
 
 ```bash
-CLUSTER_COUNT=2 make acm-teardown ACM_TEARDOWN_ARGS=--dry-run
+CLUSTER_COUNT=2 make teardown ACM_TEARDOWN_ARGS=--dry-run
 ```
 
 Notes:
 
 - When `CLUSTER_CREATE=false`, ManagedClusters themselves are **not** deleted. Only ADNR resources on them are torn down.
 - When `CLUSTER_CREATE=true`, teardown also targets Hive ClusterDeployments for the rendered spokes.
-- Single-cluster teardown skips ACM/ArgoCD steps and uninstalls the hub chart only.
-- If ArgoCD Applications linger in `Terminating` during teardown, `acm-teardown` strips finalizers after `ACM_TEARDOWN_APP_TIMEOUT_SECONDS` (default 300s) and continues. Dry-run only logs the strip step.
+- Single-cluster teardown removes local edge Argo apps (or the Helm edge release), then uninstalls the hub chart. No ACM objects.
+- If ArgoCD Applications linger in `Terminating` during teardown, `make teardown` strips finalizers after `ACM_TEARDOWN_APP_TIMEOUT_SECONDS` (default 300s) and continues. Dry-run only logs the strip step.
 - If you accidentally run teardown with `CLUSTER_COUNT=1` after a hub-spoke deploy, the script fails with a clear error instead of orphaning ArgoCD/ACM objects.
 
 Confirm:
@@ -344,7 +383,7 @@ export HIVE_BASE_DOMAIN=...
 export HIVE_CLUSTER_IMAGE_SET=...
 export HIVE_AWS_REGION=...
 
-CLUSTER_COUNT=2 CLUSTER_CREATE=true make acm-deploy
+CLUSTER_COUNT=2 CLUSTER_CREATE=true make deploy
 ```
 
 Dry-run ClusterDeployment manifests:
@@ -372,13 +411,13 @@ oc label namespace openshift-gitops \
   apps.open-cluster-management.io/gitops-argo-namespace=true --overwrite
 ```
 
-Fresh installs via `make acm-deploy` label the namespace during `acm-apply-placement`, then wait for `GitOpsCluster` readiness before `argocd-apply`. Re-run `make acm-apply-placement CLUSTER_COUNT=2` and `make acm-wait-gitopscluster CLUSTER_COUNT=2` if you applied GitOpsCluster manually.
+Fresh installs via `make deploy` label the namespace during `acm-apply-placement`, then wait for `GitOpsCluster` readiness before `argocd-apply`. Re-run `make acm-apply-placement CLUSTER_COUNT=2` and `make acm-wait-gitopscluster CLUSTER_COUNT=2` if you applied GitOpsCluster manually.
 
 **ArgoCD Applications stuck `Terminating` during teardown**  
-`acm-teardown` patches the prune finalizer before delete, then waits up to `ACM_TEARDOWN_APP_TIMEOUT_SECONDS` (default 300). If Applications still exist, it strips finalizers and continues so teardown does not hang. Dry-run logs the strip step without patching. To wait longer before the strip:
+`make teardown` patches the prune finalizer before delete, then waits up to `ACM_TEARDOWN_APP_TIMEOUT_SECONDS` (default 300). If Applications still exist, it strips finalizers and continues so teardown does not hang. Dry-run logs the strip step without patching. To wait longer before the strip:
 
 ```bash
-CLUSTER_COUNT=2 make acm-teardown ACM_TEARDOWN_APP_TIMEOUT_SECONDS=600
+CLUSTER_COUNT=2 make teardown ACM_TEARDOWN_APP_TIMEOUT_SECONDS=600
 ```
 
 Manual unblock (last resort):

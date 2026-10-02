@@ -90,11 +90,42 @@ def test_render_values_yaml_two_spokes():
 
 
 def test_validate_single_cluster_ok():
-    ok, messages, summary = validate_mod.validate_topology(cluster_count=1)
+    ok, messages, summary = validate_mod.validate_topology(
+        cluster_count=1,
+        gitops_repo_url="https://github.com/example/repo.git",
+        gitops_revision="main",
+        edge_gitops="auto",
+    )
     assert ok is True
     assert summary["deploymentMode"] == "single-cluster"
     assert summary["spokeCount"] == 0
+    assert summary["edgeGitops"] == "auto"
     assert any("OK:" in m for m in messages)
+
+
+def test_validate_single_cluster_helm_skips_gitops():
+    ok, messages, summary = validate_mod.validate_topology(
+        cluster_count=1,
+        gitops_repo_url="",
+        gitops_revision="",
+        edge_gitops="helm",
+        skip_oc_check=True,
+    )
+    assert ok is True
+    assert summary["edgeGitops"] == "helm"
+    assert any("OK:" in m for m in messages)
+
+
+def test_validate_single_cluster_argocd_requires_gitops():
+    ok, messages, _ = validate_mod.validate_topology(
+        cluster_count=1,
+        gitops_repo_url="",
+        gitops_revision="",
+        edge_gitops="argocd",
+        skip_oc_check=True,
+    )
+    assert ok is False
+    assert any("GITOPS_REPO_URL" in m for m in messages)
 
 
 def test_validate_hub_spoke_requires_gitops():
