@@ -1,7 +1,9 @@
 # External Route for the KServe-generated predictor Service.
 #
-# Authentication is enforced by the Authorino policy configured at the Route
-# edge. Do not add credentials or auth middleware to ran-ml-service itself.
+# This Route is unauthenticated. Secure it before exposing it beyond the
+# cluster (network policy, Gateway API with a Kuadrant AuthPolicy, oauth-proxy,
+# or equivalent). Do not add credentials or auth middleware to ran-ml-service
+# itself.
 #
 # Apply after the InferenceService is Ready:
 #   oc apply -f model-serving/ran-ml-service/deploy/route.yaml

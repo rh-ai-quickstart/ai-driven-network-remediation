@@ -218,7 +218,7 @@ helm_adnr_llm_args = \
 	--set-string telco.ranRcaService.env.graniteModelName='adnr-llm/$(ADNR_LLM_ID)'
 
 helm_adnr_detect_args = \
-	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',) \
+	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',--set telco.ranAnomalyDetector.enabled=false) \
 	$(if $(ADNR_DETECT_TOKEN),--set-string telco.ranAnomalyDetector.env.detectToken='$(ADNR_DETECT_TOKEN)',)
 
 helm_mcp_image_args = \
@@ -578,6 +578,7 @@ ifeq ($(ENABLE_LIGHTSPEED),true)
 endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
+	$(MAKE) check-adnr-detect-config
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		-f $(SPOKES_GENERATED) \
@@ -640,6 +641,23 @@ check-adnr-llm-config:
 		exit 1; \
 	fi
 
+.PHONY: check-adnr-detect-config
+check-adnr-detect-config:
+	@if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ]; then \
+		if [ -n "$(ADNR_DETECT_TOKEN)" ]; then \
+			echo "ERROR: ADNR_DETECT_TOKEN is set but ADNR_DETECT_INFERENCE_URL is empty."; \
+			echo "Set ADNR_DETECT_INFERENCE_URL, or unset ADNR_DETECT_TOKEN."; \
+			echo "See .env.example and docs/manual-deploy.md."; \
+			exit 1; \
+		fi; \
+		echo "ADNR_DETECT_INFERENCE_URL is unset. The RAN anomaly detector will be disabled."; \
+	elif ! printf '%s' "$(ADNR_DETECT_INFERENCE_URL)" | grep -Eq '^https?://'; then \
+		echo "ERROR: ADNR_DETECT_INFERENCE_URL must start with http:// or https://."; \
+		echo "Got: $(ADNR_DETECT_INFERENCE_URL)"; \
+		echo "See .env.example and docs/manual-deploy.md."; \
+		exit 1; \
+	fi
+
 .PHONY: _require-aap-operator
 _require-aap-operator:
 	@oc get csv -A 2>/dev/null | grep -q "aap-operator" || \
@@ -696,27 +714,8 @@ build-ran-ml-service-image:
 build-push-ran-ml-service: build-ran-ml-service-image
 	$(CONTAINER_TOOL) push $(RAN_ML_SERVICE_IMG) $(PUSH_EXTRA_ARGS)
 
-ML_AUTHCONFIG_TEMPLATE := model-serving/ran-ml-service/deploy/authconfig.yaml
-ML_AUTHCONFIG_NS       := model-serving
-RAN_ML_SVC_NAME        = $(if $(ADNR_DETECT_INFERENCE_URL),$(shell printf '%s' '$(ADNR_DETECT_INFERENCE_URL)' | sed -E 's|https?://([^.]+)\..*|\1|'),ran-ml-service-predictor)
-
-.PHONY: deploy-ml-authconfig
-deploy-ml-authconfig:
-	@if [ -z "$(AUTH_TOKEN)" ]; then \
-		echo "ERROR: AUTH_TOKEN is required. Usage: AUTH_TOKEN=<token> make deploy-ml-authconfig" >&2; \
-		exit 1; \
-	fi
-	$(eval ROUTE_HOST ?= $(shell oc get route ran-ml-service -n $(ML_AUTHCONFIG_NS) -o jsonpath='{.spec.host}' 2>/dev/null))
-	@if [ -z "$(ROUTE_HOST)" ]; then \
-		echo "ERROR: ROUTE_HOST could not be auto-discovered. Set it explicitly: ROUTE_HOST=<host> AUTH_TOKEN=<token> make deploy-ml-authconfig" >&2; \
-		exit 1; \
-	fi
-	@echo "==> Deploying AuthConfig for host $(ROUTE_HOST)"
-	ROUTE_HOST='$(ROUTE_HOST)' AUTH_TOKEN='$(AUTH_TOKEN)' envsubst '$$ROUTE_HOST $$AUTH_TOKEN' < $(ML_AUTHCONFIG_TEMPLATE) | oc apply -f - -n $(ML_AUTHCONFIG_NS)
-
-.PHONY: delete-ml-authconfig
-delete-ml-authconfig:
-	oc delete authconfig ran-ml-service-auth -n $(ML_AUTHCONFIG_NS) --ignore-not-found
+MODEL_SERVING_NS := model-serving
+RAN_ML_SVC_NAME  = $(if $(ADNR_DETECT_INFERENCE_URL),$(shell printf '%s' '$(ADNR_DETECT_INFERENCE_URL)' | sed -E 's|https?://([^.]+)\..*|\1|'),ran-ml-service-predictor)
 
 .PHONY: build-ran-anomaly-image
 build-ran-anomaly-image:
@@ -960,7 +959,7 @@ telco-integration-tests:
 	PF_LLAMASTACK_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
+	oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	PF_RAN_ML_PID=$$!; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
@@ -991,7 +990,7 @@ integration-tests:
 	PF_AGENT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
-	oc port-forward -n $(ML_AUTHCONFIG_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
+	oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	PF_RAN_ML_PID=$$!; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID" EXIT; \
 	sleep 2 && cd hub/integration-tests && \

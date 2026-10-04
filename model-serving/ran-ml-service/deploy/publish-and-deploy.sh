@@ -128,7 +128,7 @@ if [ -z "$SKIP_DEPLOY" ]; then
         -n "$ISVC_NAMESPACE" --timeout=300s
     info "InferenceService is ready"
 
-    info "Applying external Route (Authorino enforces authentication at the Route edge)"
+    info "Applying external Route (unauthenticated; secure it before exposing it beyond the cluster)"
     oc apply -f "$ROUTE_YAML"
 else
     info "Step 3: SKIPPED (SKIP_DEPLOY set)"

@@ -35,8 +35,10 @@ This uploads the build context to the cluster and uses the `ran-ml-overlay` Buil
 The BuildConfig outputs to an ImageStreamTag that the InferenceService references.
 
 The script waits for the InferenceService to become ready and applies the
-external Route after it is ready. The Route's Authorino policy and its bearer
-token remain cluster-managed configuration.
+external Route. The Route is unauthenticated. Secure it before exposing it
+beyond the cluster, then point the hub at it with `ADNR_DETECT_INFERENCE_URL`.
+Set `ADNR_DETECT_TOKEN` only if you add your own bearer auth. See the repository
+README and [docs/manual-deploy.md](../../docs/manual-deploy.md).
 
 ## Endpoints
 
