@@ -736,7 +736,7 @@ build-ran-remediation-image:
 
 .PHONY: build-ran-frontend-image
 build-ran-frontend-image:
-	$(CONTAINER_TOOL) build -t $(RAN_FRONTEND_IMG) --platform=$(ARCH) --build-arg VITE_ENABLE_NETWORK_REMEDIATION=$(ENABLE_NETWORK_REMEDIATION) -f hub/ran-frontend/Containerfile hub/ran-frontend
+	$(CONTAINER_TOOL) build -t $(RAN_FRONTEND_IMG) --platform=$(ARCH) --build-arg VITE_ENABLE_NETWORK_REMEDIATION=$(ENABLE_NETWORK_REMEDIATION) --build-arg VITE_ENABLE_TELCO_ORAN=$(ENABLE_TELCO_ORAN) -f hub/ran-frontend/Containerfile hub/ran-frontend
 
 .PHONY: build-frontend-image
 build-frontend-image:
