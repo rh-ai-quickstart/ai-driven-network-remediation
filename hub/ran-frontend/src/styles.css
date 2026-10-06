@@ -485,6 +485,216 @@ body {
   color: var(--ink);
 }
 
+/* ── View sub-nav (Anomaly List / Cell & Band Grid) ─────────── */
+
+.view-bar {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.view-btn {
+  display: inline-block;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  color: var(--muted);
+  padding: 8px 16px;
+  font-size: 0.86rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.view-btn.active {
+  color: var(--brand);
+  background: var(--card);
+  border-color: var(--line);
+  border-bottom-color: var(--card);
+}
+
+.view-btn:hover:not(.active) {
+  color: var(--ink);
+}
+
+/* ── Cell & Band Grid ─────────────────────────────────────────── */
+
+.cbg-scroll {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.cbg-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 320px;
+}
+
+.cbg-corner {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.cbg-col-header {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #c6aeff;
+  padding: 8px 10px;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.cbg-row-header {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #e3d8ff;
+  padding: 8px 10px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.cbg-cell {
+  width: 80px;
+  height: 52px;
+  text-align: center;
+  vertical-align: middle;
+  border: 1px solid var(--line);
+  transition: filter 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+
+.cbg-cell[role="button"] {
+  cursor: pointer;
+}
+
+.cbg-cell[role="button"]:hover {
+  filter: brightness(1.25);
+  box-shadow: 0 0 8px rgba(163, 137, 255, 0.35);
+}
+
+.cbg-green {
+  background: rgba(72, 187, 120, 0.18);
+}
+
+.cbg-yellow {
+  background: rgba(242, 170, 61, 0.28);
+}
+
+.cbg-red {
+  background: rgba(240, 93, 93, 0.3);
+}
+
+.cbg-icon {
+  font-size: 0.9rem;
+}
+
+/* ── Grid legend ──────────────────────────────────────────────── */
+
+.cbg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.cbg-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cbg-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+
+/* ── Cell detail overlay ──────────────────────────────────────── */
+
+.cell-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(4, 2, 18, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.cell-detail-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 20px 22px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 24px 48px rgba(4, 2, 18, 0.5);
+}
+
+.cell-detail-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.cell-detail-close:hover {
+  color: var(--ink);
+}
+
+.cell-detail-card h3 {
+  margin: 0 0 14px;
+  font-size: 1.1rem;
+  color: #e3d8ff;
+}
+
+.cell-detail-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.cell-detail-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #b79dff;
+}
+
+.cell-detail-grid p {
+  margin: 4px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.cell-detail-job {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+
 @media (max-width: 880px) {
   .page {
     padding: 14px;
