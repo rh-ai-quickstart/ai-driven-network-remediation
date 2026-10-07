@@ -26,7 +26,6 @@ export default function App() {
   const [view, setView] = useState(VIEWS.ANOMALIES);
 
   const showNetworkTab = import.meta.env.VITE_ENABLE_NETWORK_REMEDIATION !== "false";
-  const showGridTab = import.meta.env.VITE_ENABLE_TELCO_ORAN !== "false";
   const networkUrl = window.location.origin.replace("hub-ran-frontend", "hub-frontend");
 
   return (
@@ -40,26 +39,24 @@ export default function App() {
       <DegradedBanner deps={deps} />
       <HeaderMetrics anomalies={anomalies} count={count} deps={deps} lastUpdated={lastUpdated} />
 
-      {showGridTab && (
-        <nav className="view-bar">
-          <button
-            type="button"
-            className={`view-btn ${view === VIEWS.ANOMALIES ? "active" : ""}`}
-            onClick={() => setView(VIEWS.ANOMALIES)}
-          >
-            Anomaly List
-          </button>
-          <button
-            type="button"
-            className={`view-btn ${view === VIEWS.GRID ? "active" : ""}`}
-            onClick={() => setView(VIEWS.GRID)}
-          >
-            Cell &amp; Band Grid
-          </button>
-        </nav>
-      )}
+      <nav className="view-bar">
+        <button
+          type="button"
+          className={`view-btn ${view === VIEWS.ANOMALIES ? "active" : ""}`}
+          onClick={() => setView(VIEWS.ANOMALIES)}
+        >
+          Anomaly List
+        </button>
+        <button
+          type="button"
+          className={`view-btn ${view === VIEWS.GRID ? "active" : ""}`}
+          onClick={() => setView(VIEWS.GRID)}
+        >
+          Cell &amp; Band Grid
+        </button>
+      </nav>
 
-      {view === VIEWS.GRID && showGridTab ? (
+      {view === VIEWS.GRID ? (
         <CellBandGrid anomalies={anomalies} />
       ) : (
         <>

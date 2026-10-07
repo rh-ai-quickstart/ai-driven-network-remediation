@@ -5,7 +5,6 @@ ARG BUILDPLATFORM
 # architecture-agnostic and can be copied into the target runtime image.
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 ARG VITE_ENABLE_NETWORK_REMEDIATION=true
-ARG VITE_ENABLE_TELCO_ORAN=true
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
