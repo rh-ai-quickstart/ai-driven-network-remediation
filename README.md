@@ -210,27 +210,6 @@ export ADNR_LLM_URL=https://your-llm-endpoint.example.com/v1
 export ADNR_LLM_TOKEN=your-llm-api-token
 ```
 
-**RAN detect predictor (optional):**
-
-Telco anomaly detection calls an external Mantis predictor at `POST /v1/detect`. If `ADNR_DETECT_INFERENCE_URL` is unset, `make helm-install` disables `ran-anomaly-detector`.
-
-Deploy the predictor and read its external URL:
-
-```bash
-./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
-oc get route ran-ml-service -n model-serving -o jsonpath='https://{.spec.host}/v1/detect'
-```
-
-Point the hub at that URL, or at any other `/v1/detect` endpoint:
-
-```bash
-export ADNR_DETECT_INFERENCE_URL=https://ran-ml-service-model-serving.apps.example.com/v1/detect
-# Optional. The detector sends Authorization: Bearer only when this is set.
-export ADNR_DETECT_TOKEN=
-```
-
-The quickstart Route is unauthenticated. Before exposing it beyond the cluster, add your own control (network policy, Gateway API with a Kuadrant AuthPolicy, oauth-proxy, or equivalent). If that control expects a bearer token, set `ADNR_DETECT_TOKEN`. In-cluster `svc.cluster.local` traffic needs no token.
-
 See `.env.example` for the full configuration template.
 
 ### Required user permissions

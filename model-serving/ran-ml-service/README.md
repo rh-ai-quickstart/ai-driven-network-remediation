@@ -4,11 +4,11 @@ Mantis time-series ML predictor for TelecomTS anomaly detection (TASK=detect) an
 
 ## Deploy or refresh
 
-Use the deploy script rather than applying the InferenceService and Route separately:
+Use the deploy script rather than applying the InferenceService by hand:
 
 ```sh
-# Re-apply the existing InferenceService and external Route without rebuilding
-# the image or re-uploading model weights.
+# Re-apply the existing InferenceService without rebuilding the image
+# or re-uploading model weights.
 SKIP_HF_UPLOAD=1 SKIP_BUILD=1 \
   ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
 ```
@@ -34,11 +34,17 @@ SKIP_HF_UPLOAD=1 USE_OPENSHIFT_BUILD=1 \
 This uploads the build context to the cluster and uses the `ran-ml-overlay` BuildConfig to build the image.
 The BuildConfig outputs to an ImageStreamTag that the InferenceService references.
 
-The script waits for the InferenceService to become ready and applies the
-external Route. The Route is unauthenticated. Secure it before exposing it
-beyond the cluster, then point the hub at it with `ADNR_DETECT_INFERENCE_URL`.
-Set `ADNR_DETECT_TOKEN` only if you add your own bearer auth. See the repository
-README and [docs/manual-deploy.md](../../docs/manual-deploy.md).
+The script waits for the InferenceService to become ready. KServe publishes the
+external URL on the InferenceService status. Read it with:
+
+```bash
+oc get inferenceservice ran-ml-service -n model-serving -o jsonpath='{.status.url}/v1/detect'
+```
+
+Set that value as `ADNR_DETECT_INFERENCE_URL`. `ADNR_DETECT_TOKEN` is optional;
+the detector sends `Authorization: Bearer` only when it is set. The manifest
+namespace is `model-serving`. `ISVC_NAMESPACE` must stay `model-serving` unless
+`deploy/inferenceservice.yaml` is edited to match.
 
 ## Endpoints
 

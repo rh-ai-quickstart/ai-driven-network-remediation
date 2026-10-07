@@ -218,7 +218,7 @@ helm_adnr_llm_args = \
 	--set-string telco.ranRcaService.env.graniteModelName='adnr-llm/$(ADNR_LLM_ID)'
 
 helm_adnr_detect_args = \
-	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',--set telco.ranAnomalyDetector.enabled=false) \
+	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',) \
 	$(if $(ADNR_DETECT_TOKEN),--set-string telco.ranAnomalyDetector.env.detectToken='$(ADNR_DETECT_TOKEN)',)
 
 helm_mcp_image_args = \
@@ -578,7 +578,6 @@ ifeq ($(ENABLE_LIGHTSPEED),true)
 endif
 ifeq ($(ENABLE_HUB),true)
 	$(MAKE) check-adnr-llm-config
-	$(MAKE) check-adnr-detect-config
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		-f $(SPOKES_GENERATED) \
@@ -638,23 +637,6 @@ check-adnr-llm-config:
 		echo "ERROR: Missing required ADNR LLM configuration:$$missing"; \
 		echo "Set ADNR_LLM_ID, ADNR_LLM_URL, and ADNR_LLM_TOKEN before running 'make helm-install'."; \
 		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
-		exit 1; \
-	fi
-
-.PHONY: check-adnr-detect-config
-check-adnr-detect-config:
-	@if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ]; then \
-		if [ -n "$(ADNR_DETECT_TOKEN)" ]; then \
-			echo "ERROR: ADNR_DETECT_TOKEN is set but ADNR_DETECT_INFERENCE_URL is empty."; \
-			echo "Set ADNR_DETECT_INFERENCE_URL, or unset ADNR_DETECT_TOKEN."; \
-			echo "See .env.example and docs/manual-deploy.md."; \
-			exit 1; \
-		fi; \
-		echo "ADNR_DETECT_INFERENCE_URL is unset. The RAN anomaly detector will be disabled."; \
-	elif ! printf '%s' "$(ADNR_DETECT_INFERENCE_URL)" | grep -Eq '^https?://'; then \
-		echo "ERROR: ADNR_DETECT_INFERENCE_URL must start with http:// or https://."; \
-		echo "Got: $(ADNR_DETECT_INFERENCE_URL)"; \
-		echo "See .env.example and docs/manual-deploy.md."; \
 		exit 1; \
 	fi
 

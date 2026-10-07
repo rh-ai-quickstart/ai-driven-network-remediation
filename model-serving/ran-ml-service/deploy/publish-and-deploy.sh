@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Publish weights to HuggingFace, build+push image, deploy the InferenceService
-# and its external Route, and verify the endpoint. Run from the repo root.
+# Publish weights to HuggingFace, build+push image, deploy the InferenceService,
+# and verify the endpoint. Run from the repo root.
+#
+# The external URL is the InferenceService status URL, which KServe owns.
+# Do not apply a separate Route named ran-ml-service; KServe reconciles it away.
 #
 # Usage:
 #   ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
@@ -13,7 +16,8 @@
 #   WEIGHTS_PATH         — path to .pt weights file (default: model-serving/training/models/mantis_pretrained_ad.pt)
 #   REGISTRY             — container registry (default: quay.io/rh-ai-quickstart)
 #   VERSION              — image tag (default: from Makefile)
-#   ISVC_NAMESPACE       — namespace for InferenceService (default: model-serving)
+#   ISVC_NAMESPACE       — must stay model-serving. inferenceservice.yaml hardcodes
+#                          namespace: model-serving; this var only affects oc commands.
 #   USE_OPENSHIFT_BUILD  — set to 1 to build on OpenShift cluster instead of local podman (recommended on macOS)
 #   BUILDCONFIG_NAME     — OpenShift BuildConfig name (default: ran-ml-overlay)
 #   SKIP_BUILD           — set to 1 to skip image build/push
@@ -40,7 +44,6 @@ SKIP_BUILD="${SKIP_BUILD:-}"
 SKIP_HF_UPLOAD="${SKIP_HF_UPLOAD:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-}"
 ISVC_YAML="model-serving/ran-ml-service/deploy/inferenceservice.yaml"
-ROUTE_YAML="model-serving/ran-ml-service/deploy/route.yaml"
 
 info()  { echo "==> $*"; }
 error() { echo "ERROR: $*" >&2; exit 1; }
@@ -127,9 +130,6 @@ if [ -z "$SKIP_DEPLOY" ]; then
     oc wait --for=condition=Ready inferenceservice/ran-ml-service \
         -n "$ISVC_NAMESPACE" --timeout=300s
     info "InferenceService is ready"
-
-    info "Applying external Route (unauthenticated; secure it before exposing it beyond the cluster)"
-    oc apply -f "$ROUTE_YAML"
 else
     info "Step 3: SKIPPED (SKIP_DEPLOY set)"
 fi
