@@ -22,7 +22,7 @@ def _load(name: str, filename: str):
     return module
 
 
-lib = _load("adnr_topology_lib", "lib.py")
+lib = _load("adnr_topology_lib", "topology_lib.py")
 validate_mod = _load("adnr_topology_validate", "validate.py")
 
 

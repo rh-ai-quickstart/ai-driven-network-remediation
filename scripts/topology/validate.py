@@ -9,29 +9,19 @@ and an oc login to the hub cluster (unless SKIP_OC_CHECK=1).
 
 from __future__ import annotations
 
-import importlib.util
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+# Sibling import works for CLI (`python scripts/topology/validate.py`) and for
+# tests that load this file via importlib without package installation.
+_DIR = Path(__file__).resolve().parent
+if str(_DIR) not in sys.path:
+    sys.path.insert(0, str(_DIR))
 
-def _load_topology_lib():
-    path = Path(__file__).resolve().parent / "lib.py"
-    spec = importlib.util.spec_from_file_location("adnr_topology_lib", path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load topology lib from {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-_lib = _load_topology_lib()
-build_spokes = _lib.build_spokes
-deployment_mode_for = _lib.deployment_mode_for
-spoke_count_for = _lib.spoke_count_for
+from topology_lib import build_spokes, deployment_mode_for, spoke_count_for
 
 
 def _env(name: str, default: str = "") -> str:
