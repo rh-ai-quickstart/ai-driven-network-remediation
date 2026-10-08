@@ -34,17 +34,13 @@ SKIP_HF_UPLOAD=1 USE_OPENSHIFT_BUILD=1 \
 This uploads the build context to the cluster and uses the `ran-ml-overlay` BuildConfig to build the image.
 The BuildConfig outputs to an ImageStreamTag that the InferenceService references.
 
-The script waits for the InferenceService to become ready. KServe publishes the
-external URL on the InferenceService status. Read it with:
+The script rewrites `metadata.namespace` from `ISVC_NAMESPACE` (default `model-serving`) and waits for the InferenceService to become ready. KServe's `{.status.url}` is the in-cluster Service (`*.svc.cluster.local`). Callers outside the cluster use the Route `ran-ml-service-external`:
 
 ```bash
-oc get inferenceservice ran-ml-service -n model-serving -o jsonpath='{.status.url}/v1/detect'
+oc get route ran-ml-service-external -n "$ISVC_NAMESPACE" -o jsonpath='https://{.spec.host}/v1/detect'
 ```
 
-Set that value as `ADNR_DETECT_INFERENCE_URL`. `ADNR_DETECT_TOKEN` is optional;
-the detector sends `Authorization: Bearer` only when it is set. The manifest
-namespace is `model-serving`. `ISVC_NAMESPACE` must stay `model-serving` unless
-`deploy/inferenceservice.yaml` is edited to match.
+Set that value as `ADNR_DETECT_INFERENCE_URL`. `ADNR_DETECT_TOKEN` is optional; the detector sends `Authorization: Bearer` only when it is set. A same-cluster caller can use `{.status.url}/v1/detect` instead.
 
 ## Endpoints
 

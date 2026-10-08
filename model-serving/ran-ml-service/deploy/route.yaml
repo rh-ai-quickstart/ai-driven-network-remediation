@@ -1,0 +1,28 @@
+# External Route for the KServe predictor Service.
+#
+# Name is ran-ml-service-external, not ran-ml-service. A Route with the
+# InferenceService's own name is reconciled away by KServe.
+#
+# publish-and-deploy.sh rewrites metadata.namespace from ISVC_NAMESPACE
+# before apply. The default below matches inferenceservice.yaml.
+#
+# External detect URL:
+#   oc get route ran-ml-service-external -n <namespace> -o jsonpath='https://{.spec.host}/v1/detect'
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ran-ml-service-external
+  namespace: model-serving
+  labels:
+    app.kubernetes.io/name: ran-ml-service
+    app.kubernetes.io/part-of: ai-driven-network-remediation
+spec:
+  to:
+    kind: Service
+    name: ran-ml-service-predictor
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

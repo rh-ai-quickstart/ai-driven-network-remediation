@@ -7,11 +7,11 @@
 # Deploy:
 #   oc apply -f model-serving/ran-ml-service/deploy/inferenceservice.yaml
 #
-# Then wire the endpoint into the hub chart:
-#   ISVC_URL=$(oc get inferenceservice ran-ml-service -n model-serving \
-#     -o jsonpath='{.status.url}')
-#   helm upgrade hub ./hub/helm \
-#     --set-string ranAnomalyDetector.env.detectInferenceUrl=${ISVC_URL}/v1/detect
+# Then wire the endpoint into the hub chart.
+# {.status.url} is in-cluster only. Callers outside the cluster use the Route
+# applied by publish-and-deploy.sh (ran-ml-service-external):
+#   oc get route ran-ml-service-external -n model-serving \
+#     -o jsonpath='https://{.spec.host}/v1/detect'
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
