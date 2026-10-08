@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# Publish weights to HuggingFace, build+push image, deploy the InferenceService
-# and its external Route, and verify the endpoint. Run from the repo root.
+# Publish weights to HuggingFace, build+push image, deploy the InferenceService,
+# and verify the endpoint. Run from the repo root.
+#
+# {.status.url} is the in-cluster Service (*.svc.cluster.local). Callers outside
+# the cluster use the Route ran-ml-service-external. Do not name that Route
+# ran-ml-service: KServe reconciles a Route with the InferenceService's name.
 #
 # Usage:
 #   ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
@@ -13,7 +17,9 @@
 #   WEIGHTS_PATH         — path to .pt weights file (default: model-serving/training/models/mantis_pretrained_ad.pt)
 #   REGISTRY             — container registry (default: quay.io/rh-ai-quickstart)
 #   VERSION              — image tag (default: from Makefile)
-#   ISVC_NAMESPACE       — namespace for InferenceService (default: model-serving)
+#   ISVC_NAMESPACE       — namespace for the InferenceService and external Route
+#                          (default: model-serving). Rewritten into both manifests
+#                          before apply.
 #   USE_OPENSHIFT_BUILD  — set to 1 to build on OpenShift cluster instead of local podman (recommended on macOS)
 #   BUILDCONFIG_NAME     — OpenShift BuildConfig name (default: ran-ml-overlay)
 #   SKIP_BUILD           — set to 1 to skip image build/push
@@ -41,9 +47,20 @@ SKIP_HF_UPLOAD="${SKIP_HF_UPLOAD:-}"
 SKIP_DEPLOY="${SKIP_DEPLOY:-}"
 ISVC_YAML="model-serving/ran-ml-service/deploy/inferenceservice.yaml"
 ROUTE_YAML="model-serving/ran-ml-service/deploy/route.yaml"
+EXTERNAL_ROUTE_NAME="ran-ml-service-external"
 
 info()  { echo "==> $*"; }
 error() { echo "ERROR: $*" >&2; exit 1; }
+
+# inferenceservice.yaml and route.yaml both default metadata.namespace to
+# model-serving. Rewrite that field so ISVC_NAMESPACE is the namespace applied.
+render_manifest() {
+    local src="$1" dest="$2"
+    sed \
+        -e "s|image: .*noc-ran-ml-service:.*|image: ${IMAGE}|" \
+        -e "s|^  namespace: model-serving$|  namespace: ${ISVC_NAMESPACE}|" \
+        "$src" > "$dest"
+}
 
 # ── Step 1: Upload weights to HuggingFace ──────────────────────────
 if [ -z "$SKIP_HF_UPLOAD" ]; then
@@ -117,19 +134,21 @@ if [ -z "$SKIP_DEPLOY" ]; then
 
     oc create namespace "$ISVC_NAMESPACE" 2>/dev/null || true
 
-    TMP_YAML=$(mktemp)
-    trap 'rm -f "$TMP_YAML"' EXIT
-    sed "s|image: .*noc-ran-ml-service:.*|image: ${IMAGE}|" "$ISVC_YAML" > "$TMP_YAML"
-    info "Applying InferenceService with image $IMAGE"
-    oc apply -f "$TMP_YAML"
+    TMP_ISVC=$(mktemp)
+    TMP_ROUTE=$(mktemp)
+    trap 'rm -f "$TMP_ISVC" "$TMP_ROUTE"' EXIT
+    render_manifest "$ISVC_YAML" "$TMP_ISVC"
+    render_manifest "$ROUTE_YAML" "$TMP_ROUTE"
+    info "Applying InferenceService with image $IMAGE in namespace $ISVC_NAMESPACE"
+    oc apply -f "$TMP_ISVC"
 
     info "Waiting for InferenceService to become ready (timeout: 5m)..."
     oc wait --for=condition=Ready inferenceservice/ran-ml-service \
         -n "$ISVC_NAMESPACE" --timeout=300s
     info "InferenceService is ready"
 
-    info "Applying external Route (Authorino enforces authentication at the Route edge)"
-    oc apply -f "$ROUTE_YAML"
+    info "Applying external Route $EXTERNAL_ROUTE_NAME"
+    oc apply -f "$TMP_ROUTE"
 else
     info "Step 3: SKIPPED (SKIP_DEPLOY set)"
 fi
@@ -146,11 +165,28 @@ if [ -z "$ISVC_URL" ]; then
     exit 0
 fi
 
-DETECT_URL="${ISVC_URL}/v1/detect"
-info "Endpoint: $DETECT_URL"
+info "In-cluster URL (reachable only from inside the cluster): ${ISVC_URL}/v1/detect"
+
+info "Waiting for external Route host..."
+ROUTE_HOST=""
+for _ in $(seq 1 30); do
+    ROUTE_HOST=$(oc get route "$EXTERNAL_ROUTE_NAME" -n "$ISVC_NAMESPACE" \
+        -o jsonpath='{.spec.host}' 2>/dev/null || true)
+    if [ -n "$ROUTE_HOST" ]; then
+        break
+    fi
+    sleep 2
+done
+if [ -z "$ROUTE_HOST" ]; then
+    error "Route $EXTERNAL_ROUTE_NAME has no host in namespace $ISVC_NAMESPACE"
+fi
+
+EXTERNAL_BASE="https://${ROUTE_HOST}"
+DETECT_URL="${EXTERNAL_BASE}/v1/detect"
+info "External URL: $DETECT_URL"
 
 info "Testing health endpoint..."
-curl -sf "${ISVC_URL}/health" | python3 -m json.tool
+curl -skf "${EXTERNAL_BASE}/health" | python3 -m json.tool
 
 info "Testing /v1/detect with dummy payload..."
 # Minimal 128-timestep payload (all zeros + TCP protocol encoding)
@@ -166,13 +202,13 @@ row = {
 }
 print(json.dumps({'kpi_window': [row] * 128}))
 ")
-curl -sf -X POST "$DETECT_URL" \
+curl -skf -X POST "$DETECT_URL" \
     -H "Content-Type: application/json" \
     -d "$PAYLOAD" | python3 -m json.tool
 
 info ""
-info "SUCCESS — endpoint is live."
+info "SUCCESS — external endpoint is live."
 info ""
-info "Wire it into the hub chart:"
-info "  helm upgrade hub ./hub/helm \\"
-info "    --set-string ranAnomalyDetector.env.detectInferenceUrl=$DETECT_URL"
+info "From outside the cluster, including CI, set:"
+info "  ADNR_DETECT_INFERENCE_URL=$DETECT_URL"
+info "Same-cluster callers can use ${ISVC_URL}/v1/detect instead."

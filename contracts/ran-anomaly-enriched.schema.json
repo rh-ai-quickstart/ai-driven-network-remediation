@@ -4,7 +4,7 @@
   "title": "Enriched RAN Anomaly (ran-anomalies-enriched topic)",
   "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis on ML-detected anomalies.",
   "type": "object",
-  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause", "recommended_fix"],
+  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause_category", "root_cause", "recommended_fix"],
   "properties": {
     "incident_id": {
       "type": "string",
@@ -37,6 +37,11 @@
       "minimum": 0,
       "maximum": 1,
       "description": "Softmax confidence from the Mantis AD binary classifier."
+    },
+    "root_cause_category": {
+      "type": "string",
+      "enum": ["antenna_misalignment", "interference", "scheduler_degradation", "congestion", "capacity_exhaustion", "cell_failure", "unknown"],
+      "description": "Discrete RCA classification used to select the remediation playbook."
     },
     "root_cause": {
       "type": "string",

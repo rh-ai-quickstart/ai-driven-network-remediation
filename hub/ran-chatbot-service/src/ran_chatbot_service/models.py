@@ -20,6 +20,7 @@ class EnrichedAnomaly(BaseModel):
     kpi_window: list[dict]
     ad_label: str
     ad_confidence: float
+    root_cause_category: str
     root_cause: str
     recommended_fix: str
 

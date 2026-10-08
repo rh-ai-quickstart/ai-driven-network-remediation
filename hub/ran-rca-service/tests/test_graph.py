@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import jsonschema
 import pytest
-from helpers import CONTRACTS_DIR, SAMPLE_ANOMALY, make_anomaly, make_llm_response
+from helpers import CONTRACTS_DIR, SAMPLE_ANOMALY, make_llm_response
 from ran_rca_service.graph import build_graph
 
 
@@ -36,6 +36,7 @@ class TestFullGraph:
         assert result["ad_label"] == "anomalous"
         assert result["ad_confidence"] == 0.94
         assert result["context_snippets"] == []
+        assert result["root_cause_category"] == "antenna_misalignment"
         assert result["root_cause"] != ""
         assert result["recommended_fix"] != ""
 
@@ -55,6 +56,7 @@ class TestFullGraph:
             "kpi_window": result["kpi_window"],
             "ad_label": result["ad_label"],
             "ad_confidence": result["ad_confidence"],
+            "root_cause_category": result["root_cause_category"],
             "root_cause": result["root_cause"],
             "recommended_fix": result["recommended_fix"],
         }
@@ -76,6 +78,7 @@ class TestFullGraph:
         assert result["ad_confidence"] == 0.94
         assert result["root_cause"] == ""
         assert result["recommended_fix"] == ""
+        assert result["root_cause_category"] == "unknown"
 
     @pytest.mark.asyncio
     async def test_both_rag_and_llm_unavailable(self):
@@ -94,3 +97,4 @@ class TestFullGraph:
         assert result["incident_id"] == "test-001"
         assert result["root_cause"] == ""
         assert result["recommended_fix"] == ""
+        assert result["root_cause_category"] == "unknown"

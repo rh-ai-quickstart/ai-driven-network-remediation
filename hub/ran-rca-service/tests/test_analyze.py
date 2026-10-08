@@ -20,6 +20,14 @@ def mock_llm():
 
 class TestSuccessfulLlmCall:
     @pytest.mark.asyncio
+    async def test_returns_root_cause_category_from_llm(self, mock_llm):
+        from ran_rca_service.nodes.analyze import analyze_node
+
+        result = await analyze_node(make_state(context_snippets=["vendor doc snippet"]))
+
+        assert result["root_cause_category"] == "antenna_misalignment"
+
+    @pytest.mark.asyncio
     async def test_returns_root_cause_from_llm(self, mock_llm):
         from ran_rca_service.nodes.analyze import analyze_node
 
@@ -66,6 +74,16 @@ class TestSuccessfulLlmCall:
 
         call_kwargs = mock_llm.ainvoke.call_args[1]
         assert call_kwargs["response_format"]["type"] == "json_schema"
+        schema = call_kwargs["response_format"]["json_schema"]["schema"]
+        assert schema["properties"]["root_cause_category"]["enum"] == [
+            "antenna_misalignment",
+            "interference",
+            "scheduler_degradation",
+            "congestion",
+            "capacity_exhaustion",
+            "cell_failure",
+            "unknown",
+        ]
 
 
 class TestContextTruncation:
@@ -93,6 +111,7 @@ class TestGracefulDegradation:
 
         assert result["root_cause"] == ""
         assert result["recommended_fix"] == ""
+        assert result["root_cause_category"] == "unknown"
 
     @pytest.mark.asyncio
     async def test_malformed_json_returns_empty_fields(self):
@@ -106,6 +125,7 @@ class TestGracefulDegradation:
 
         assert result["root_cause"] == ""
         assert result["recommended_fix"] == ""
+        assert result["root_cause_category"] == "unknown"
 
     @pytest.mark.asyncio
     async def test_no_context_snippets_still_calls_llm(self, mock_llm):
@@ -128,6 +148,7 @@ class TestGracefulDegradation:
 
         assert result["root_cause"] == ""
         assert result["recommended_fix"] == ""
+        assert result["root_cause_category"] == "unknown"
 
 
 class TestContractValidation:

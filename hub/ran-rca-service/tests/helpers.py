@@ -21,6 +21,7 @@ CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 
 VALID_LLM_JSON = json.dumps(
     {
+        "root_cause_category": "antenna_misalignment",
         "root_cause": "Severe signal degradation in zone A detected by Mantis AD with 94% confidence. Pattern consistent with antenna misalignment causing RSRP drop and increased BLER (see 3GPP TS 38.214, Section 5.1.1).",
         "recommended_fix": "Inspect antenna alignment for the affected zone per vendor O-RAN configuration guide, Section 4.3.2. Verify physical tilt and azimuth against planned values.",
     }
@@ -50,6 +51,7 @@ def project_enriched(state: RCAState, result: dict) -> dict:
         "kpi_window": state.kpi_window,
         "ad_label": state.ad_label,
         "ad_confidence": state.ad_confidence,
+        "root_cause_category": result["root_cause_category"],
         "root_cause": result["root_cause"],
         "recommended_fix": result["recommended_fix"],
     }

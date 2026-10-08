@@ -6,6 +6,11 @@ function confidenceBadge(confidence) {
   return "low";
 }
 
+function formatCategory(category) {
+  if (!category) return "";
+  return category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function RemediationBadge({ status }) {
   if (status === "completed") {
     return <span className="remediation-badge completed">✅ Remediated</span>;
@@ -72,6 +77,9 @@ export function AnomalyTable({ anomalies, baseUrl, onCleared }) {
               </header>
               <p className="anomaly-detail">
                 Application: {a.application} · 128×18 KPI window
+                {a.root_cause_category && (
+                  <span className="category-badge"> · Category: {formatCategory(a.root_cause_category)}</span>
+                )}
               </p>
               <div className="anomaly-grid">
                 <div>

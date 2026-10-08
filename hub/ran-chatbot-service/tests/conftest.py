@@ -13,6 +13,7 @@ SAMPLE_ANOMALY_DICT = {
     "kpi_window": [{"RSRP": -85.0, "DL_BLER": 0.1}] * 128,
     "ad_label": "anomalous",
     "ad_confidence": 0.94,
+    "root_cause_category": "antenna_misalignment",
     "root_cause": "Signal degradation due to antenna misalignment in zone A.",
     "recommended_fix": "Section 4.2 — Verify antenna tilt and azimuth alignment.",
 }

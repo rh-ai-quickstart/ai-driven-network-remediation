@@ -58,6 +58,7 @@ def test_anomalies_includes_new_schema_fields(client, sample_anomaly):
     assert "application" in anomaly
     assert "ad_label" in anomaly
     assert "ad_confidence" in anomaly
+    assert "root_cause_category" in anomaly
     assert "root_cause" in anomaly
     assert "recommended_fix" in anomaly
     assert "cell_id" not in anomaly

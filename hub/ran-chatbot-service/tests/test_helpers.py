@@ -13,6 +13,10 @@ from ran_chatbot_service.config import MODEL_API_URL
 from ran_chatbot_service.models import ModelSource
 
 
+def test_enriched_anomaly_includes_root_cause_category(sample_anomaly):
+    assert sample_anomaly.root_cause_category == "antenna_misalignment"
+
+
 class TestBuildChatContext:
     def test_includes_anomaly_details(self, sample_anomalies):
         prompt = build_chat_context("What's happening?", sample_anomalies, [], [])
@@ -148,6 +152,7 @@ class TestCallModel:
 class TestFormatChatReply:
     def test_with_anomalies_and_live_reply(self, sample_anomalies):
         reply = format_chat_reply("What's wrong?", "Signal degradation in zone A.", sample_anomalies)
+        assert reply.startswith("[Antenna Misalignment] ")
         assert "Anomalies detected: 1" in reply
         assert "Incident test-001" in reply
         assert "zone=A" in reply
@@ -174,3 +179,10 @@ class TestFormatChatReply:
         newest = sample_anomaly.model_copy(update={"incident_id": "inc-new"})
         reply = format_chat_reply("What's wrong?", "insight", [oldest, newest])
         assert "Incident inc-new" in reply
+
+    def test_category_tag_replaces_underscores_and_title_cases(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={"root_cause_category": "scheduler_degradation"})
+
+        reply = format_chat_reply("What's wrong?", "insight", [anomaly])
+
+        assert reply.startswith("[Scheduler Degradation] ")
