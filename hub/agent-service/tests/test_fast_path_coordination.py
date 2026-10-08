@@ -65,6 +65,7 @@ class TestFastPathSkip:
                 AsyncMock(return_value=None),
             ),
             patch("agent_service.nodes.remediate._invoke_tool", AsyncMock(side_effect=mock_invoke)),
+            patch("agent_service.nodes._aap_job._invoke_tool", AsyncMock(side_effect=mock_invoke)),
         ):
             result = await node(state)
 

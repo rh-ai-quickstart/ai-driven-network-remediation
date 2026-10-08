@@ -1,18 +1,15 @@
-import asyncio
 import re
-import time
 
 from loguru import logger
 
 from agent_service.config import (
     FAST_PATH_LAST_HEAL_ANNOTATION,
-    POLL_INTERVAL_SECONDS,
-    TERMINAL_STATUSES,
     now_iso,
 )
 from agent_service.edge_site import remediation_should_retry, resolve_edge_site_id
 from agent_service.fast_path import recent_deployment_remediation_actuation, target_deployment_name
 from agent_service.models import GraphConfig, RemediationResult
+from agent_service.nodes._aap_job import evaluate_job
 from agent_service.utils import build_launch_extra_vars
 from agent_service.utils import invoke_tool as _invoke_tool
 
@@ -77,35 +74,18 @@ async def _launch_job(template: str, log_event, edge_site_id: str) -> dict:
 
 async def _handle_completion(template: str, job_id: int, state, config, *, edge_site_id: str = ""):
     """Poll a launched job and return the appropriate state update."""
-    status = await _poll_job(job_id, config.job_timeout)
+    outcome = await evaluate_job(job_id, config.job_timeout)
 
-    if status is None or status.get("status") not in TERMINAL_STATUSES:
+    if not outcome.success:
         return _failure(
             state,
             config,
             template,
-            f"Job {job_id} timed out",
+            outcome.output_summary,
             job_id,
-            elapsed=config.job_timeout,
-            timed_out=True,
-            edge_site_id=edge_site_id,
-        )
-
-    output_text = await _get_output(job_id)
-    elapsed = status.get("elapsed", 0)
-    finished = status.get("finished") or now_iso()
-
-    if status.get("failed"):
-        traceback = status.get("result_traceback", "")
-        summary = traceback or output_text
-        return _failure(
-            state,
-            config,
-            template,
-            summary[:500],
-            job_id,
-            elapsed=elapsed,
-            timestamp=finished,
+            elapsed=outcome.elapsed,
+            timestamp=outcome.timestamp,
+            timed_out=outcome.timed_out,
             edge_site_id=edge_site_id,
         )
 
@@ -116,9 +96,9 @@ async def _handle_completion(template: str, job_id: int, state, config, *, edge_
             tool_used="aap",
             success=True,
             job_id=str(job_id),
-            duration_seconds=float(elapsed),
-            output_summary=output_text[:1000],
-            timestamp=finished,
+            duration_seconds=float(outcome.elapsed),
+            output_summary=outcome.output_summary,
+            timestamp=outcome.timestamp,
         ),
     }
 
@@ -214,39 +194,6 @@ def make_remediate_node(config: GraphConfig):
         )
 
     return remediate_node
-
-
-async def _poll_job(job_id: int, timeout: float) -> dict | None:
-    """Poll get_job_status until terminal or timeout. Returns None on timeout."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        try:
-            status = await _invoke_tool(
-                "get_job_status",
-                {"job_id": job_id},
-            )
-        except Exception:
-            logger.exception("Failed to poll job status")
-            return None
-        if status.get("status") in TERMINAL_STATUSES:
-            return status
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
-        await asyncio.sleep(min(POLL_INTERVAL_SECONDS, remaining))
-    return None
-
-
-async def _get_output(job_id: int) -> str:
-    try:
-        result = await _invoke_tool(
-            "get_job_output",
-            {"job_id": job_id},
-        )
-        return result.get("output", "")
-    except Exception:
-        logger.exception("Failed to get job output")
-        return ""
 
 
 def _failure(
