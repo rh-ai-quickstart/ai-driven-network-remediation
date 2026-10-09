@@ -70,7 +70,8 @@ def test_nginx_deployment_has_oom_friendly_memory_limit():
     assert "kind: Deployment" in rendered
     assert "name: edge-nginx" in rendered
     assert "namespace: dark-noc-edge" in rendered
-    assert "nginx:1.27-alpine" in rendered
+    assert "nginxinc/nginx-unprivileged:1.27-alpine" in rendered
+    assert "containerPort: 8080" in rendered
     assert "memory: 64Mi" in rendered
     assert "adnr.io/site-id" in rendered and "edge-site-01" in rendered
 

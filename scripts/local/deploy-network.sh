@@ -7,7 +7,7 @@ set -o errexit
 REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
 VERSION="${VERSION:-0.1.0}"
 NAMESPACE="${NAMESPACE:-hub}"
-EDGE_NAMESPACE="${EDGE_NAMESPACE:-$NAMESPACE}"
+EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
 
 echo "Using REGISTRY=${REGISTRY}"
 echo "Using VERSION=${VERSION}"
@@ -15,7 +15,7 @@ echo "Using NAMESPACE=${NAMESPACE}"
 echo "Using EDGE_NAMESPACE=${EDGE_NAMESPACE}"
 
 echo "Cleaning up existing deployment"
-NAMESPACE="${NAMESPACE}" make helm-uninstall
+CLUSTER_COUNT=1 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make teardown
 
 echo "Building images"
 REGISTRY="${REGISTRY}" VERSION="${VERSION}" ENABLE_TELCO_ORAN=false ENABLE_NETWORK_REMEDIATION=true make build-all-images
@@ -29,8 +29,10 @@ REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" EDGE_NAMESP
 	ENABLE_NETWORK_REMEDIATION=true \
 	AUTO_INGEST_ON_STARTUP=false make helm-install
 
-echo "Creating edge workload in namespace ${EDGE_NAMESPACE}"
-EDGE_NAMESPACE="${EDGE_NAMESPACE}" make deploy-edge-workload
+echo "Installing edge chart in namespace ${EDGE_NAMESPACE}"
+CLUSTER_COUNT=1 EDGE_GITOPS=helm \
+	REGISTRY="${REGISTRY}" VERSION="${VERSION}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" \
+	CLUSTER_LOG_FORWARDER_ENABLED=false make edge-deploy
 
 echo "Running Network integration tests"
 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make network-integration-tests

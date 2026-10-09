@@ -12,7 +12,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 HUB_CHART = REPO_ROOT / "hub" / "helm"
-TOPOLOGY_LIB = REPO_ROOT / "scripts" / "topology" / "lib.py"
+TOPOLOGY_LIB = REPO_ROOT / "scripts" / "topology" / "topology_lib.py"
 _DETECT_URL_SET = "telco.ranAnomalyDetector.env.detectInferenceUrl=http://predictor:8080/v1/detect"
 
 

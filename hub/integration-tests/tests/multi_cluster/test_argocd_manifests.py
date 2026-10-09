@@ -25,6 +25,8 @@ def test_appproject_restricts_edge_destinations_and_resources():
     assert "name: adnr-edge" in text
     assert "namespace: openshift-gitops" in text
     assert "namespace: dark-noc-edge" in text
+    assert "name: in-cluster" in text
+    assert "server: https://kubernetes.default.svc" in text
     assert "kind: Namespace" in text
     assert "kind: ClusterRoleBinding" in text
     assert "kind: ClusterLogForwarder" in text
@@ -43,14 +45,25 @@ def test_applicationset_list_generator_and_site_id_params():
     assert "SPOKE_ELEMENTS_END" in text
     assert "name: edge-site-01" in text
     assert "siteId: edge-site-01" in text
+    assert "destinationName: edge-site-01" in text
     assert "name: edge-site-02" in text
     assert "siteId: edge-site-02" in text
+    assert "destinationName: edge-site-02" in text
     assert "path: edge/helm" in text
     assert "name: siteId" in text
     assert 'value: "{{.siteId}}"' in text
+    assert "name: createNamespace" in text
+    assert 'value: "false"' in text
+    assert "CreateNamespace=true" in text
     assert "name: kafka.externalHost" in text
     assert "__KAFKA_EXTERNAL_HOST__" in text
-    assert 'name: "{{.name}}"' in text
+    assert "name: fastPathHealer.image.repository" in text
+    assert "__FAST_PATH_HEALER_IMAGE_REPO__" in text
+    assert "name: fastPathHealer.image.tag" in text
+    assert "__FAST_PATH_HEALER_IMAGE_TAG__" in text
+    assert "name: clusterLogForwarder.enabled" in text
+    assert "__CLUSTER_LOG_FORWARDER_ENABLED__" in text
+    assert 'name: "{{.destinationName}}"' in text
     assert "resources-finalizer.argocd.argoproj.io" in text
     assert "project: adnr-edge" in text
     assert "RespectIgnoreDifferences=true" in text
@@ -58,3 +71,4 @@ def test_applicationset_list_generator_and_site_id_params():
     assert "/spec/template/spec/containers/0/resources" in text
     assert "/metadata/annotations" in text
     assert "/spec/template/metadata/annotations" in text
+    assert "__EDGE_SELF_HEAL__" in text

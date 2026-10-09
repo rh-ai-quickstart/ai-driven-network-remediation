@@ -155,7 +155,7 @@ adnr_ensure_gitops_argo_namespace_label() {
 
   [[ -n "${oc_bin}" ]] || oc_bin="$(adnr_resolve_oc)"
   if ! "${oc_bin}" get namespace "${argocd_ns}" >/dev/null 2>&1; then
-    adnr_fail "Argo CD namespace ${argocd_ns} not found; install OpenShift GitOps before acm-deploy"
+    adnr_fail "Argo CD namespace ${argocd_ns} not found; install OpenShift GitOps before make deploy"
   fi
 
   if adnr_gitops_argo_namespace_label_present "${oc_bin}" "${argocd_ns}"; then

@@ -40,6 +40,8 @@ The deploy will use images from the $REGISTRY
 make helm-install
 ```
 
+Hub-only install does not deploy the edge chart. For hub plus `edge/helm` in `dark-noc-edge` (Argo or Helm fallback), use `CLUSTER_COUNT=1 make deploy` instead. See [multi-cluster-deploy.md](multi-cluster-deploy.md) Scenario A.
+
 For local development and demos, `make helm-install` enables the AAP mock by default.
 For environments that should use a real Ansible Automation Platform controller instead,
 disable the mock during deployment:

@@ -1,15 +1,14 @@
-# ADNR edge ApplicationSet: one Application per spoke from spokes.generated.yaml.
+# ADNR edge ApplicationSet: one Application per edge destination.
 #
-# Generator: list elements are rendered by scripts/acm/argocd-apply.sh from
-# hub/helm/spokes.generated.yaml (gitignored; not usable as a Git file generator).
-# ClusterDecisionResource is an alternative once spokes are labeled; list keeps
-# siteId aligned with topology. siteId MUST equal the ManagedCluster name
-# (edge-site-NN): remediation routes to the spoke via ACM cluster-proxy using
-# edge_site_id as the cluster path segment.
+# Generator: list elements are rendered by scripts/acm/argocd-apply.sh.
+# CLUSTER_COUNT>=2: elements come from hub/helm/spokes.generated.yaml
+#   (ManagedCluster name = Argo destination name = siteId, edge-site-NN).
+# CLUSTER_COUNT=1: one local element with destinationName=in-cluster and
+#   siteId=edge-site-01 (demo/MCP alias); hub topology.spokes stays empty.
 #
 # Sample values / spokes below are valid for kubectl --dry-run=client. The apply
-# script replaces the SPOKE_ELEMENTS block and substitutes repo/revision/kafka
-# from env (GITOPS_REPO_URL, GITOPS_REVISION, KAFKA_EXTERNAL_HOST).
+# script replaces the SPOKE_ELEMENTS block and substitutes repo/revision/kafka/
+# healer image/CLF/selfHeal from env.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -30,14 +29,16 @@ spec:
           - name: edge-site-01
             siteId: edge-site-01
             namespace: dark-noc-edge
+            destinationName: edge-site-01
           - name: edge-site-02
             siteId: edge-site-02
             namespace: dark-noc-edge
+            destinationName: edge-site-02
           # SPOKE_ELEMENTS_END
   template:
     metadata:
       name: "adnr-edge-{{.name}}"
-      # Cascade-prune spoke resources when the Application is deleted (acm-teardown).
+      # Cascade-prune edge resources when the Application is deleted (make teardown).
       finalizers:
         - resources-finalizer.argocd.argoproj.io
       labels:
@@ -58,11 +59,20 @@ spec:
               value: "{{.siteId}}"
             - name: namespace
               value: "{{.namespace}}"
+            # SyncOption CreateNamespace owns the destination NS; skip chart Namespace.
+            - name: createNamespace
+              value: "false"
             - name: kafka.externalHost
               value: "__KAFKA_EXTERNAL_HOST__"
+            - name: fastPathHealer.image.repository
+              value: "__FAST_PATH_HEALER_IMAGE_REPO__"
+            - name: fastPathHealer.image.tag
+              value: "__FAST_PATH_HEALER_IMAGE_TAG__"
+            - name: clusterLogForwarder.enabled
+              value: "__CLUSTER_LOG_FORWARDER_ENABLED__"
       destination:
-        # ManagedCluster name = ArgoCD cluster secret name (ACM GitOps registers these).
-        name: "{{.name}}"
+        # Spoke ManagedCluster name, or in-cluster for single-cluster GitOps.
+        name: "{{.destinationName}}"
         namespace: "{{.namespace}}"
       syncPolicy:
         automated:
