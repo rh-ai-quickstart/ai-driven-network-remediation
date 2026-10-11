@@ -30,6 +30,7 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
         with:
+          python-version: "3.13"
           enable-cache: true
           cache-dependency-glob: model-serving/ran-ml-service/uv.lock
 
