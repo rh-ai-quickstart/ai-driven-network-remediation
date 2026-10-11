@@ -25,6 +25,7 @@ _POLL_SECONDS = 5
 def _find(anomalies: list[dict], incident_id: str) -> dict | None:
     return next((a for a in anomalies if a.get("incident_id") == incident_id), None)
 
+
 @pytest.mark.skip(reason="Remove skip with https://redhat.atlassian.net/browse/APPENG-6493")
 def test_demo_trigger_reaches_completed_remediation(ran_chatbot_client):
     trigger = ran_chatbot_client.post("/api/demo/trigger", json={"scenario": "antenna_failure"})
@@ -42,9 +43,7 @@ def test_demo_trigger_reaches_completed_remediation(ran_chatbot_client):
         time.sleep(_POLL_SECONDS)
     else:
         stage = "was never detected" if anomaly is None else "was detected but never remediated"
-        pytest.fail(
-            f"incident {incident_id} {stage} within {_TIMEOUT_SECONDS}s (last seen: {anomaly})"
-        )
+        pytest.fail(f"incident {incident_id} {stage} within {_TIMEOUT_SECONDS}s (last seen: {anomaly})")
 
     assert anomaly["remediation_status"] == "completed", anomaly
     assert anomaly["remediation_job_id"]

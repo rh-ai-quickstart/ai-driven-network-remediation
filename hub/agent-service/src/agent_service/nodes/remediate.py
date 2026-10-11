@@ -11,7 +11,10 @@ from agent_service.config import (
     now_iso,
 )
 from agent_service.edge_site import remediation_should_retry, resolve_edge_site_id
-from agent_service.fast_path import recent_deployment_remediation_actuation, target_deployment_name
+from agent_service.fast_path import (
+    recent_deployment_remediation_actuation,
+    target_deployment_name,
+)
 from agent_service.models import GraphConfig, RemediationResult
 from agent_service.utils import build_launch_extra_vars
 from agent_service.utils import invoke_tool as _invoke_tool
@@ -131,9 +134,7 @@ def make_remediate_node(config: GraphConfig):
         rca = state.root_cause_analysis
 
         raw_action = rca.recommended_actions[0] if rca.recommended_actions else None
-        template = state.selected_template or (
-            _resolve_template(raw_action, rca.failure_type) if raw_action else None
-        )
+        template = state.selected_template or (_resolve_template(raw_action, rca.failure_type) if raw_action else None)
         if not template:
             logger.warning("No matching remediation template for RCA")
             return {
@@ -176,8 +177,7 @@ def make_remediate_node(config: GraphConfig):
                     )
                 else:
                     summary = (
-                        f"Deployment {deployment} had a recent hub rollout restart; "
-                        f"skipping duplicate AAP job"
+                        f"Deployment {deployment} had a recent hub rollout restart; " f"skipping duplicate AAP job"
                     )
                 logger.info(summary)
                 return {

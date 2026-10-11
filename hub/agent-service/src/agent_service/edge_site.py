@@ -8,6 +8,7 @@ from typing import Any
 
 from agent_service.config import EDGE_NAMESPACE
 from agent_service.utils import EDGE_SITE_STAMP
+
 # Hub-spoke demo default when CLF records omit site labels (single primary edge chart).
 _DEFAULT_EDGE_SITE = "edge-01"
 

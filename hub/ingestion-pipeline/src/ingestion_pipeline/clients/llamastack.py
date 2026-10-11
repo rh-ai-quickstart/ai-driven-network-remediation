@@ -150,12 +150,14 @@ class LlamaStackVectorStoreClient:
                     attributes=item.attributes,
                     chunking_strategy=chunking_strategy,
                 )
-                succeeded.append(VectorStoreFileSummary(
-                    id=attached_file.id,
-                    vector_store_id=attached_file.vector_store_id,
-                    status=attached_file.status,
-                    attributes=attached_file.attributes,
-                ))
+                succeeded.append(
+                    VectorStoreFileSummary(
+                        id=attached_file.id,
+                        vector_store_id=attached_file.vector_store_id,
+                        status=attached_file.status,
+                        attributes=attached_file.attributes,
+                    )
+                )
             except Exception as exc:
                 logger.exception("Failed to ingest '%s'", item.filename)
                 failed.append(FailedIngestItem(item=item, reason=str(exc)))

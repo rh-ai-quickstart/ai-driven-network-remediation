@@ -128,7 +128,7 @@ def test_aap_multicluster_rbac_renders_per_spoke():
     assert "cluster:hub:system:serviceaccount:aap:aap-integration-serviceaccount" in rendered
     assert "edge-site-01" in rendered
     assert "edge-site-02" in rendered
-    assert 'kind: User' in rendered
+    assert "kind: User" in rendered
 
 
 def test_aap_multicluster_rbac_skipped_without_hub_spoke():

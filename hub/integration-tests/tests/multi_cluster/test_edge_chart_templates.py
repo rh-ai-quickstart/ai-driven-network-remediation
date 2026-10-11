@@ -169,9 +169,7 @@ def test_fast_path_healer_enabled_renders_runner_and_watcher():
     assert "kind: NetworkPolicy" in rendered
     assert 'image: "quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:0.1.5"' in rendered
     # runner + watcher each declare the same image ref
-    assert rendered.count(
-        'image: "quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:0.1.5"'
-    ) == 2
+    assert rendered.count('image: "quay.io/rh-ai-quickstart/noc-edge-fast-path-healer:0.1.5"') == 2
     assert "noc-edge-fast-path-healer:0.1.0" not in rendered
     assert "EDGE_COOLDOWN_SECONDS" in rendered
     assert "cpu: 10m" in rendered

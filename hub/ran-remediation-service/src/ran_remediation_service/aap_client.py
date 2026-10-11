@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 
 from loguru import logger
-
 from ran_remediation_service.config import get_http_client
 
 

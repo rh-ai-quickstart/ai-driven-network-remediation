@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from kubernetes import client
-
 from edge_fast_path_healer.logging_util import log_event
 from edge_fast_path_healer.models import RemediationResult
+from kubernetes import client
 
 ANNOTATION_LAST_HEAL = "adnr.io/fast-path-last-heal"
 ANNOTATION_SITE = "adnr.io/fast-path-site"
@@ -23,9 +22,7 @@ def parse_memory_mi(value: str) -> int | None:
 
 def _annotation_maps(deployment: dict) -> tuple[dict, dict]:
     meta = (deployment.get("metadata") or {}).get("annotations") or {}
-    tpl = (
-        ((deployment.get("spec") or {}).get("template") or {}).get("metadata") or {}
-    ).get("annotations") or {}
+    tpl = (((deployment.get("spec") or {}).get("template") or {}).get("metadata") or {}).get("annotations") or {}
     return meta, tpl
 
 

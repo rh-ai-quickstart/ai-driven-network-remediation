@@ -72,8 +72,7 @@ def _invoke_graph_for_alert(
     async def _run_workflow():
         if await should_suppress_clf_feedback_loop(alert.raw_event):
             logger.info(
-                "Suppressed CLF feedback-loop alert (no workflow, no audit) "
-                "topic={} offset={}",
+                "Suppressed CLF feedback-loop alert (no workflow, no audit) " "topic={} offset={}",
                 alert.topic,
                 alert.offset,
             )

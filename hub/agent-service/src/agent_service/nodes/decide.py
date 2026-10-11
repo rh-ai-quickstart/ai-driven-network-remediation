@@ -31,9 +31,7 @@ def make_decide_node(config: GraphConfig):
         # Overrides force a synthetic failure_type/confidence for testing while
         # summary/recommended_actions stay real; guarding that incoherent RCA
         # with the LLM is meaningless, so skip it and trust the resolved template.
-        has_overrides = (
-            state.confidence_override is not None and state.failure_type_override is not None
-        )
+        has_overrides = state.confidence_override is not None and state.failure_type_override is not None
 
         action = rca.recommended_actions[0] if rca.recommended_actions else None
         template = _resolve_template(action, rca.failure_type) if action else None

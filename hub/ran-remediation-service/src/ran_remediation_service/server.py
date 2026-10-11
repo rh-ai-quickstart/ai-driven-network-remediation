@@ -17,7 +17,6 @@ from typing import Any
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
-
 from ran_remediation_service.config import (
     KAFKA_BOOTSTRAP,
     KAFKA_CONSUMER_ENABLED,
@@ -59,19 +58,21 @@ def _handle_enriched_message(
         return
 
     record = {
-        "incident_id":    result.get("incident_id", anomaly.get("incident_id")),
-        "zone":           result.get("zone", anomaly.get("zone")),
-        "application":    result.get("application", anomaly.get("application")),
-        "template_name":  result.get("template_name", ""),
-        "job_id":         result.get("job_id", ""),
-        "job_status":     result.get("job_status", ""),
-        "success":        result.get("success", False),
+        "incident_id": result.get("incident_id", anomaly.get("incident_id")),
+        "zone": result.get("zone", anomaly.get("zone")),
+        "application": result.get("application", anomaly.get("application")),
+        "template_name": result.get("template_name", ""),
+        "job_id": result.get("job_id", ""),
+        "job_status": result.get("job_status", ""),
+        "success": result.get("success", False),
         "output_summary": result.get("output_summary", ""),
-        "timestamp":      result.get("timestamp", ""),
+        "timestamp": result.get("timestamp", ""),
     }
     logger.info(
         "RAN remediation complete: incident_id={} zone={} success={}",
-        record["incident_id"], record["zone"], record["success"],
+        record["incident_id"],
+        record["zone"],
+        record["success"],
     )
     recent_results.append(record)
 
@@ -136,4 +137,5 @@ def remediation_results(req: Request, limit: int = Query(default=50, ge=0)):
 
 def start():
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8004")))

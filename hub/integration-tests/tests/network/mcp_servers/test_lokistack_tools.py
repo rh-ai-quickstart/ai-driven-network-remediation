@@ -3,6 +3,7 @@ import subprocess
 import time
 
 import pytest
+
 from .conftest import mcp_call
 
 NAMESPACE = os.environ.get("NAMESPACE", "hub")

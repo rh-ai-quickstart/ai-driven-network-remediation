@@ -5,8 +5,6 @@ import time
 from dataclasses import dataclass
 
 import httpx
-from kubernetes import client
-
 from edge_fast_path_healer.detect import (
     deployment_memory_limit_mi,
     pod_oom_event_key,
@@ -15,6 +13,7 @@ from edge_fast_path_healer.detect import (
 from edge_fast_path_healer.k8s_client import load_k8s_apps_api
 from edge_fast_path_healer.logging_util import log_event
 from edge_fast_path_healer.models import RemediationEvent
+from kubernetes import client
 
 
 @dataclass(frozen=True)

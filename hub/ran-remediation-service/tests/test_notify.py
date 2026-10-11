@@ -1,7 +1,6 @@
 """Unit tests for the notify node."""
 
 import pytest
-
 from ran_remediation_service.models import RemediationState
 from ran_remediation_service.nodes.notify import _build_payload, notify_node
 
@@ -58,8 +57,11 @@ async def test_notify_node_slack_disabled_returns_empty():
 @pytest.mark.asyncio
 async def test_notify_node_slack_enabled_no_token_returns_empty():
     from unittest.mock import patch
+
     state = _state()
-    with patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", True), \
-         patch("ran_remediation_service.nodes.notify.SLACK_BOT_TOKEN", ""):
+    with (
+        patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", True),
+        patch("ran_remediation_service.nodes.notify.SLACK_BOT_TOKEN", ""),
+    ):
         result = await notify_node(state)
     assert result == {}

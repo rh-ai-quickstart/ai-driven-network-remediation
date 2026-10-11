@@ -103,14 +103,16 @@ class TestAnomaliesEndpoint:
         assert response.json() == {"count": 0, "anomalies": []}
 
     def test_anomalies_returns_detected_items(self, client):
-        client.app.state.recent_anomalies.append({
-            "incident_id": "test-001",
-            "zone": "A",
-            "application": "Twitch",
-            "kpi_window": [],
-            "ad_label": "anomalous",
-            "ad_confidence": 0.94,
-        })
+        client.app.state.recent_anomalies.append(
+            {
+                "incident_id": "test-001",
+                "zone": "A",
+                "application": "Twitch",
+                "kpi_window": [],
+                "ad_label": "anomalous",
+                "ad_confidence": 0.94,
+            }
+        )
         response = client.get("/anomalies")
         assert response.status_code == 200
         body = response.json()
@@ -119,14 +121,16 @@ class TestAnomaliesEndpoint:
 
     def test_anomalies_respects_limit(self, client):
         for i in range(5):
-            client.app.state.recent_anomalies.append({
-                "incident_id": f"inc-{i}",
-                "zone": "A",
-                "application": "X",
-                "kpi_window": [],
-                "ad_label": "anomalous",
-                "ad_confidence": 0.9,
-            })
+            client.app.state.recent_anomalies.append(
+                {
+                    "incident_id": f"inc-{i}",
+                    "zone": "A",
+                    "application": "X",
+                    "kpi_window": [],
+                    "ad_label": "anomalous",
+                    "ad_confidence": 0.9,
+                }
+            )
         response = client.get("/anomalies", params={"limit": 2})
         body = response.json()
         assert body["count"] == 2
@@ -189,12 +193,14 @@ class TestKafkaLifespan:
             )
 
             with TestClient(app):
-                msg = json.dumps({
-                    "incident_id": "pub-test",
-                    "zone": "B",
-                    "application": "YouTube",
-                    "kpi_window": [{"RSRP": 0}] * 128,
-                }).encode()
+                msg = json.dumps(
+                    {
+                        "incident_id": "pub-test",
+                        "zone": "B",
+                        "application": "YouTube",
+                        "kpi_window": [{"RSRP": 0}] * 128,
+                    }
+                ).encode()
                 captured_handler["handler"](msg)
 
                 mock_producer.send.assert_called_once()

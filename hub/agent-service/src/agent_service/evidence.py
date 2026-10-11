@@ -48,7 +48,9 @@ def get_structured_attachments(state) -> list[dict]:
         data = getattr(state, attr, None)
         if data:
             content = json.dumps(_limit_data(data, limit), indent=2)
-            attachments.append({"attachment_type": "configuration", "content_type": "application/json", "content": content})
+            attachments.append(
+                {"attachment_type": "configuration", "content_type": "application/json", "content": content}
+            )
     return attachments
 
 

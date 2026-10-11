@@ -10,10 +10,8 @@ from unittest.mock import patch
 import httpx
 import jsonschema
 import pytest
-
-from ran_anomaly_detector.detection import AnomalyDetectionService
-
 from conftest import synthetic_fixture_message
+from ran_anomaly_detector.detection import AnomalyDetectionService
 
 CONTRACTS_DIR = Path(__file__).resolve().parents[3] / "contracts"
 

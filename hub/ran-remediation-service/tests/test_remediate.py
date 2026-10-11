@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from ran_remediation_service.aap_client import AAPError
 from ran_remediation_service.models import RemediationState
 from ran_remediation_service.nodes.remediate import remediate_node
@@ -83,9 +82,13 @@ async def test_job_failure():
 @pytest.mark.asyncio
 async def test_job_timeout():
     launch, status, output = _patch_aap(7, {"status": "running"})
-    with launch, status, output, \
-         patch("ran_remediation_service.nodes.remediate.JOB_TIMEOUT_SECONDS", 0.01), \
-         patch("ran_remediation_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.001):
+    with (
+        launch,
+        status,
+        output,
+        patch("ran_remediation_service.nodes.remediate.JOB_TIMEOUT_SECONDS", 0.01),
+        patch("ran_remediation_service.nodes.remediate.POLL_INTERVAL_SECONDS", 0.001),
+    ):
         result = await remediate_node(_state())
 
     assert result["success"] is False

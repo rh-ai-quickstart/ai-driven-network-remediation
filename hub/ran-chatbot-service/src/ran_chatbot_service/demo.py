@@ -12,7 +12,7 @@ import logging
 import uuid
 from typing import Any
 
-from telco_oran.catalog import get_fixture, fixture_to_kpi_message, list_scenarios
+from telco_oran.catalog import fixture_to_kpi_message, get_fixture
 
 from .config import DEMO_METRICS_TOPIC, KAFKA_BOOTSTRAP
 

@@ -31,7 +31,9 @@ def normalize_incident_record(payload: dict[str, Any]) -> dict[str, Any]:
     aap_job_id = str(event.get("aap_job_id") or payload.get("aap_job_id") or "")
     confidence = float(event.get("ai_confidence") or payload.get("ai_confidence") or 0)
     duration_ms = float(event.get("total_duration_ms") or payload.get("total_duration_ms") or 0)
-    edge_site = str(event.get("edge_site_id") or payload.get("edge_site_id") or labels.get("edge_site_id") or "edge-site-01")
+    edge_site = str(
+        event.get("edge_site_id") or payload.get("edge_site_id") or labels.get("edge_site_id") or "edge-site-01"
+    )
 
     ts_raw = ""
     for key in ("timestamp", "@timestamp", "time", "ts"):

@@ -8,10 +8,8 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-
-from ran_anomaly_detector.detection import AnomalyDetectionService
-
 from conftest import synthetic_fixture, synthetic_fixture_message
+from ran_anomaly_detector.detection import AnomalyDetectionService
 
 pytestmark = pytest.mark.usefixtures("_patch_detect_url")
 
@@ -46,9 +44,7 @@ class TestAnomalyDetectionService:
             mock_client.return_value.post.return_value = _mock_detect_response("anomalous", 0.94)
             service.process_message(msg)
 
-        assert mock_client.return_value.post.call_args.kwargs["headers"] == {
-            "Authorization": "Bearer detect-token"
-        }
+        assert mock_client.return_value.post.call_args.kwargs["headers"] == {"Authorization": "Bearer detect-token"}
 
     def test_inference_omits_authorization_when_token_is_empty(self):
         service = AnomalyDetectionService()
@@ -146,11 +142,13 @@ class TestAnomalyDetectionService:
     def test_generates_incident_id_if_not_in_message(self):
         service = AnomalyDetectionService()
         fixture = synthetic_fixture("antenna_failure")
-        msg = json.dumps({
-            "zone": fixture["zone"],
-            "application": fixture["application"],
-            "kpi_window": fixture["kpi_window"],
-        }).encode()
+        msg = json.dumps(
+            {
+                "zone": fixture["zone"],
+                "application": fixture["application"],
+                "kpi_window": fixture["kpi_window"],
+            }
+        ).encode()
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
             mock_client.return_value.post.return_value = _mock_detect_response("anomalous", 0.91)

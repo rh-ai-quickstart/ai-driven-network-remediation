@@ -23,16 +23,27 @@ from agent_service.config import (
     get_llm,
     now_iso,
 )
-from agent_service.evidence import build_evidence_prompt, build_grounding_text, get_pod_logs_for_attachment, get_structured_attachments
+from agent_service.evidence import (
+    build_evidence_prompt,
+    build_grounding_text,
+    get_pod_logs_for_attachment,
+    get_structured_attachments,
+)
 from agent_service.models import RemediationResult
 from agent_service.nodes.rag_retrieval import store_generated_playbook
-from agent_service.playbook_sanitize import fix_ansible_facts, quote_jinja, sanitize_playbook
+from agent_service.playbook_sanitize import (
+    fix_ansible_facts,
+    quote_jinja,
+    sanitize_playbook,
+)
 from agent_service.utils import (
     build_launch_extra_vars,
+)
+from agent_service.utils import invoke_tool as _invoke_tool
+from agent_service.utils import (
     normalize_component_name,
     resolve_remediation_deployment,
 )
-from agent_service.utils import invoke_tool as _invoke_tool
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
@@ -105,9 +116,7 @@ def _parse_summary_json(text: str) -> dict:
         if not isinstance(candidate, dict):
             continue
         overlay = {
-            key: candidate[key]
-            for key in _SUMMARY_KEYS
-            if isinstance(candidate.get(key), str) and candidate[key]
+            key: candidate[key] for key in _SUMMARY_KEYS if isinstance(candidate.get(key), str) and candidate[key]
         }
         if overlay:
             return overlay
@@ -198,13 +207,13 @@ def _build_attachments(rca, log_event, pod_logs: str = "", extra_attachments: li
                 if log_event and log_event.raw
                 else None
             ),
+            ({"attachment_type": "log", "content_type": "text/plain", "content": pod_logs} if pod_logs else None),
             (
-                {"attachment_type": "log", "content_type": "text/plain", "content": pod_logs}
-                if pod_logs
-                else None
-            ),
-            (
-                {"attachment_type": "configuration", "content_type": "text/plain", "content": "\n".join(rca.evidence[:_MAX_EVIDENCE_ITEMS])[:_MAX_EVIDENCE_CHARS]}
+                {
+                    "attachment_type": "configuration",
+                    "content_type": "text/plain",
+                    "content": "\n".join(rca.evidence[:_MAX_EVIDENCE_ITEMS])[:_MAX_EVIDENCE_CHARS],
+                }
                 if rca and rca.evidence
                 else None
             ),
@@ -312,7 +321,9 @@ async def lightspeed_node(state) -> dict:
         # TODO: validate playbook ops before AAP submission (block delete, shell, command modules)
         if not isinstance(parsed, list):
             duration = time.monotonic() - t0
-            logger.warning(f"Playbook YAML parse/sanitize failed, refusing to launch raw playbook (type={type(parsed).__name__})")
+            logger.warning(
+                f"Playbook YAML parse/sanitize failed, refusing to launch raw playbook (type={type(parsed).__name__})"
+            )
             result = RemediationResult(
                 action_taken="generate-playbook",
                 tool_used="lightspeed",
@@ -426,7 +437,9 @@ async def _await_project_sync(update_id: int) -> bool:
     return False
 
 
-async def _resolve_target(extra_vars: dict, llm_summary: dict | None, original_edge_site_id: str = "") -> tuple[dict, str]:
+async def _resolve_target(
+    extra_vars: dict, llm_summary: dict | None, original_edge_site_id: str = ""
+) -> tuple[dict, str]:
     """Confirm the remediation target exists on the resolved spoke before launching.
 
     Fails closed: the LLM is free to name the affected component, but we mutate only a
@@ -509,7 +522,9 @@ async def _execute_in_aap(
     extra_vars = build_launch_extra_vars(
         log_event, llm_summary=llm_summary, evidence_text=evidence_text, resource_specs=resource_specs
     )
-    extra_vars, verify_error = await _resolve_target(extra_vars, llm_summary, log_event.edge_site_id if log_event else "")
+    extra_vars, verify_error = await _resolve_target(
+        extra_vars, llm_summary, log_event.edge_site_id if log_event else ""
+    )
     if verify_error:
         return _aap_step_failed(result, {"error": verify_error}, "verify_target")
     launch = await _invoke_tool(

@@ -61,9 +61,7 @@ def resolve_remediation_deployment(namespace: str, pod_name: str) -> str:
         return _EDGE_NGINX_DEPLOYMENT
     # Standalone nginx-edge-* pods (synthetic alerts) and edge-nginx-* ReplicaSet pods
     # both target the edge-nginx Deployment on the spoke.
-    if ns == EDGE_NAMESPACE and (
-        pod.startswith("nginx-edge-") or pod.startswith("edge-nginx-")
-    ):
+    if ns == EDGE_NAMESPACE and (pod.startswith("nginx-edge-") or pod.startswith("edge-nginx-")):
         return _EDGE_NGINX_DEPLOYMENT
     return derived
 

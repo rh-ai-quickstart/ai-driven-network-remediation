@@ -25,7 +25,10 @@ from agent_service.config import (
     FAST_PATH_LAST_HEAL_ANNOTATION,
     ROLLOUT_RESTART_ANNOTATION,
 )
-from agent_service.edge_site import extract_edge_site_id_from_alert, resolve_edge_site_id
+from agent_service.edge_site import (
+    extract_edge_site_id_from_alert,
+    resolve_edge_site_id,
+)
 from agent_service.models import LogEvent
 from agent_service.utils import invoke_tool, resolve_remediation_deployment
 

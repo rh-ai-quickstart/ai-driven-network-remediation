@@ -337,8 +337,14 @@ class TestToolArgDefaults:
         ):
             await node(state)
 
-        assert mock_invoke.call_args_list[0].args == ("get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"})
-        assert mock_invoke.call_args_list[1].args == ("get_events", {"namespace": "payments", "limit": 20, "edge_site_id": "edge-1"})
+        assert mock_invoke.call_args_list[0].args == (
+            "get_events",
+            {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"},
+        )
+        assert mock_invoke.call_args_list[1].args == (
+            "get_events",
+            {"namespace": "payments", "limit": 20, "edge_site_id": "edge-1"},
+        )
 
     async def test_llm_provided_edge_site_id_is_preserved(self):
         config = GraphConfig()
@@ -415,9 +421,7 @@ class TestToolArgDefaults:
         ):
             await node(state)
 
-        mock_invoke.assert_called_once_with(
-            "find_error_patterns", {"namespace": "prod", "app": "nginx"}
-        )
+        mock_invoke.assert_called_once_with("find_error_patterns", {"namespace": "prod", "app": "nginx"})
 
     async def test_omitted_edge_site_id_defaults_to_log_event(self):
         config = GraphConfig()
@@ -437,9 +441,7 @@ class TestToolArgDefaults:
         ):
             await node(state)
 
-        mock_invoke.assert_called_once_with(
-            "get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"}
-        )
+        mock_invoke.assert_called_once_with("get_events", {"namespace": "prod", "limit": 20, "edge_site_id": "edge-1"})
 
 
 def _empty_evidence():

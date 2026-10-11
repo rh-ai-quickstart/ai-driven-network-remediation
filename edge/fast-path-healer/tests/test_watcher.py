@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 import respx
-
 from edge_fast_path_healer.watcher import WatcherSettings, scan_once
 
 _SETTINGS = WatcherSettings(
@@ -18,15 +17,7 @@ _SETTINGS = WatcherSettings(
     cooldown_seconds=300,
 )
 
-_DEP = {
-    "spec": {
-        "template": {
-            "spec": {
-                "containers": [{"resources": {"limits": {"memory": "64Mi"}}}]
-            }
-        }
-    }
-}
+_DEP = {"spec": {"template": {"spec": {"containers": [{"resources": {"limits": {"memory": "64Mi"}}}]}}}}
 
 
 def _oom_pod(finished_at: str) -> dict:

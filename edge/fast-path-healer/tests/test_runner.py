@@ -1,10 +1,9 @@
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from edge_fast_path_healer.models import RemediationResult
 from edge_fast_path_healer.runner import RunnerSettings, create_app
+from fastapi.testclient import TestClient
 
 _SETTINGS = RunnerSettings(
     namespace="dark-noc-edge",

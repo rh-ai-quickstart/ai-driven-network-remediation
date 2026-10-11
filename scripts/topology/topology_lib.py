@@ -115,7 +115,8 @@ def render_values_yaml(
         lines.append("  multiClusterCreds:")
         lines.append(f"    serviceAccountName: {mcp_service_account}")
         lines.extend(
-            f"  {line}" for line in render_mcp_openshift_volumes(
+            f"  {line}"
+            for line in render_mcp_openshift_volumes(
                 spokes,
                 prefix=prefix,
                 service_account_name=mcp_service_account,

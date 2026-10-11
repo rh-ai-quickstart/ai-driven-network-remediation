@@ -6,7 +6,10 @@ from servicenow_bootstrap.setup_validations import _resolve_validation_auth
 
 
 class TestResolveValidationAuth:
-    @patch("servicenow_bootstrap.setup_validations.load_creds_file", return_value={"user_id": "noc_agent", "password": "from-file"})
+    @patch(
+        "servicenow_bootstrap.setup_validations.load_creds_file",
+        return_value={"user_id": "noc_agent", "password": "from-file"},
+    )
     def test_prefers_api_key_from_env(self, _mock_creds, monkeypatch):
         monkeypatch.setenv("SERVICENOW_API_KEY", "env-api-key")
 

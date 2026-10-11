@@ -13,8 +13,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
-from shared.kafka import TopicConsumer
-
 from ran_anomaly_detector.config import (
     DETECT_INFERENCE_URL,
     DETECT_TOKEN,
@@ -27,6 +25,7 @@ from ran_anomaly_detector.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_anomaly_detector.detection import AnomalyDetectionService
+from shared.kafka import TopicConsumer
 
 AnomalyBuffer = deque[dict[str, Any]]
 

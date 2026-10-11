@@ -45,7 +45,7 @@ def _helm_template(*extra_sets: str) -> str:
 def test_ran_anomaly_detector_renders_empty_detect_token_by_default():
     rendered = _helm_template()
 
-    assert "- name: DETECT_TOKEN\n              value: \"\"" in rendered
+    assert '- name: DETECT_TOKEN\n              value: ""' in rendered
 
 
 def test_ran_anomaly_detector_renders_configured_detect_token():

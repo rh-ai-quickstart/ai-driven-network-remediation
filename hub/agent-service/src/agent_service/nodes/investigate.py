@@ -18,7 +18,10 @@ _TOOLS = [
                 "properties": {
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
                     "limit": {"type": "integer", "description": "Max events to return", "default": 20},
-                    "edge_site_id": {"type": "string", "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster."},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
                 },
                 "required": ["namespace"],
             },
@@ -54,7 +57,10 @@ _TOOLS = [
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
                     "container": {"type": "string", "description": "Container name"},
                     "tail_lines": {"type": "integer", "description": "Number of lines from the end", "default": 100},
-                    "edge_site_id": {"type": "string", "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster."},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
                 },
                 "required": ["pod_name", "namespace"],
             },
@@ -98,7 +104,10 @@ _TOOLS = [
                 "properties": {
                     "name": {"type": "string", "description": "Pod name (exact or prefix)"},
                     "namespace": {"type": "string", "description": "Kubernetes namespace"},
-                    "edge_site_id": {"type": "string", "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster."},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
                 },
                 "required": ["name", "namespace"],
             },

@@ -3,6 +3,7 @@
 import os
 
 import pytest
+
 from .conftest import mcp_call, mcp_list_tools
 
 _aap_mock_disabled = os.environ.get("ENABLE_AAP_MOCK", "true").lower() != "true"

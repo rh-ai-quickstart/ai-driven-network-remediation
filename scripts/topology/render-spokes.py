@@ -20,10 +20,10 @@ _DIR = Path(__file__).resolve().parent
 if str(_DIR) not in sys.path:
     sys.path.insert(0, str(_DIR))
 
-from topology_lib import deployment_mode_for, render_values_yaml, spoke_count_for
-
 
 def main(argv: list[str] | None = None) -> int:
+    from topology_lib import deployment_mode_for, render_values_yaml, spoke_count_for
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output",

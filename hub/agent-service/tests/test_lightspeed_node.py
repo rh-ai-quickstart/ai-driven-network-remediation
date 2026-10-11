@@ -888,11 +888,13 @@ def _make_playbook(uri_dict):
 
 class TestFixPatchTasks:
     def test_string_body_converted_to_dict(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "body": '{"spec": {"replicas": 3}}',
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "body": '{"spec": {"replicas": 3}}',
+            }
+        )
         _fix_patch_tasks(pb)
         uri = pb[0]["tasks"][0]["uri"]
         assert isinstance(uri["body"], dict)
@@ -900,56 +902,66 @@ class TestFixPatchTasks:
         assert uri["body_format"] == "json"
 
     def test_strategic_merge_patch_header_set(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "headers": {"Authorization": "Bearer tok"},
-            "body": {"spec": {}},
-            "body_format": "json",
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "headers": {"Authorization": "Bearer tok"},
+                "body": {"spec": {}},
+                "body_format": "json",
+            }
+        )
         _fix_patch_tasks(pb)
         headers = pb[0]["tasks"][0]["uri"]["headers"]
         assert headers["Content-Type"] == _STRATEGIC_MERGE_PATCH
         assert headers["Authorization"] == "Bearer tok"
 
     def test_invalid_content_type_param_stripped(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "content_type": "application/strategic-merge-patch+json",
-            "body": {"spec": {}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "content_type": "application/strategic-merge-patch+json",
+                "body": {"spec": {}},
+            }
+        )
         _fix_patch_tasks(pb)
         uri = pb[0]["tasks"][0]["uri"]
         assert "content_type" not in uri
         assert uri["headers"]["Content-Type"] == _STRATEGIC_MERGE_PATCH
 
     def test_status_code_added_when_missing(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "body": {"spec": {}},
-            "body_format": "json",
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "body": {"spec": {}},
+                "body_format": "json",
+            }
+        )
         _fix_patch_tasks(pb)
         assert pb[0]["tasks"][0]["uri"]["status_code"] == 200
 
     def test_existing_status_code_preserved(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "body": {"spec": {}},
-            "body_format": "json",
-            "status_code": 201,
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "body": {"spec": {}},
+                "body_format": "json",
+                "status_code": 201,
+            }
+        )
         _fix_patch_tasks(pb)
         assert pb[0]["tasks"][0]["uri"]["status_code"] == 201
 
     def test_get_tasks_untouched(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "GET",
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "GET",
+            }
+        )
         _fix_patch_tasks(pb)
         uri = pb[0]["tasks"][0]["uri"]
         assert "body_format" not in uri
@@ -965,73 +977,87 @@ class TestFixPatchTasks:
 
     def test_multiline_string_body(self):
         body_str = "spec:\n  template:\n    spec:\n      containers:\n        - name: app\n          resources:\n            limits:\n              memory: 512Mi\n"
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "body": body_str,
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "body": body_str,
+            }
+        )
         _fix_patch_tasks(pb)
         uri = pb[0]["tasks"][0]["uri"]
         assert isinstance(uri["body"], dict)
         assert uri["body"]["spec"]["template"]["spec"]["containers"][0]["name"] == "app"
 
     def test_headers_created_when_absent(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "body": {"spec": {}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "body": {"spec": {}},
+            }
+        )
         _fix_patch_tasks(pb)
         assert pb[0]["tasks"][0]["uri"]["headers"]["Content-Type"] == _STRATEGIC_MERGE_PATCH
 
     def test_wrong_content_type_overwritten(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "headers": {"Content-Type": "application/merge-patch+json"},
-            "body": {"spec": {}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "headers": {"Content-Type": "application/merge-patch+json"},
+                "body": {"spec": {}},
+            }
+        )
         _fix_patch_tasks(pb)
         assert pb[0]["tasks"][0]["uri"]["headers"]["Content-Type"] == _STRATEGIC_MERGE_PATCH
 
     def test_deployment_body_containers_wrapped_under_template(self):
-        pb = _make_playbook({
-            "url": "{{ hub_url }}/{{ edge_site_id }}/apis/apps/v1/namespaces/ns/deployments/myapp",
-            "method": "PATCH",
-            "body": {"spec": {"containers": [{"name": "app", "resources": {"limits": {"memory": "256Mi"}}}]}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "{{ hub_url }}/{{ edge_site_id }}/apis/apps/v1/namespaces/ns/deployments/myapp",
+                "method": "PATCH",
+                "body": {"spec": {"containers": [{"name": "app", "resources": {"limits": {"memory": "256Mi"}}}]}},
+            }
+        )
         _fix_patch_tasks(pb)
         body = pb[0]["tasks"][0]["uri"]["body"]
         assert "containers" not in body["spec"]
         assert body["spec"]["template"]["spec"]["containers"][0]["name"] == "app"
 
     def test_deployment_body_already_correct_not_double_wrapped(self):
-        pb = _make_playbook({
-            "url": "{{ hub_url }}/{{ edge_site_id }}/apis/apps/v1/namespaces/ns/deployments/myapp",
-            "method": "PATCH",
-            "body": {"spec": {"template": {"spec": {"containers": [{"name": "app"}]}}}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "{{ hub_url }}/{{ edge_site_id }}/apis/apps/v1/namespaces/ns/deployments/myapp",
+                "method": "PATCH",
+                "body": {"spec": {"template": {"spec": {"containers": [{"name": "app"}]}}}},
+            }
+        )
         _fix_patch_tasks(pb)
         body = pb[0]["tasks"][0]["uri"]["body"]
         assert body["spec"]["template"]["spec"]["containers"][0]["name"] == "app"
         assert "containers" not in body["spec"]
 
     def test_non_deployment_url_containers_not_wrapped(self):
-        pb = _make_playbook({
-            "url": "{{ hub_url }}/{{ edge_site_id }}/api/v1/namespaces/ns/pods/mypod",
-            "method": "PATCH",
-            "body": {"spec": {"containers": [{"name": "app"}]}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "{{ hub_url }}/{{ edge_site_id }}/api/v1/namespaces/ns/pods/mypod",
+                "method": "PATCH",
+                "body": {"spec": {"containers": [{"name": "app"}]}},
+            }
+        )
         _fix_patch_tasks(pb)
         body = pb[0]["tasks"][0]["uri"]["body"]
         assert body["spec"]["containers"][0]["name"] == "app"
 
     def test_json_patch_list_body_sets_json_patch_content_type(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "body": [{"op": "replace", "path": "/spec/replicas", "value": 3}],
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "body": [{"op": "replace", "path": "/spec/replicas", "value": 3}],
+            }
+        )
         _fix_patch_tasks(pb)
         uri = pb[0]["tasks"][0]["uri"]
         assert uri["headers"]["Content-Type"] == _JSON_PATCH
@@ -1042,11 +1068,16 @@ class TestFixPatchTasks:
         play = {
             "name": "single play",
             "hosts": "localhost",
-            "tasks": [{"name": "patch it", "uri": {
-                "url": "https://api/v1/...",
-                "method": "PATCH",
-                "body": '{"spec": {"replicas": 3}}',
-            }}],
+            "tasks": [
+                {
+                    "name": "patch it",
+                    "uri": {
+                        "url": "https://api/v1/...",
+                        "method": "PATCH",
+                        "body": '{"spec": {"replicas": 3}}',
+                    },
+                }
+            ],
         }
         result = sanitize_playbook(play)
         assert isinstance(result, list)
@@ -1055,21 +1086,25 @@ class TestFixPatchTasks:
         assert uri["headers"]["Content-Type"] == _STRATEGIC_MERGE_PATCH
 
     def test_apply_patch_content_type_preserved(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...",
-            "method": "PATCH",
-            "headers": {"Content-Type": _APPLY_PATCH},
-            "body": {"spec": {}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...",
+                "method": "PATCH",
+                "headers": {"Content-Type": _APPLY_PATCH},
+                "body": {"spec": {}},
+            }
+        )
         _fix_patch_tasks(pb)
         assert pb[0]["tasks"][0]["uri"]["headers"]["Content-Type"] == _APPLY_PATCH
 
     def test_field_manager_url_gets_apply_patch_content_type(self):
-        pb = _make_playbook({
-            "url": "https://api/v1/...?fieldManager=agent-service&force=true",
-            "method": "PATCH",
-            "body": {"spec": {}},
-        })
+        pb = _make_playbook(
+            {
+                "url": "https://api/v1/...?fieldManager=agent-service&force=true",
+                "method": "PATCH",
+                "body": {"spec": {}},
+            }
+        )
         _fix_patch_tasks(pb)
         assert pb[0]["tasks"][0]["uri"]["headers"]["Content-Type"] == _APPLY_PATCH
 
@@ -1078,7 +1113,9 @@ class TestFixPatchTasks:
 
 
 def _make_play_with_vars(play_vars, uri_dict):
-    return [{"name": "test play", "hosts": "localhost", "vars": play_vars, "tasks": [{"name": "call api", "uri": uri_dict}]}]
+    return [
+        {"name": "test play", "hosts": "localhost", "vars": play_vars, "tasks": [{"name": "call api", "uri": uri_dict}]}
+    ]
 
 
 class TestFixClusterProxyAuth:
@@ -1141,7 +1178,11 @@ class TestFixClusterProxyAuth:
                 "k8s_api_token": "{{ lookup('env', 'K8S_AUTH_API_KEY') }}",
                 "namespace": "edge-site-01",
             },
-            {"url": "{{ k8s_api_url }}/apis/apps/v1/...", "method": "PATCH", "headers": {"Authorization": "Bearer {{ k8s_api_token }}"}},
+            {
+                "url": "{{ k8s_api_url }}/apis/apps/v1/...",
+                "method": "PATCH",
+                "headers": {"Authorization": "Bearer {{ k8s_api_token }}"},
+            },
         )
         _fix_cluster_proxy_auth(pb)
         assert pb[0]["vars"]["k8s_api_url"] == "{{ hub_url }}/{{ edge_site_id }}"
@@ -1149,21 +1190,43 @@ class TestFixClusterProxyAuth:
         assert pb[0]["vars"]["namespace"] == "edge-site-01"
 
     def test_no_vars_section_does_not_crash(self):
-        pb = [{"name": "test", "hosts": "localhost", "tasks": [{"name": "t", "uri": {"url": "http://x", "method": "GET"}}]}]
+        pb = [
+            {
+                "name": "test",
+                "hosts": "localhost",
+                "tasks": [{"name": "t", "uri": {"url": "http://x", "method": "GET"}}],
+            }
+        ]
         _fix_cluster_proxy_auth(pb)
         assert "vars" not in pb[0]
 
     def test_task_level_env_block_stripped(self):
-        pb = [{"name": "p", "hosts": "localhost", "tasks": [
-            {"name": "t", "ansible.builtin.uri": {"url": "https://x", "method": "PATCH"}, "env": {"K8S_AUTH_HOST": "x"}},
-        ]}]
+        pb = [
+            {
+                "name": "p",
+                "hosts": "localhost",
+                "tasks": [
+                    {
+                        "name": "t",
+                        "ansible.builtin.uri": {"url": "https://x", "method": "PATCH"},
+                        "env": {"K8S_AUTH_HOST": "x"},
+                    },
+                ],
+            }
+        ]
         _fix_cluster_proxy_auth(pb)
         assert "env" not in pb[0]["tasks"][0]
 
     def test_task_level_environment_block_stripped(self):
-        pb = [{"name": "p", "hosts": "localhost", "tasks": [
-            {"name": "t", "uri": {"url": "https://x", "method": "GET"}, "environment": {"K8S_AUTH_HOST": "x"}},
-        ]}]
+        pb = [
+            {
+                "name": "p",
+                "hosts": "localhost",
+                "tasks": [
+                    {"name": "t", "uri": {"url": "https://x", "method": "GET"}, "environment": {"K8S_AUTH_HOST": "x"}},
+                ],
+            }
+        ]
         _fix_cluster_proxy_auth(pb)
         assert "environment" not in pb[0]["tasks"][0]
 
@@ -1258,18 +1321,21 @@ class TestQuoteJinjaRegex:
     def test_mixed_jinja_and_literal(self):
         """URL with Jinja and trailing literal text must be quoted."""
         from agent_service.playbook_sanitize import quote_jinja
+
         text = "    url: {{ hub_url }}/{{ edge_site_id }}/apis/v1/namespaces"
         result = quote_jinja(text)
         assert result == '    url: "{{ hub_url }}/{{ edge_site_id }}/apis/v1/namespaces"'
 
     def test_hyphenated_key(self):
         from agent_service.playbook_sanitize import quote_jinja
+
         text = "    Content-Type: {{ content_type }}"
         result = quote_jinja(text)
         assert result == '    Content-Type: "{{ content_type }}"'
 
     def test_already_quoted_not_double_quoted(self):
         from agent_service.playbook_sanitize import quote_jinja
+
         text = '    url: "{{ already_quoted }}"'
         result = quote_jinja(text)
         assert result == '    url: "{{ already_quoted }}"'
@@ -1285,7 +1351,11 @@ def _play_with_block(uri_dicts_by_section):
         if section == "block":
             block_tasks.append({"name": f"{section} task", "uri": uri_dict})
         # rescue/always are siblings of block inside the same task dict
-    task_entry = {"block": [{"name": "block task", "uri": uri_dicts_by_section.get("block", {"url": "http://x", "method": "GET"})}]}
+    task_entry = {
+        "block": [
+            {"name": "block task", "uri": uri_dicts_by_section.get("block", {"url": "http://x", "method": "GET"})}
+        ]
+    }
     if "rescue" in uri_dicts_by_section:
         task_entry["rescue"] = [{"name": "rescue task", "uri": uri_dicts_by_section["rescue"]}]
     if "always" in uri_dicts_by_section:
@@ -1295,21 +1365,27 @@ def _play_with_block(uri_dicts_by_section):
 
 class TestIterUriTasks:
     def test_flat_tasks(self):
-        play = {"name": "p", "hosts": "localhost", "tasks": [
-            {"name": "t1", "uri": {"url": "http://a", "method": "GET"}},
-            {"name": "t2", "ansible.builtin.uri": {"url": "http://b", "method": "POST"}},
-        ]}
+        play = {
+            "name": "p",
+            "hosts": "localhost",
+            "tasks": [
+                {"name": "t1", "uri": {"url": "http://a", "method": "GET"}},
+                {"name": "t2", "ansible.builtin.uri": {"url": "http://b", "method": "POST"}},
+            ],
+        }
         results = list(_iter_uri_tasks(play))
         assert len(results) == 2
         assert results[0][1]["url"] == "http://a"
         assert results[1][1]["url"] == "http://b"
 
     def test_block_rescue_always(self):
-        play = _play_with_block({
-            "block": {"url": "http://block", "method": "GET"},
-            "rescue": {"url": "http://rescue", "method": "GET"},
-            "always": {"url": "http://always", "method": "GET"},
-        })
+        play = _play_with_block(
+            {
+                "block": {"url": "http://block", "method": "GET"},
+                "rescue": {"url": "http://rescue", "method": "GET"},
+                "always": {"url": "http://always", "method": "GET"},
+            }
+        )
         results = list(_iter_uri_tasks(play))
         urls = [uri["url"] for _, uri in results]
         assert "http://block" in urls
@@ -1317,10 +1393,14 @@ class TestIterUriTasks:
         assert "http://always" in urls
 
     def test_non_uri_tasks_skipped(self):
-        play = {"name": "p", "hosts": "localhost", "tasks": [
-            {"name": "debug", "debug": {"msg": "hello"}},
-            {"name": "api call", "uri": {"url": "http://x", "method": "GET"}},
-        ]}
+        play = {
+            "name": "p",
+            "hosts": "localhost",
+            "tasks": [
+                {"name": "debug", "debug": {"msg": "hello"}},
+                {"name": "api call", "uri": {"url": "http://x", "method": "GET"}},
+            ],
+        }
         results = list(_iter_uri_tasks(play))
         assert len(results) == 1
 
@@ -1329,10 +1409,13 @@ class TestIterUriTasks:
         assert list(_iter_uri_tasks(play)) == []
 
     def test_pre_tasks_and_post_tasks(self):
-        play = {"name": "p", "hosts": "localhost",
-                "pre_tasks": [{"name": "pre", "uri": {"url": "http://pre", "method": "GET"}}],
-                "post_tasks": [{"name": "post", "uri": {"url": "http://post", "method": "GET"}}],
-                "tasks": []}
+        play = {
+            "name": "p",
+            "hosts": "localhost",
+            "pre_tasks": [{"name": "pre", "uri": {"url": "http://pre", "method": "GET"}}],
+            "post_tasks": [{"name": "post", "uri": {"url": "http://post", "method": "GET"}}],
+            "tasks": [],
+        }
         results = list(_iter_uri_tasks(play))
         urls = [uri["url"] for _, uri in results]
         assert "http://pre" in urls
@@ -1344,54 +1427,76 @@ class TestIterUriTasks:
 
 class TestStripDangerousHeaders:
     def test_impersonate_user_stripped(self):
-        pb = _make_playbook({
-            "url": "http://x", "method": "GET",
-            "headers": {"Authorization": "Bearer tok", "Impersonate-User": "admin"},
-        })
+        pb = _make_playbook(
+            {
+                "url": "http://x",
+                "method": "GET",
+                "headers": {"Authorization": "Bearer tok", "Impersonate-User": "admin"},
+            }
+        )
         _strip_dangerous_headers(pb)
         headers = pb[0]["tasks"][0]["uri"]["headers"]
         assert "Impersonate-User" not in headers
         assert headers["Authorization"] == "Bearer tok"
 
     def test_impersonate_group_stripped(self):
-        pb = _make_playbook({
-            "url": "http://x", "method": "GET",
-            "headers": {"Impersonate-Group": "system:masters"},
-        })
+        pb = _make_playbook(
+            {
+                "url": "http://x",
+                "method": "GET",
+                "headers": {"Impersonate-Group": "system:masters"},
+            }
+        )
         _strip_dangerous_headers(pb)
         assert "Impersonate-Group" not in pb[0]["tasks"][0]["uri"]["headers"]
 
     def test_impersonate_extra_stripped(self):
-        pb = _make_playbook({
-            "url": "http://x", "method": "GET",
-            "headers": {"Impersonate-Extra-scopes": "admin"},
-        })
+        pb = _make_playbook(
+            {
+                "url": "http://x",
+                "method": "GET",
+                "headers": {"Impersonate-Extra-scopes": "admin"},
+            }
+        )
         _strip_dangerous_headers(pb)
         assert "Impersonate-Extra-scopes" not in pb[0]["tasks"][0]["uri"]["headers"]
 
     def test_x_forwarded_for_stripped(self):
-        pb = _make_playbook({
-            "url": "http://x", "method": "GET",
-            "headers": {"X-Forwarded-For": "10.0.0.1", "Authorization": "Bearer tok"},
-        })
+        pb = _make_playbook(
+            {
+                "url": "http://x",
+                "method": "GET",
+                "headers": {"X-Forwarded-For": "10.0.0.1", "Authorization": "Bearer tok"},
+            }
+        )
         _strip_dangerous_headers(pb)
         headers = pb[0]["tasks"][0]["uri"]["headers"]
         assert "X-Forwarded-For" not in headers
         assert headers["Authorization"] == "Bearer tok"
 
     def test_x_real_ip_stripped(self):
-        pb = _make_playbook({
-            "url": "http://x", "method": "GET",
-            "headers": {"X-Real-IP": "10.0.0.1"},
-        })
+        pb = _make_playbook(
+            {
+                "url": "http://x",
+                "method": "GET",
+                "headers": {"X-Real-IP": "10.0.0.1"},
+            }
+        )
         _strip_dangerous_headers(pb)
         assert "X-Real-IP" not in pb[0]["tasks"][0]["uri"]["headers"]
 
     def test_normal_headers_preserved(self):
-        pb = _make_playbook({
-            "url": "http://x", "method": "GET",
-            "headers": {"Authorization": "Bearer tok", "Content-Type": "application/json", "Accept": "application/json"},
-        })
+        pb = _make_playbook(
+            {
+                "url": "http://x",
+                "method": "GET",
+                "headers": {
+                    "Authorization": "Bearer tok",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            }
+        )
         _strip_dangerous_headers(pb)
         headers = pb[0]["tasks"][0]["uri"]["headers"]
         assert headers["Authorization"] == "Bearer tok"
@@ -1406,10 +1511,12 @@ class TestStripDangerousHeaders:
         assert _strip_dangerous_headers(None) is None
 
     def test_block_rescue_tasks_also_stripped(self):
-        play = _play_with_block({
-            "block": {"url": "http://x", "method": "GET", "headers": {"Impersonate-User": "admin"}},
-            "rescue": {"url": "http://y", "method": "GET", "headers": {"X-Forwarded-For": "1.2.3.4"}},
-        })
+        play = _play_with_block(
+            {
+                "block": {"url": "http://x", "method": "GET", "headers": {"Impersonate-User": "admin"}},
+                "rescue": {"url": "http://y", "method": "GET", "headers": {"X-Forwarded-For": "1.2.3.4"}},
+            }
+        )
         pb = [play]
         _strip_dangerous_headers(pb)
         for task, uri in _iter_uri_tasks(play):
@@ -1451,9 +1558,11 @@ class TestValidateCertsInjection:
         assert pb[0]["tasks"][0]["uri"]["validate_certs"] is True
 
     def test_validate_certs_in_block_task(self):
-        play = _play_with_block({
-            "block": {"url": "http://x", "method": "GET"},
-        })
+        play = _play_with_block(
+            {
+                "block": {"url": "http://x", "method": "GET"},
+            }
+        )
         _fix_cluster_proxy_auth([play])
         for task, uri in _iter_uri_tasks(play):
             assert uri.get("validate_certs") is False
@@ -1464,30 +1573,44 @@ class TestValidateCertsInjection:
 
 class TestBlockRescuePostProcessing:
     def test_auth_header_injected_in_block_task(self):
-        play = _play_with_block({
-            "block": {"url": "{{ hub_url }}/{{ edge_site_id }}/api/v1/pods", "method": "GET"},
-        })
+        play = _play_with_block(
+            {
+                "block": {"url": "{{ hub_url }}/{{ edge_site_id }}/api/v1/pods", "method": "GET"},
+            }
+        )
         _fix_cluster_proxy_auth([play])
         for _, uri in _iter_uri_tasks(play):
             assert uri["headers"]["Authorization"] == "Bearer {{ token_acm }}"
 
     def test_patch_fixed_in_rescue_task(self):
-        play = _play_with_block({
-            "block": {"url": "http://x", "method": "GET"},
-            "rescue": {"url": "http://y", "method": "PATCH", "body": {"spec": {}},
-                       "headers": {"Content-Type": "application/merge-patch+json"}},
-        })
+        play = _play_with_block(
+            {
+                "block": {"url": "http://x", "method": "GET"},
+                "rescue": {
+                    "url": "http://y",
+                    "method": "PATCH",
+                    "body": {"spec": {}},
+                    "headers": {"Content-Type": "application/merge-patch+json"},
+                },
+            }
+        )
         _fix_patch_tasks([play])
         for _, uri in _iter_uri_tasks(play):
             if str(uri.get("method", "")).upper() == "PATCH":
                 assert uri["headers"]["Content-Type"] == _STRATEGIC_MERGE_PATCH
 
     def test_env_stripped_from_block_task(self):
-        play = {"name": "p", "hosts": "localhost", "tasks": [
-            {"block": [
-                {"name": "t", "uri": {"url": "http://x", "method": "GET"}, "env": {"K8S_AUTH_HOST": "x"}},
-            ]},
-        ]}
+        play = {
+            "name": "p",
+            "hosts": "localhost",
+            "tasks": [
+                {
+                    "block": [
+                        {"name": "t", "uri": {"url": "http://x", "method": "GET"}, "env": {"K8S_AUTH_HOST": "x"}},
+                    ]
+                },
+            ],
+        }
         _fix_cluster_proxy_auth([play])
         block_task = play["tasks"][0]["block"][0]
         assert "env" not in block_task
@@ -1516,10 +1639,12 @@ class TestParseSummaryJsonGreedy:
 class TestPromptRegressionGuard:
     def test_prompt_does_not_contain_never_use_lookup(self):
         from agent_service.config import LIGHTSPEED_PROMPT_TEMPLATE
+
         assert "NEVER use lookup" not in LIGHTSPEED_PROMPT_TEMPLATE
 
     def test_prompt_contains_available_variables(self):
         from agent_service.config import LIGHTSPEED_PROMPT_TEMPLATE
+
         assert "hub_url" in LIGHTSPEED_PROMPT_TEMPLATE
         assert "token_acm" in LIGHTSPEED_PROMPT_TEMPLATE
         assert "edge_site_id" in LIGHTSPEED_PROMPT_TEMPLATE

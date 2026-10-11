@@ -6,7 +6,6 @@ import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
-
 from ran_rca_service.config import get_llm
 from ran_rca_service.models import RCAState
 
@@ -92,6 +91,7 @@ def _extract_critical_kpis(kpi_window: list[dict]) -> str:
         return ""
 
     return "Critical absolute indicators (RSRP, SNR, BLER):\n" + "\n".join(lines)
+
 
 _RESPONSE_SCHEMA = {
     "type": "object",

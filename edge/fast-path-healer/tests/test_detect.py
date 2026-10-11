@@ -39,15 +39,7 @@ def test_pod_oom_event_key_ignores_missing_finished_at():
 
 
 def test_deployment_memory_limit_mi():
-    dep = {
-        "spec": {
-            "template": {
-                "spec": {
-                    "containers": [{"resources": {"limits": {"memory": "32Mi"}}}]
-                }
-            }
-        }
-    }
+    dep = {"spec": {"template": {"spec": {"containers": [{"resources": {"limits": {"memory": "32Mi"}}}]}}}}
     assert deployment_memory_limit_mi(dep) == 32
 
 

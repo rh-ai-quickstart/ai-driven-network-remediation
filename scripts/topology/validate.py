@@ -21,8 +21,6 @@ _DIR = Path(__file__).resolve().parent
 if str(_DIR) not in sys.path:
     sys.path.insert(0, str(_DIR))
 
-from topology_lib import build_spokes, deployment_mode_for, spoke_count_for
-
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
@@ -91,6 +89,8 @@ def _build_summary(
     spoke_name_prefix: str,
     edge_gitops: str,
 ) -> dict:
+    from topology_lib import spoke_count_for
+
     return {
         "clusterCount": cluster_count,
         "deploymentMode": mode,
@@ -135,6 +135,8 @@ def validate_topology(
     Checks run first and fail fast. Summary and info lines are built only after
     every check passes.
     """
+    from topology_lib import build_spokes, deployment_mode_for
+
     try:
         mode = deployment_mode_for(cluster_count)
         spokes = build_spokes(cluster_count, prefix=spoke_name_prefix, namespace=edge_namespace)

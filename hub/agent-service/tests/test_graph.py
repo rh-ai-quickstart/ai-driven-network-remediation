@@ -322,9 +322,7 @@ class TestConditionalRouting:
             AsyncMock(return_value=MatchVerdict.NO_MATCH),
         ):
             graph = build_graph()
-            result = await graph.ainvoke(
-                {"raw_event": "test event", "confidence_override": 0.95}
-            )
+            result = await graph.ainvoke({"raw_event": "test event", "confidence_override": 0.95})
 
         assert result["decision"] == "lightspeed"
         assert result["remediation_result"].generated_template_name is not None
@@ -335,9 +333,7 @@ class TestConditionalRouting:
             AsyncMock(return_value=MatchVerdict.ERROR),
         ):
             graph = build_graph()
-            result = await graph.ainvoke(
-                {"raw_event": "test event", "confidence_override": 0.95}
-            )
+            result = await graph.ainvoke({"raw_event": "test event", "confidence_override": 0.95})
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None

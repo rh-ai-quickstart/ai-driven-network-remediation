@@ -33,7 +33,7 @@ def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
 
 
 def _remediation_status(record: dict) -> str:
-    """"successful"/"failed" reflect a completed remediation attempt: audit records
+    """ "successful"/"failed" reflect a completed remediation attempt: audit records
     are only published by ran-remediation-service's audit_node after remediate_node
     has already polled the AAP job to a terminal state (or given up), so `success`
     is always a definite bool in practice — never a "pending"/"in-progress" record.
@@ -154,8 +154,7 @@ def format_chat_reply(
         model_insight = "Live model unavailable; using deterministic operational fallback."
 
     return (
-        category_tag
-        + "Summary:\n"
+        category_tag + "Summary:\n"
         f"- Anomalies detected: {len(anomalies)}\n"
         f"{anomaly_line}\n"
         f"- Request: {user_message}\n\n"

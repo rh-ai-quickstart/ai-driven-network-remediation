@@ -4,7 +4,11 @@ import pytest
 from helpers import make_log_event, make_rca, make_state
 
 from agent_service.models import GraphConfig
-from agent_service.nodes.remediate import _launch_job, _resolve_template, make_remediate_node
+from agent_service.nodes.remediate import (
+    _launch_job,
+    _resolve_template,
+    make_remediate_node,
+)
 
 _LAUNCH_OK = {"success": True, "job_id": 99, "status": "pending"}
 _JOB_DONE = {

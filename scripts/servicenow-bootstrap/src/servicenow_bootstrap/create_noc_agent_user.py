@@ -9,7 +9,6 @@ itil + rest_service roles needed for incident table CRUD.
 
 import argparse
 import json
-import os
 import secrets
 import string
 import sys

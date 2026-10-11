@@ -54,8 +54,10 @@ def _verify_auth(
     mock_api_key = os.getenv("SERVICENOW_API_KEY", "")
     if mock_api_key and x_sn_apikey and secrets.compare_digest(x_sn_apikey, mock_api_key):
         return "api-key"
-    if credentials and secrets.compare_digest(credentials.username, MOCK_USERNAME) and secrets.compare_digest(
-        credentials.password, MOCK_PASSWORD
+    if (
+        credentials
+        and secrets.compare_digest(credentials.username, MOCK_USERNAME)
+        and secrets.compare_digest(credentials.password, MOCK_PASSWORD)
     ):
         return credentials.username
     raise HTTPException(status_code=401, detail="Invalid credentials")

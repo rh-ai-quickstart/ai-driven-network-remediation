@@ -13,7 +13,6 @@ from typing import Any
 
 import httpx
 from loguru import logger
-
 from ran_anomaly_detector.config import DETECT_INFERENCE_URL, DETECT_TOKEN
 
 AnomalyOutput = dict[str, Any]
@@ -53,7 +52,9 @@ class AnomalyDetectionService:
         """Process a single TelecomTS JSON sample through ML detection."""
         kpi_window = sample.get("kpi_window")
         if not kpi_window or len(kpi_window) != 128:
-            logger.warning("Skipping sample with missing or invalid kpi_window (len={})", len(kpi_window) if kpi_window else 0)
+            logger.warning(
+                "Skipping sample with missing or invalid kpi_window (len={})", len(kpi_window) if kpi_window else 0
+            )
             return []
 
         detect_result = self._call_detect(kpi_window)
@@ -81,7 +82,9 @@ class AnomalyDetectionService:
 
         logger.info(
             "Anomaly detected: incident_id={} zone={} confidence={:.3f}",
-            incident_id, zone, confidence,
+            incident_id,
+            zone,
+            confidence,
         )
         return [output]
 

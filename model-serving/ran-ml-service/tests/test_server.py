@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from ran_ml_service.model import InvalidKpiWindowError
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
@@ -136,12 +135,23 @@ class TestPreprocessing:
 
         kpi_window = [
             {
-                "RSRP": -85.0, "DL_BLER": 0.0, "DL_MCS": 10.0, "UL_BLER": 0.0,
-                "UL_MCS": 5.0, "UL_NPRB": 20, "UL_SNR": 15.0, "TX_Bytes": 1000,
-                "RX_Bytes": 2000, "Estimated_UL_Buffer": 0, "PRBs_DL_Current": 50.0,
-                "PRBs_UL_Current": 30.0, "PRB_Utilization_DL": 0.5,
-                "PRB_Utilization_UL": 0.3, "UL_Protocol": "TCP",
-                "UL_NumberOfPackets": 100, "DL_Protocol": "UDP",
+                "RSRP": -85.0,
+                "DL_BLER": 0.0,
+                "DL_MCS": 10.0,
+                "UL_BLER": 0.0,
+                "UL_MCS": 5.0,
+                "UL_NPRB": 20,
+                "UL_SNR": 15.0,
+                "TX_Bytes": 1000,
+                "RX_Bytes": 2000,
+                "Estimated_UL_Buffer": 0,
+                "PRBs_DL_Current": 50.0,
+                "PRBs_UL_Current": 30.0,
+                "PRB_Utilization_DL": 0.5,
+                "PRB_Utilization_UL": 0.3,
+                "UL_Protocol": "TCP",
+                "UL_NumberOfPackets": 100,
+                "DL_Protocol": "UDP",
                 "DL_NumberOfPackets": 200,
             }
         ] * 128
@@ -155,12 +165,23 @@ class TestPreprocessing:
 
         kpi_window = [
             {
-                "RSRP": -85.0, "DL_BLER": 0.0, "DL_MCS": 10.0, "UL_BLER": 0.0,
-                "UL_MCS": 5.0, "UL_NPRB": 20, "UL_SNR": 15.0, "TX_Bytes": 1000,
-                "RX_Bytes": 2000, "Estimated_UL_Buffer": 0, "PRBs_DL_Current": 50.0,
-                "PRBs_UL_Current": 30.0, "PRB_Utilization_DL": 0.5,
-                "PRB_Utilization_UL": 0.3, "UL_Protocol": None,
-                "UL_NumberOfPackets": 100, "DL_Protocol": "None",
+                "RSRP": -85.0,
+                "DL_BLER": 0.0,
+                "DL_MCS": 10.0,
+                "UL_BLER": 0.0,
+                "UL_MCS": 5.0,
+                "UL_NPRB": 20,
+                "UL_SNR": 15.0,
+                "TX_Bytes": 1000,
+                "RX_Bytes": 2000,
+                "Estimated_UL_Buffer": 0,
+                "PRBs_DL_Current": 50.0,
+                "PRBs_UL_Current": 30.0,
+                "PRB_Utilization_DL": 0.5,
+                "PRB_Utilization_UL": 0.3,
+                "UL_Protocol": None,
+                "UL_NumberOfPackets": 100,
+                "DL_Protocol": "None",
                 "DL_NumberOfPackets": 200,
             }
         ] * 128

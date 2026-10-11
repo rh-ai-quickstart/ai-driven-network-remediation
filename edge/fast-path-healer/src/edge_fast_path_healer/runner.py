@@ -4,11 +4,10 @@ import os
 from dataclasses import dataclass
 
 import uvicorn
-from fastapi import FastAPI, Response
-
 from edge_fast_path_healer.k8s_client import load_k8s_apps_api
 from edge_fast_path_healer.models import RemediationEvent, RemediationResult
 from edge_fast_path_healer.remediate import remediate_oom
+from fastapi import FastAPI, Response
 
 
 @dataclass(frozen=True)

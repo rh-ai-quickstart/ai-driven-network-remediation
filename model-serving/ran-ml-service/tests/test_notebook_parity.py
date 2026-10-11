@@ -26,9 +26,9 @@ def _sha256(path: Path) -> str:
 def notebook_reference() -> dict:
     reference = json.loads(REFERENCE_PATH.read_text())
     notebook_path = REPO_ROOT / reference["notebook"]
-    assert _sha256(notebook_path) == reference["notebook_sha256"], (
-        "notebook changed without refreshing parity reference values"
-    )
+    assert (
+        _sha256(notebook_path) == reference["notebook_sha256"]
+    ), "notebook changed without refreshing parity reference values"
     return reference
 
 

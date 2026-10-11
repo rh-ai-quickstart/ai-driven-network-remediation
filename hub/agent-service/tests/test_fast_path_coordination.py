@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from helpers import make_log_event, make_rca, make_state
 
-from agent_service.config import FAST_PATH_LAST_HEAL_ANNOTATION
 from agent_service.models import GraphConfig
 from agent_service.nodes.remediate import make_remediate_node
 
@@ -17,8 +16,6 @@ class TestFastPathSkip:
             log_event=make_log_event(pod_name="edge-nginx-6b7f8c9d4-x2k9z", namespace="dark-noc-edge"),
             root_cause_analysis=make_rca(failure_type="OOMKilled", recommended_actions=["scale memory"]),
         )
-        recent = {"annotations": {FAST_PATH_LAST_HEAL_ANNOTATION: "2026-08-18T12:00:00Z"}}
-
         with (
             patch(
                 "agent_service.nodes.remediate.recent_deployment_remediation_actuation",

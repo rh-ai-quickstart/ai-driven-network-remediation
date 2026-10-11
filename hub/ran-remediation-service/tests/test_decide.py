@@ -2,18 +2,25 @@
 
 import pytest
 from ran_remediation_service.models import RemediationState
-from ran_remediation_service.nodes.decide import _CATEGORY_TO_TEMPLATE, _FALLBACK_TEMPLATE, decide_node
+from ran_remediation_service.nodes.decide import (
+    _CATEGORY_TO_TEMPLATE,
+    _FALLBACK_TEMPLATE,
+    decide_node,
+)
 
 
-@pytest.mark.parametrize(("category", "expected_template"), [
-    ("antenna_misalignment", "ran-antenna-tilt-adjust"),
-    ("interference", "ran-interference-mitigation"),
-    ("scheduler_degradation", "ran-scheduler-optimize"),
-    ("congestion", "ran-load-balance"),
-    ("capacity_exhaustion", "ran-capacity-expand"),
-    ("cell_failure", "ran-cell-recovery"),
-    ("unknown", "ran-generic-remediation"),
-])
+@pytest.mark.parametrize(
+    ("category", "expected_template"),
+    [
+        ("antenna_misalignment", "ran-antenna-tilt-adjust"),
+        ("interference", "ran-interference-mitigation"),
+        ("scheduler_degradation", "ran-scheduler-optimize"),
+        ("congestion", "ran-load-balance"),
+        ("capacity_exhaustion", "ran-capacity-expand"),
+        ("cell_failure", "ran-cell-recovery"),
+        ("unknown", "ran-generic-remediation"),
+    ],
+)
 def test_category_selects_template(category, expected_template):
     result = decide_node(RemediationState(root_cause_category=category))
 

@@ -19,17 +19,30 @@ import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
 
-from .config import MANTIS_CHECKPOINT, MANTIS_MODEL_PATH, TASK
+from .config import MANTIS_CHECKPOINT, MANTIS_MODEL_PATH
 
 PRETRAINED_SEQ_LEN = 512
 PRETRAINED_HIDDEN_DIM = 256
 
 KPI_CHANNELS = [
-    "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB",
-    "UL_SNR", "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer",
-    "PRBs_DL_Current", "PRBs_UL_Current", "PRB_Utilization_DL",
-    "PRB_Utilization_UL", "UL_Protocol", "UL_NumberOfPackets",
-    "DL_Protocol", "DL_NumberOfPackets",
+    "RSRP",
+    "DL_BLER",
+    "DL_MCS",
+    "UL_BLER",
+    "UL_MCS",
+    "UL_NPRB",
+    "UL_SNR",
+    "TX_Bytes",
+    "RX_Bytes",
+    "Estimated_UL_Buffer",
+    "PRBs_DL_Current",
+    "PRBs_UL_Current",
+    "PRB_Utilization_DL",
+    "PRB_Utilization_UL",
+    "UL_Protocol",
+    "UL_NumberOfPackets",
+    "DL_Protocol",
+    "DL_NumberOfPackets",
 ]
 
 PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2}
@@ -59,9 +72,7 @@ def _encode_channel(channel: str, value: Any, timestep: int) -> float:
     if channel in PROTOCOL_CHANNELS:
         if isinstance(value, str) or value is None:
             if value not in PROTOCOL_MAP:
-                raise InvalidKpiWindowError(
-                    f"invalid {channel} {value!r} at timestep {timestep}"
-                )
+                raise InvalidKpiWindowError(f"invalid {channel} {value!r} at timestep {timestep}")
             return float(PROTOCOL_MAP[value])
     elif value is None:
         raise InvalidKpiWindowError(f"null KPI {channel!r} at timestep {timestep}")
@@ -69,9 +80,7 @@ def _encode_channel(channel: str, value: Any, timestep: int) -> float:
     try:
         encoded = float(value)
     except (TypeError, ValueError) as exc:
-        raise InvalidKpiWindowError(
-            f"non-numeric KPI {channel!r} at timestep {timestep}: {value!r}"
-        ) from exc
+        raise InvalidKpiWindowError(f"non-numeric KPI {channel!r} at timestep {timestep}: {value!r}") from exc
 
     if encoded != encoded:  # NaN
         raise InvalidKpiWindowError(f"NaN KPI {channel!r} at timestep {timestep}")

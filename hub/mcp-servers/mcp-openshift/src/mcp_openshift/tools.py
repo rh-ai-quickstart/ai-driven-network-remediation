@@ -377,13 +377,7 @@ def get_deployment(
     try:
         data = json.loads(result["stdout"])
         meta = data.get("metadata", {}).get("annotations") or {}
-        tpl = (
-            data.get("spec", {})
-            .get("template", {})
-            .get("metadata", {})
-            .get("annotations")
-            or {}
-        )
+        tpl = data.get("spec", {}).get("template", {}).get("metadata", {}).get("annotations") or {}
         return {
             "success": True,
             "deployment": deployment,
@@ -392,7 +386,6 @@ def get_deployment(
         }
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"Failed to parse deployment output: {e}", "annotations": {}}
-
 
 
 @mcp.tool()

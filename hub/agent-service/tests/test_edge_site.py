@@ -1,4 +1,4 @@
-import json
+from helpers import make_log_event
 
 from agent_service.config import EDGE_NAMESPACE
 from agent_service.edge_site import (
@@ -6,7 +6,6 @@ from agent_service.edge_site import (
     remediation_should_retry,
     resolve_edge_site_id,
 )
-from helpers import make_log_event
 
 
 class TestExtractEdgeSiteIdFromAlert:

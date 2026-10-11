@@ -1,13 +1,11 @@
 """Unit tests for FastAPI server endpoints."""
 
-import asyncio
 import json
 from collections import deque
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from ran_remediation_service.server import _handle_enriched_message, app
 
 
@@ -88,17 +86,19 @@ _VALID_MESSAGE = {
 
 def _make_graph(success: bool = True):
     mock = MagicMock()
-    mock.ainvoke = AsyncMock(return_value={
-        "incident_id": "a3f7c2d1",
-        "zone": "A",
-        "application": "File",
-        "template_name": "ran-antenna-tilt-adjust",
-        "job_id": "7",
-        "job_status": "successful",
-        "success": success,
-        "output_summary": "ok=3",
-        "timestamp": "2026-09-22T10:00:00Z",
-    })
+    mock.ainvoke = AsyncMock(
+        return_value={
+            "incident_id": "a3f7c2d1",
+            "zone": "A",
+            "application": "File",
+            "template_name": "ran-antenna-tilt-adjust",
+            "job_id": "7",
+            "job_status": "successful",
+            "success": success,
+            "output_summary": "ok=3",
+            "timestamp": "2026-09-22T10:00:00Z",
+        }
+    )
     return mock
 
 

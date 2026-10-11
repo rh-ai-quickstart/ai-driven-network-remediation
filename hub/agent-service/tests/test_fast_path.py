@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_service.config import EDGE_NAMESPACE, FAST_PATH_LAST_HEAL_ANNOTATION, ROLLOUT_RESTART_ANNOTATION
+from agent_service.config import (
+    EDGE_NAMESPACE,
+    FAST_PATH_LAST_HEAL_ANNOTATION,
+    ROLLOUT_RESTART_ANNOTATION,
+)
 from agent_service.fast_path import (
     demo_requires_hub_aap,
     deployment_remediation_actuation_source,
@@ -12,9 +16,9 @@ from agent_service.fast_path import (
     is_clf_shaped_kafka_event,
     is_dashboard_demo_kafka_event,
     is_demo_oom_kafka_alert,
-    should_suppress_clf_feedback_loop,
     should_check_fast_path,
     should_consult_spoke_fast_path,
+    should_suppress_clf_feedback_loop,
     spoke_fast_path_actuated,
     spoke_fast_path_recent,
     target_deployment_name,
@@ -184,10 +188,7 @@ def test_target_deployment_name_derives_from_replicaset_pod():
 
 
 def test_target_deployment_name_maps_demo_nginx_edge_pod():
-    assert (
-        target_deployment_name("nginx-edge-oom", namespace=EDGE_NAMESPACE)
-        == "edge-nginx"
-    )
+    assert target_deployment_name("nginx-edge-oom", namespace=EDGE_NAMESPACE) == "edge-nginx"
 
 
 def test_target_deployment_name_returns_none_when_unparseable():

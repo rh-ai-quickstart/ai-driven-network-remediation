@@ -10,12 +10,12 @@ def main() -> None:
     from ran_remediation_service.graph import build_graph
 
     sample = {
-        "incident_id":     "demo-001",
-        "zone":            "A",
-        "application":     "File",
-        "ad_label":        "anomalous",
-        "ad_confidence":   0.9995,
-        "root_cause":      "Signal degradation consistent with antenna misalignment.",
+        "incident_id": "demo-001",
+        "zone": "A",
+        "application": "File",
+        "ad_label": "anomalous",
+        "ad_confidence": 0.9995,
+        "root_cause": "Signal degradation consistent with antenna misalignment.",
         "recommended_fix": "Adjust antenna tilt per vendor guide Section 4.3.2.",
     }
 

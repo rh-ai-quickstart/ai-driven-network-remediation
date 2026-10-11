@@ -12,7 +12,6 @@ import time
 
 from kafka import KafkaProducer
 from loguru import logger
-
 from ran_remediation_service.config import (
     KAFKA_BOOTSTRAP,
     KAFKA_REMEDIATION_TOPIC,
@@ -27,19 +26,19 @@ def build_audit_payload(state: RemediationState) -> dict:
         total_ms = max(0.0, time.time() * 1000 - state.incident_start_ms)
 
     return {
-        "timestamp":         state.timestamp or now_iso(),
-        "incident_id":       state.incident_id,
-        "zone":              state.zone,
-        "application":       state.application,
-        "ad_label":          state.ad_label,
-        "ad_confidence":     state.ad_confidence,
-        "root_cause":        state.root_cause,
-        "template_name":     state.template_name,
-        "job_id":            state.job_id,
-        "job_status":        state.job_status,
-        "success":           state.success,
-        "timed_out":         state.timed_out,
-        "output_summary":    state.output_summary,
+        "timestamp": state.timestamp or now_iso(),
+        "incident_id": state.incident_id,
+        "zone": state.zone,
+        "application": state.application,
+        "ad_label": state.ad_label,
+        "ad_confidence": state.ad_confidence,
+        "root_cause": state.root_cause,
+        "template_name": state.template_name,
+        "job_id": state.job_id,
+        "job_status": state.job_status,
+        "success": state.success,
+        "timed_out": state.timed_out,
+        "output_summary": state.output_summary,
         "total_duration_ms": total_ms,
     }
 

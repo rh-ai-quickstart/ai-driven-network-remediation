@@ -8,8 +8,8 @@ from agent_service.config import EDGE_NAMESPACE
 from agent_service.utils import (
     build_launch_extra_vars,
     derive_deployment_name,
-    normalize_component_name,
     invoke_tool,
+    normalize_component_name,
     warm_tool_cache,
 )
 

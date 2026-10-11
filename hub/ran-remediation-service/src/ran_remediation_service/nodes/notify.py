@@ -10,11 +10,6 @@ from __future__ import annotations
 import asyncio
 
 from loguru import logger
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-from slack_sdk.models.attachments import BlockAttachment
-from slack_sdk.models.blocks import DividerBlock, HeaderBlock, SectionBlock
-
 from ran_remediation_service.config import (
     SLACK_BOT_TOKEN,
     SLACK_CHANNEL,
@@ -22,9 +17,13 @@ from ran_remediation_service.config import (
     SLACK_TIMEOUT_SECONDS,
 )
 from ran_remediation_service.models import RemediationState
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
+from slack_sdk.models.attachments import BlockAttachment
+from slack_sdk.models.blocks import DividerBlock, HeaderBlock, SectionBlock
 
 _STATUS_COLORS = {
-    True:  "#00AA00",  # green — success
+    True: "#00AA00",  # green — success
     False: "#FF0000",  # red   — failure
 }
 
@@ -67,7 +66,8 @@ async def notify_node(state: RemediationState) -> dict:
     if not (SLACK_ENABLED and SLACK_BOT_TOKEN):
         logger.info(
             "Slack disabled — remediation result: incident_id={} success={}",
-            state.incident_id, state.success,
+            state.incident_id,
+            state.success,
         )
         return {}
 

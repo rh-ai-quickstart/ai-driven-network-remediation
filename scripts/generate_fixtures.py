@@ -19,11 +19,24 @@ FIXTURES_DIR = Path(__file__).resolve().parents[1] / "hub" / "telco-oran" / "src
 SEED = 42
 
 KPI_CHANNELS = [
-    "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB",
-    "UL_SNR", "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer",
-    "PRBs_DL_Current", "PRBs_UL_Current", "PRB_Utilization_DL",
-    "PRB_Utilization_UL", "UL_Protocol", "UL_NumberOfPackets",
-    "DL_Protocol", "DL_NumberOfPackets",
+    "RSRP",
+    "DL_BLER",
+    "DL_MCS",
+    "UL_BLER",
+    "UL_MCS",
+    "UL_NPRB",
+    "UL_SNR",
+    "TX_Bytes",
+    "RX_Bytes",
+    "Estimated_UL_Buffer",
+    "PRBs_DL_Current",
+    "PRBs_UL_Current",
+    "PRB_Utilization_DL",
+    "PRB_Utilization_UL",
+    "UL_Protocol",
+    "UL_NumberOfPackets",
+    "DL_Protocol",
+    "DL_NumberOfPackets",
 ]
 
 PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2}

@@ -43,8 +43,10 @@ def client():
     mock_remediation_consumer = MagicMock()
     mock_remediation_consumer.is_connected = True
 
-    with patch("ran_chatbot_service.AnomaliesConsumer", return_value=mock_anomalies_consumer), \
-         patch("ran_chatbot_service.RemediationConsumer", return_value=mock_remediation_consumer):
+    with (
+        patch("ran_chatbot_service.AnomaliesConsumer", return_value=mock_anomalies_consumer),
+        patch("ran_chatbot_service.RemediationConsumer", return_value=mock_remediation_consumer),
+    ):
         with TestClient(app) as test_client:
             test_client.app.state.recent_remediations = deque(maxlen=100)
             yield test_client

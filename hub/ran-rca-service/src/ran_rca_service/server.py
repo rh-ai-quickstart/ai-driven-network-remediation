@@ -13,8 +13,6 @@ from fastapi import FastAPI, Query, Request
 from fastapi.responses import JSONResponse
 from kafka import KafkaProducer
 from loguru import logger
-from shared.kafka import TopicConsumer
-
 from ran_rca_service.config import (
     KAFKA_ANOMALIES_TOPIC,
     KAFKA_BOOTSTRAP,
@@ -24,6 +22,7 @@ from ran_rca_service.config import (
     RECENT_ANOMALIES_LIMIT,
 )
 from ran_rca_service.graph import build_graph
+from shared.kafka import TopicConsumer
 
 EnrichedBuffer = deque[dict[str, Any]]
 

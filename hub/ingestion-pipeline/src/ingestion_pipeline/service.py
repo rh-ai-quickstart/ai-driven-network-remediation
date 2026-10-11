@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 from ingestion_pipeline.clients.llamastack import (
-    FailedIngestItem,
     IngestItem,
     LlamaStackVectorStoreClient,
     VectorStoreFileContentSummary,

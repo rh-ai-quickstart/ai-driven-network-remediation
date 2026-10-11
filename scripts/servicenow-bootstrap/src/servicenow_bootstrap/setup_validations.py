@@ -151,9 +151,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
                 "close_notes": "Validation: resolved by servicenow-bootstrap",
                 "resolved_by": "noc_agent",
             }
-            success, data, error = self._make_request(
-                "PATCH", f"table/incident/{self._created_sys_id}", payload
-            )
+            success, data, error = self._make_request("PATCH", f"table/incident/{self._created_sys_id}", payload)
             if success:
                 return True, f"  RESOLVE passed — incident marked as Resolved (close_code={close_code})"
             last_error = error
@@ -240,10 +238,7 @@ class ServiceNowIncidentTester(ServiceNowClient):
             print("\nAll tests passed! Your ServiceNow instance is ready for " "incident management.")
             print("\nYou can now deploy with your ServiceNow instance:")
             if self.api_key:
-                print(
-                    f"  SERVICENOW_URL={self.instance_url}\n"
-                    "  SERVICENOW_API_KEY=<from .servicenow-creds.json>"
-                )
+                print(f"  SERVICENOW_URL={self.instance_url}\n" "  SERVICENOW_API_KEY=<from .servicenow-creds.json>")
             else:
                 print(
                     f"  SERVICENOW_URL={self.instance_url}\n"

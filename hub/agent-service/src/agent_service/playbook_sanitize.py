@@ -19,12 +19,8 @@ _BLOCK_KEYS = ("block", "rescue", "always")
 _DANGEROUS_HEADER_PREFIXES = ("impersonate-",)
 _DANGEROUS_HEADERS = frozenset({"x-forwarded-for", "x-real-ip"})
 
-_K8S_HOST_LOOKUP_RE = re.compile(
-    r"\{\{\s*lookup\s*\(\s*['\"]env['\"]\s*,\s*['\"]K8S_AUTH_HOST['\"]\s*\)\s*\}\}"
-)
-_K8S_KEY_LOOKUP_RE = re.compile(
-    r"\{\{\s*lookup\s*\(\s*['\"]env['\"]\s*,\s*['\"]K8S_AUTH_API_KEY['\"]\s*\)\s*\}\}"
-)
+_K8S_HOST_LOOKUP_RE = re.compile(r"\{\{\s*lookup\s*\(\s*['\"]env['\"]\s*,\s*['\"]K8S_AUTH_HOST['\"]\s*\)\s*\}\}")
+_K8S_KEY_LOOKUP_RE = re.compile(r"\{\{\s*lookup\s*\(\s*['\"]env['\"]\s*,\s*['\"]K8S_AUTH_API_KEY['\"]\s*\)\s*\}\}")
 _BASIC_AUTH_KEYS = ("url_username", "url_password", "force_basic_auth")
 _DEPLOYMENT_URL_RE = re.compile(r"/deployments/")
 
@@ -39,11 +35,13 @@ def fix_ansible_facts(yaml_text: str) -> str:
 
 def quote_jinja(yaml_text: str) -> str:
     """Quote bare Jinja2 expressions so the YAML is valid for Ansible."""
+
     def _replacer(m):
         prefix, value = m.group(1), m.group(2)
         if value.startswith('"') or value.startswith("'"):
             return m.group(0)
         return f'{prefix}"{value}"'
+
     return _UNQUOTED_JINJA_RE.sub(_replacer, yaml_text)
 
 

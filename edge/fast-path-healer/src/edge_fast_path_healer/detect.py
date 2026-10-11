@@ -18,9 +18,7 @@ def _finished_at_is_recent(finished_at: str | None, max_age_seconds: int) -> boo
     return age.total_seconds() < max_age_seconds
 
 
-def pod_oom_event_key(
-    pod: dict, *, max_age_seconds: int = DEFAULT_OOM_MAX_AGE_SECONDS
-) -> str | None:
+def pod_oom_event_key(pod: dict, *, max_age_seconds: int = DEFAULT_OOM_MAX_AGE_SECONDS) -> str | None:
     name = pod.get("metadata", {}).get("name", "")
     statuses = pod.get("status", {}).get("containerStatuses", [])
     for status in statuses:
@@ -35,12 +33,7 @@ def pod_oom_event_key(
 
 
 def deployment_memory_limit_mi(deployment: dict) -> int | None:
-    containers = (
-        deployment.get("spec", {})
-        .get("template", {})
-        .get("spec", {})
-        .get("containers", [])
-    )
+    containers = deployment.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
     if not containers:
         return None
     mem = (containers[0].get("resources") or {}).get("limits", {}).get("memory", "")

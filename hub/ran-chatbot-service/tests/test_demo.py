@@ -4,7 +4,6 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from ran_chatbot_service.demo import build_demo_sample, publish_demo_metrics
 
 
@@ -55,11 +54,24 @@ class TestBuildDemoSample:
         timestep = payload["kpi_window"][0]
 
         expected_channels = {
-            "RSRP", "DL_BLER", "DL_MCS", "UL_BLER", "UL_MCS", "UL_NPRB",
-            "UL_SNR", "TX_Bytes", "RX_Bytes", "Estimated_UL_Buffer",
-            "PRBs_DL_Current", "PRBs_UL_Current", "PRB_Utilization_DL",
-            "PRB_Utilization_UL", "UL_Protocol", "UL_NumberOfPackets",
-            "DL_Protocol", "DL_NumberOfPackets",
+            "RSRP",
+            "DL_BLER",
+            "DL_MCS",
+            "UL_BLER",
+            "UL_MCS",
+            "UL_NPRB",
+            "UL_SNR",
+            "TX_Bytes",
+            "RX_Bytes",
+            "Estimated_UL_Buffer",
+            "PRBs_DL_Current",
+            "PRBs_UL_Current",
+            "PRB_Utilization_DL",
+            "PRB_Utilization_UL",
+            "UL_Protocol",
+            "UL_NumberOfPackets",
+            "DL_Protocol",
+            "DL_NumberOfPackets",
         }
         assert expected_channels.issubset(set(timestep.keys()))
 
