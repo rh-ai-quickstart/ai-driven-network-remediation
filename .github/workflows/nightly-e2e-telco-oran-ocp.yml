@@ -79,6 +79,29 @@ jobs:
           OCP_TOKEN: ${{ secrets.OCP_TOKEN }}
           OCP_SERVER: ${{ secrets.OCP_SERVER }}
 
+      - name: Resolve shared detector URL
+        shell: bash
+        env:
+          CONFIGURED_DETECT_URL: ${{ vars.ADNR_DETECT_INFERENCE_URL }}
+        run: |
+          detect_url="${CONFIGURED_DETECT_URL}"
+          if [ -z "${detect_url}" ]; then
+            predictor_url="$(oc get inferenceservice ran-ml-service \
+              -n model-serving -o jsonpath='{.status.url}' 2>/dev/null || true)"
+            if [ -n "${predictor_url}" ]; then
+              detect_url="${predictor_url%/}/v1/detect"
+            fi
+          fi
+          if [ -z "${detect_url}" ]; then
+            echo "ADNR_DETECT_INFERENCE_URL is not configured and the shared ran-ml-service URL could not be discovered."
+            exit 1
+          fi
+          case "${detect_url}" in
+            */v1/detect) ;;
+            *) detect_url="${detect_url%/}/v1/detect" ;;
+          esac
+          echo "ADNR_DETECT_INFERENCE_URL=${detect_url}" >> "${GITHUB_ENV}"
+
       - name: Pre-cleanup
         continue-on-error: true
         shell: bash
@@ -87,20 +110,18 @@ jobs:
 
       - name: Helm install
         shell: bash
-        # The legacy job intentionally exercises Telco without a predictor.
-        # The parallel ml-integration job enables the detector with its URL.
         run: |
           make helm-install \
             ENABLE_TELCO_ORAN=true \
             ENABLE_NETWORK_REMEDIATION=false \
             EDGE_RBAC_ENABLED=false \
             ROUTES_ENABLED=false \
-            AUTO_INGEST_ON_STARTUP=false \
-            HELM_EXTRA_ARGS="--set telco.ranAnomalyDetector.enabled=false"
+            AUTO_INGEST_ON_STARTUP=false
         env:
           ADNR_LLM_ID: ${{ vars.ADNR_LLM_ID }}
           ADNR_LLM_URL: ${{ vars.ADNR_LLM_URL }}
           ADNR_LLM_TOKEN: ${{ secrets.ADNR_LLM_TOKEN }}
+          ADNR_DETECT_TOKEN: ${{ secrets.ADNR_DETECT_TOKEN }}
 
       - name: Run Telco ORAN integration tests
         shell: bash
@@ -138,8 +159,8 @@ jobs:
           ADNR_DETECT_TOKEN: ${{ secrets.ADNR_DETECT_TOKEN }}
         run: |
           if [ -z "${ADNR_DETECT_INFERENCE_URL}" ]; then
-            echo "ADNR_DETECT_INFERENCE_URL variable is missing or empty; skipping ML integration."
-            exit 0
+            echo "ADNR_DETECT_INFERENCE_URL variable is missing or empty."
+            exit 1
           fi
           if [ -z "${ADNR_DETECT_TOKEN}" ]; then
             echo "ADNR_DETECT_TOKEN is unset. The predictor request will be unauthenticated."

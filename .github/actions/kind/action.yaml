@@ -103,7 +103,6 @@ runs:
           HELM_EXTRA_ARGS="\
             --set waitImage=curlimages/curl:8.14.1 \
             --set network.waitImage=curlimages/curl:8.14.1 \
-            --set telco.ranAnomalyDetector.enabled=false \
             --set network.mcpSecrets.openshift.create=true \
             --set-file network.mcpSecrets.openshift.kubeconfig=/tmp/edge-kubeconfig \
             --set network.mcp-servers.mcp-servers.noc-lokistack.enabled=false \

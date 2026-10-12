@@ -91,6 +91,8 @@ jobs:
           ADNR_LLM_ID: ${{ vars.ADNR_LLM_ID }}
           ADNR_LLM_URL: ${{ vars.ADNR_LLM_URL }}
           ADNR_LLM_TOKEN: ${{ secrets.ADNR_LLM_TOKEN }}
+          ADNR_DETECT_INFERENCE_URL: ${{ vars.ADNR_DETECT_INFERENCE_URL }}
+          ADNR_DETECT_TOKEN: ${{ secrets.ADNR_DETECT_TOKEN }}
           ENABLE_TELCO_ORAN: ${{ inputs.enable_telco_oran }}
           ENABLE_NETWORK_REMEDIATION: ${{ inputs.enable_network_remediation }}
 
