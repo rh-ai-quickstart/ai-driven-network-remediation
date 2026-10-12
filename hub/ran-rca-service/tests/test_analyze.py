@@ -20,6 +20,24 @@ def mock_llm():
 
 class TestSuccessfulLlmCall:
     @pytest.mark.asyncio
+    async def test_confident_ml_hint_preserves_kpis_and_vendor_evidence(self, mock_llm):
+        from ran_rca_service.nodes.analyze import analyze_node
+
+        await analyze_node(make_state(
+            ml_class="Co-Channel Interference (Severe)",
+            ml_class_index=2,
+            ml_confidence=0.95,
+            ml_status="used",
+            ml_steer_used=True,
+            context_snippets=["vendor RF guide section 4"],
+        ))
+        user_msg = mock_llm.ainvoke.call_args[0][0][1].content
+        assert "Mantis RCA suggestion: Co-Channel Interference (Severe)" in user_msg
+        assert "Top 8 most variable KPIs" in user_msg
+        assert "Critical absolute indicators" in user_msg
+        assert "vendor RF guide section 4" in user_msg
+
+    @pytest.mark.asyncio
     async def test_returns_root_cause_category_from_llm(self, mock_llm):
         from ran_rca_service.nodes.analyze import analyze_node
 

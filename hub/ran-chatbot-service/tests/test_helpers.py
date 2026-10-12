@@ -18,6 +18,21 @@ def test_enriched_anomaly_includes_root_cause_category(sample_anomaly):
 
 
 class TestBuildChatContext:
+    def test_ml_advice_is_separate_from_final_diagnosis(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={
+            "ml_class": "Co-Channel Interference (Severe)",
+            "ml_class_index": 2,
+            "ml_confidence": 0.93,
+            "ml_status": "used",
+            "ml_steer_used": True,
+        })
+        prompt = build_chat_context("Explain", [anomaly], [], [])
+        assert "Mantis RCA prediction: Co-Channel Interference (Severe)" in prompt
+        assert "Final LLM category: antenna_misalignment" in prompt
+        reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
+        assert "Mantis RCA Prediction:\n- Co-Channel Interference (Severe)" in reply
+        assert "Final LLM Operational Category:\n- antenna_misalignment" in reply
+
     def test_includes_anomaly_details(self, sample_anomalies):
         prompt = build_chat_context("What's happening?", sample_anomalies, [], [])
         assert "test-001" in prompt
@@ -150,6 +165,23 @@ class TestCallModel:
 
 
 class TestFormatChatReply:
+    def test_requested_incident_uses_its_own_ml_prediction(self, sample_anomaly):
+        older = sample_anomaly.model_copy(update={
+            "incident_id": "older-123",
+            "ml_class": "Antenna Failure",
+            "ml_confidence": 0.93,
+            "ml_steer_used": True,
+        })
+        newer = sample_anomaly.model_copy(update={
+            "incident_id": "newer-456",
+            "ml_class": "Resource Allocation Bugs",
+            "ml_confidence": 0.8,
+        })
+        reply = format_chat_reply("Explain older-123", "analysis", [older, newer])
+        assert "Incident older-123" in reply
+        assert "Mantis RCA Prediction:\n- Antenna Failure" in reply
+        assert "Resource Allocation Bugs" not in reply
+
     def test_with_anomalies_and_live_reply(self, sample_anomalies):
         reply = format_chat_reply("What's wrong?", "Signal degradation in zone A.", sample_anomalies)
         assert reply.startswith("[Antenna Misalignment] ")

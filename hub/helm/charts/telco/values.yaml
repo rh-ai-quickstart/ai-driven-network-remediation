@@ -56,6 +56,8 @@ ranRcaService:
     kafkaGroupId: "ran-rca-service"
     kafkaConsumerEnabled: "true"
     recentAnomaliesLimit: "100"
+    classifyInferenceUrl: ""
+    classifyToken: ""
   service:
     type: ClusterIP
     port: 8003

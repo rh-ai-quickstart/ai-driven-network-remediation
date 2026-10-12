@@ -131,6 +131,11 @@ class TestHandleAnomalyMessage:
                 "root_cause_category": "antenna_misalignment",
                 "root_cause": "cause",
                 "recommended_fix": "fix",
+                "ml_class": "Antenna Failure",
+                "ml_class_index": 0,
+                "ml_confidence": 0.91,
+                "ml_status": "used",
+                "ml_steer_used": True,
             }
         )
         producer = MagicMock()
@@ -146,6 +151,10 @@ class TestHandleAnomalyMessage:
         assert enriched["root_cause_category"] == "antenna_misalignment"
         assert enriched["root_cause"] == "cause"
         assert enriched["recommended_fix"] == "fix"
+        assert enriched["kpi_window"] == SAMPLE_ANOMALY["kpi_window"]
+        assert enriched["ml_class"] == "Antenna Failure"
+        assert enriched["ml_status"] == "used"
+        assert enriched["ml_steer_used"] is True
 
     def test_skips_malformed_json(self):
         from collections import deque

@@ -33,6 +33,21 @@ def test_unmapped_category_uses_generic_template():
     assert result["template_name"] == _FALLBACK_TEMPLATE
 
 
+def test_confident_ml_disagreement_does_not_choose_playbook():
+    enriched = {
+        "incident_id": "pinned-incident",
+        "root_cause_category": "antenna_misalignment",
+        "ml_class": "Co-Channel Interference (Severe)",
+        "ml_class_index": 2,
+        "ml_confidence": 0.99,
+        "ml_status": "used",
+        "ml_steer_used": True,
+    }
+    result = decide_node(RemediationState.model_validate(enriched))
+    assert result["template_name"] == "ran-antenna-tilt-adjust"
+    assert result["extra_vars"]["root_cause_category"] == "antenna_misalignment"
+
+
 def test_decide_node_returns_template_and_extra_vars():
     state = RemediationState(
         incident_id="abc123",

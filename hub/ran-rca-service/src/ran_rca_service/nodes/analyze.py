@@ -133,6 +133,12 @@ async def analyze_node(state: RCAState) -> dict:
         user_content += f"\n\nTop 8 most variable KPIs:\n{kpi_summary}"
     if critical_kpis:
         user_content += f"\n\n{critical_kpis}"
+    if state.ml_steer_used:
+        user_content += (
+            f"\n\nMantis RCA suggestion: {state.ml_class} "
+            f"(index {state.ml_class_index}, confidence {state.ml_confidence:.3f}). "
+            "Use this as evidence; choose the final operational category from the KPIs and vendor documentation."
+        )
     if context:
         user_content += f"\n\nVendor documentation context:\n{context}"
 

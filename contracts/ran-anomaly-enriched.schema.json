@@ -4,7 +4,7 @@
   "title": "Enriched RAN Anomaly (ran-anomalies-enriched topic)",
   "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis on ML-detected anomalies.",
   "type": "object",
-  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause_category", "root_cause", "recommended_fix"],
+  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause_category", "root_cause", "recommended_fix", "ml_class", "ml_class_index", "ml_confidence", "ml_status", "ml_steer_used"],
   "properties": {
     "incident_id": {
       "type": "string",
@@ -50,6 +50,11 @@
     "recommended_fix": {
       "type": "string",
       "description": "LLM-recommended remediation action referencing vendor documentation."
-    }
+    },
+    "ml_class": {"type": "string"},
+    "ml_class_index": {"type": ["integer", "null"], "minimum": 0, "maximum": 9},
+    "ml_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "ml_status": {"type": "string", "enum": ["disabled", "used", "low_confidence", "unavailable"]},
+    "ml_steer_used": {"type": "boolean"}
   }
 }

@@ -15,6 +15,18 @@ def _patch_rag_client(mock):
 
 class TestQueryConstruction:
     @pytest.mark.asyncio
+    async def test_confident_ml_hint_steers_search(self):
+        mock = MagicMock()
+        mock.search = AsyncMock(return_value=[])
+        with _patch_rag_client(mock):
+            result = await rag_retrieval_node(make_state(
+                ml_class="Antenna Failure", ml_class_index=0,
+                ml_confidence=0.9, ml_status="used", ml_steer_used=True,
+            ))
+        assert "Antenna Failure" in result["rag_query_used"]
+        assert "RSRP" in result["rag_query_used"]
+
+    @pytest.mark.asyncio
     async def test_query_built_from_relevant_fields(self):
         mock = MagicMock()
         mock.search = AsyncMock(return_value=[])

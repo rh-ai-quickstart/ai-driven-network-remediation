@@ -20,6 +20,11 @@ class RCAState(BaseModel):
     root_cause_category: str = "unknown"
     root_cause: str = ""
     recommended_fix: str = ""
+    ml_class: str = ""
+    ml_class_index: int | None = None
+    ml_confidence: float | None = None
+    ml_status: str = "disabled"
+    ml_steer_used: bool = False
 
     def kpi_summary(self, top_n: int = 0) -> str:
         """Per-channel min/mean/max sorted by range (most variable first). 0 = all."""

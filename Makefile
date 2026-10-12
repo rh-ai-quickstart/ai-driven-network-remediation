@@ -223,6 +223,10 @@ helm_adnr_detect_args = \
 	$(if $(ADNR_DETECT_INFERENCE_URL),--set-string telco.ranAnomalyDetector.env.detectInferenceUrl='$(ADNR_DETECT_INFERENCE_URL)',) \
 	$(if $(ADNR_DETECT_TOKEN),--set-string telco.ranAnomalyDetector.env.detectToken='$(ADNR_DETECT_TOKEN)',)
 
+helm_adnr_classify_args = \
+	$(if $(ADNR_CLASSIFY_INFERENCE_URL),--set-string telco.ranRcaService.env.classifyInferenceUrl='$(ADNR_CLASSIFY_INFERENCE_URL)',) \
+	$(if $(ADNR_CLASSIFY_TOKEN),--set-string telco.ranRcaService.env.classifyToken='$(ADNR_CLASSIFY_TOKEN)',)
+
 helm_mcp_image_args = \
 	--set network.mcp-servers.mcp-servers.noc-openshift.image.repository=$(REGISTRY)/noc-mcp-openshift \
 	--set network.mcp-servers.mcp-servers.noc-openshift.image.tag=$(VERSION) \
@@ -366,6 +370,7 @@ helm_all_args = \
 	$(helm_gitea_args) \
 	$(helm_adnr_llm_args) \
 	$(helm_adnr_detect_args) \
+	$(helm_adnr_classify_args) \
 	$(helm_autorag_args) \
 	$(helm_lightspeed_args) \
 	$(helm_slack_args) \

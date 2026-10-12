@@ -55,7 +55,7 @@ def _handle_anomaly_message(
         result = loop.run_until_complete(graph.ainvoke(anomaly))
     except Exception:  # noqa: BLE001 - Kafka consumption must survive graph failures.
         logger.exception("Graph invocation failed, forwarding anomaly unenriched")
-        result = {**anomaly, "root_cause_category": "unknown", "root_cause": "", "recommended_fix": ""}
+        result = {**anomaly, "root_cause_category": "unknown", "root_cause": "", "recommended_fix": "", "ml_status": "unavailable", "ml_steer_used": False}
 
     enriched = {
         "incident_id": result.get("incident_id", ""),
@@ -67,6 +67,11 @@ def _handle_anomaly_message(
         "root_cause_category": result.get("root_cause_category", "unknown"),
         "root_cause": result.get("root_cause", ""),
         "recommended_fix": result.get("recommended_fix", ""),
+        "ml_class": result.get("ml_class", ""),
+        "ml_class_index": result.get("ml_class_index"),
+        "ml_confidence": result.get("ml_confidence"),
+        "ml_status": result.get("ml_status", "disabled"),
+        "ml_steer_used": result.get("ml_steer_used", False),
     }
 
     logger.info("RAN anomaly enriched: incident_id={} zone={}", enriched["incident_id"], enriched["zone"])

@@ -10,6 +10,7 @@ and fine-tuned task weights from a local .pt checkpoint.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from loguru import logger
 
-from .config import MANTIS_CHECKPOINT, MANTIS_MODEL_PATH
+from .config import MANTIS_CHECKPOINT, MANTIS_MODEL_PATH, TASK
 
 PRETRAINED_SEQ_LEN = 512
 PRETRAINED_HIDDEN_DIM = 256
@@ -49,7 +50,7 @@ PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2}
 PROTOCOL_CHANNELS = frozenset({"UL_Protocol", "DL_Protocol"})
 
 AD_LABELS = ["normal", "anomalous"]
-RCA_LABELS = [
+RCA_CLASSES = (
     "Antenna Failure",
     "Co-Channel Interference (Mild)",
     "Co-Channel Interference (Severe)",
@@ -60,7 +61,7 @@ RCA_LABELS = [
     "Resource Allocation Bugs",
     "High Network Congestion (Gradual Buildup)",
     "High Network Congestion (Sudden Spike)",
-]
+)
 
 
 class InvalidKpiWindowError(ValueError):
@@ -82,8 +83,10 @@ def _encode_channel(channel: str, value: Any, timestep: int) -> float:
     except (TypeError, ValueError) as exc:
         raise InvalidKpiWindowError(f"non-numeric KPI {channel!r} at timestep {timestep}: {value!r}") from exc
 
-    if encoded != encoded:  # NaN
+    if math.isnan(encoded):
         raise InvalidKpiWindowError(f"NaN KPI {channel!r} at timestep {timestep}")
+    if not math.isfinite(encoded):
+        raise InvalidKpiWindowError(f"non-finite KPI {channel!r} at timestep {timestep}")
     return encoded
 
 
@@ -121,13 +124,15 @@ class PretrainedMantisEncoder(nn.Module):
 class MantisPredictor:
     """Wraps encoder + head for inference. Handles loading and preprocessing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.encoder: PretrainedMantisEncoder | None = None
         self.head: nn.Module | None = None
         self.task: str = ""
         self.n_classes: int = 0
         self.labels: list[str] = []
-        self._loaded = False
+        self._loaded: bool = False
+        self.rca_means: torch.Tensor | None = None
+        self.rca_stds: torch.Tensor | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -135,6 +140,7 @@ class MantisPredictor:
 
     def load(self) -> None:
         """Load model weights from MANTIS_MODEL_PATH."""
+        self._loaded = False
         weights_path = self._resolve_weights_path()
         if weights_path is None:
             logger.warning("No model weights configured (MANTIS_MODEL_PATH empty)")
@@ -147,8 +153,31 @@ class MantisPredictor:
         n_classes = ckpt.get("n_classes", 2)
         d_model = ckpt.get("d_model", 64)
         checkpoint = ckpt.get("checkpoint", MANTIS_CHECKPOINT)
+        if checkpoint != "paris-noah/Mantis-8M":
+            raise ValueError(f"unsupported Mantis backbone: {checkpoint}")
+        expected_task = "root-cause analysis" if TASK == "classify" else "anomaly detection"
+        expected_classes = 10 if TASK == "classify" else 2
+        if task != expected_task or n_classes != expected_classes:
+            raise ValueError(f"checkpoint task/classes {task!r}/{n_classes} do not match TASK={TASK}")
+        if TASK == "classify":
+            stats_path = Path(weights_path).with_name("rca_preprocessing.json")
+            import json
 
-        self.encoder = PretrainedMantisEncoder(checkpoint=checkpoint, d_model=d_model)
+            stats = json.loads(stats_path.read_text())
+            if stats["channels"] != KPI_CHANNELS or stats["protocol_map"] != {"TCP": 0, "UDP": 1, "None": 2}:
+                raise ValueError("RCA preprocessing feature contract mismatch")
+            self.rca_means = torch.tensor(stats["train"]["means"], dtype=torch.float32).view(1, 1, -1)
+            self.rca_stds = torch.tensor(stats["train"]["stds"], dtype=torch.float32).view(1, 1, -1)
+            if (
+                self.rca_means.shape != (1, 1, 18)
+                or self.rca_stds.shape != (1, 1, 18)
+                or not torch.isfinite(self.rca_means).all()
+                or not torch.isfinite(self.rca_stds).all()
+                or (self.rca_stds <= 0).any()
+            ):
+                raise ValueError("invalid RCA preprocessing statistics")
+
+        self.encoder = PretrainedMantisEncoder(checkpoint=MANTIS_CHECKPOINT, d_model=d_model)
         self.encoder.load_state_dict(ckpt["encoder"])
         self.encoder.eval()
 
@@ -161,7 +190,7 @@ class MantisPredictor:
 
         self.task = task
         self.n_classes = n_classes
-        self.labels = AD_LABELS if task == "anomaly detection" else RCA_LABELS
+        self.labels = AD_LABELS if task == "anomaly detection" else list(RCA_CLASSES)
 
         self._loaded = True
         logger.info("Model loaded: task={}, n_classes={}, d_model={}", task, n_classes, d_model)
@@ -183,8 +212,12 @@ class MantisPredictor:
         Missing keys and null numeric KPIs are rejected; 0 is a real measurement.
         Returns tensor of shape [1, 128, 18].
         """
+        if len(kpi_window) != 128:
+            raise InvalidKpiWindowError("kpi_window must contain exactly 128 timesteps")
         rows = []
         for t, timestep in enumerate(kpi_window):
+            if not isinstance(timestep, dict):
+                raise InvalidKpiWindowError(f"timestep {t} is not an object")
             row = []
             for ch in KPI_CHANNELS:
                 if ch not in timestep:
@@ -193,7 +226,14 @@ class MantisPredictor:
             rows.append(row)
 
         x = np.array(rows, dtype=np.float32)  # [128, 18]
-        return torch.tensor(x, dtype=torch.float32).unsqueeze(0)  # [1, 128, 18]
+        if not np.isfinite(x).all():
+            raise InvalidKpiWindowError("KPI values overflow float32")
+        tensor = torch.tensor(x, dtype=torch.float32).unsqueeze(0)
+        if self.task == "root-cause analysis":
+            if self.rca_means is None or self.rca_stds is None:
+                raise RuntimeError("RCA preprocessing statistics not loaded")
+            tensor = (tensor - self.rca_means) / self.rca_stds
+        return tensor
 
     def predict(self, kpi_window: list[dict]) -> dict:
         """Run inference on a single kpi_window. Returns label + confidence."""
@@ -201,6 +241,8 @@ class MantisPredictor:
             raise RuntimeError("Model not loaded")
 
         x = self.preprocess(kpi_window)
+        if self.encoder is None or self.head is None:
+            raise RuntimeError("Model not initialized")
         with torch.no_grad():
             embedding = self.encoder(x)
             logits = self.head(embedding)

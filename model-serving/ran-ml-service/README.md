@@ -56,3 +56,16 @@ Set that value as `ADNR_DETECT_INFERENCE_URL`. `ADNR_DETECT_TOKEN` is optional; 
 | `MANTIS_MODEL_PATH` | Local path to `.pt` weights file |
 | `MANTIS_CHECKPOINT` | HuggingFace backbone ID (default: `paris-noah/Mantis-8M`, baked into image) |
 | `PORT` | HTTP port (default: 8080) |
+
+For local RCA inference, place the original `mantis_pretrained_rca.pt` and
+`artifacts/rca_preprocessing.json` in one directory, then run:
+
+```sh
+cd model-serving/ran-ml-service
+TASK=classify MANTIS_MODEL_PATH=/path/to/mantis_pretrained_rca.pt uv run ran-ml-service
+```
+
+The Mantis-8M backbone must be present in the Hugging Face cache for offline
+mode. `POST /v1/classify` accepts `{"kpi_window": [...]}` with all 128 rows and
+returns `class`, `class_index`, and `confidence`. `/ready` stays unavailable if
+the checkpoint task, class count, or preprocessing artifact is invalid.

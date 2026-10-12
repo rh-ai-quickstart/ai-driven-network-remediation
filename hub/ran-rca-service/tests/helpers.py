@@ -54,4 +54,9 @@ def project_enriched(state: RCAState, result: dict) -> dict:
         "root_cause_category": result["root_cause_category"],
         "root_cause": result["root_cause"],
         "recommended_fix": result["recommended_fix"],
+        "ml_class": result.get("ml_class", state.ml_class),
+        "ml_class_index": result.get("ml_class_index", state.ml_class_index),
+        "ml_confidence": result.get("ml_confidence", state.ml_confidence),
+        "ml_status": result.get("ml_status", state.ml_status),
+        "ml_steer_used": result.get("ml_steer_used", state.ml_steer_used),
     }

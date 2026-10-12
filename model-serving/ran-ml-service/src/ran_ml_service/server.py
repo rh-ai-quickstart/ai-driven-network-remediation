@@ -17,7 +17,10 @@ from .model import InvalidKpiWindowError, predictor
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting ran-ml-service with TASK={}", TASK)
-    predictor.load()
+    try:
+        predictor.load()
+    except Exception:
+        logger.exception("Model failed validation or loading; readiness will remain false")
     yield
 
 
@@ -42,6 +45,12 @@ class DetectResponse(BaseModel):
     class_index: int = 0
 
 
+class ClassifyResponse(BaseModel):
+    class_: str = Field(alias="class")
+    confidence: float
+    class_index: int
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "task": TASK}
@@ -57,14 +66,16 @@ def ready():
     return {"ready": True, "task": TASK}
 
 
-@app.post("/v1/detect")
-def detect(req: DetectRequest) -> DetectResponse:
+@app.post("/v1/detect", response_model=DetectResponse)
+def detect(req: DetectRequest) -> DetectResponse | JSONResponse:
     """Binary anomaly detection: is this KPI window anomalous or normal?"""
     if not predictor.is_ready:
         return JSONResponse(
             {"error": "model not loaded"},
             status_code=503,
         )
+    if TASK != "detect":
+        return JSONResponse({"error": "wrong task"}, status_code=404)
 
     try:
         result = predictor.predict(req.kpi_window)
@@ -78,6 +89,22 @@ def detect(req: DetectRequest) -> DetectResponse:
             {"error": "inference failed"},
             status_code=500,
         )
+
+
+@app.post("/v1/classify", response_model=ClassifyResponse)
+def classify(req: DetectRequest) -> ClassifyResponse | JSONResponse:
+    if TASK != "classify":
+        return JSONResponse({"error": "wrong task"}, status_code=404)
+    if not predictor.is_ready:
+        return JSONResponse({"error": "model not loaded"}, status_code=503)
+    try:
+        prediction = predictor.predict(req.kpi_window)
+        return ClassifyResponse.model_validate({"class": prediction["label"], "confidence": prediction["confidence"], "class_index": prediction["class_index"]})
+    except InvalidKpiWindowError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except Exception:
+        logger.exception("RCA inference failed")
+        return JSONResponse({"error": "inference failed"}, status_code=500)
 
 
 def start():

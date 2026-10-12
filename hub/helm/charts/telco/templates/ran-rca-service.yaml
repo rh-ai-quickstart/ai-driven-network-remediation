@@ -43,6 +43,10 @@ spec:
               value: {{ .Values.ranRcaService.env.kafkaConsumerEnabled | quote }}
             - name: RECENT_ANOMALIES_LIMIT
               value: {{ .Values.ranRcaService.env.recentAnomaliesLimit | quote }}
+            - name: CLASSIFY_INFERENCE_URL
+              value: {{ .Values.ranRcaService.env.classifyInferenceUrl | quote }}
+            - name: CLASSIFY_TOKEN
+              value: {{ .Values.ranRcaService.env.classifyToken | quote }}
           ports:
             - name: http
               containerPort: 8003

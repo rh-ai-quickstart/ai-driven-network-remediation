@@ -23,6 +23,11 @@ class EnrichedAnomaly(BaseModel):
     root_cause_category: str
     root_cause: str
     recommended_fix: str
+    ml_class: str = ""
+    ml_class_index: int | None = None
+    ml_confidence: float | None = None
+    ml_status: str = "disabled"
+    ml_steer_used: bool = False
 
 
 class ModelSource(StrEnum):

@@ -23,10 +23,16 @@ def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
         return "No recent RAN anomalies detected."
     lines = []
     for a in anomalies[-_MAX_ITEMS_IN_PROMPT:]:
+        ml_advice = (
+            f"Mantis RCA prediction: {a.ml_class} (confidence {a.ml_confidence:.2f}); "
+            f"guidance used: {a.ml_steer_used}.\n    "
+            if a.ml_class and a.ml_confidence is not None else ""
+        )
         lines.append(
             f"  - Incident {a.incident_id} (zone={a.zone}, app={a.application}) "
             f"[AD confidence: {a.ad_confidence:.2f}]\n"
-            f"    Root cause: {a.root_cause or 'n/a'}\n"
+            f"    {ml_advice}Final LLM category: {a.root_cause_category}; "
+            f"Root cause: {a.root_cause or 'n/a'}\n"
             f"    Recommended fix: {a.recommended_fix or 'n/a'}"
         )
     return "\n".join(lines)
@@ -83,7 +89,8 @@ def build_chat_context(
         "Answer the operator's request directly with concise, actionable analysis about the "
         "detected anomalies below.\n"
         "When discussing an anomaly, mention: the incident ID, zone, application context, "
-        "the AD confidence score, the likely root cause, and the recommended fix (including "
+        "the AD confidence score, any confident Mantis RCA prediction as separate advice, "
+        "the final LLM diagnosis and operational category, and the recommended fix (including "
         "which vendor documentation section it references).\n"
         "When discussing remediation status, mention whether the fix succeeded, failed, or is "
         "pending (outcome not yet known), the job status, and whether it timed out.\n"
@@ -137,8 +144,12 @@ def format_chat_reply(
         anomaly_line = "- No RAN anomalies currently detected."
         root_cause = "n/a"
         recommended_fix = "n/a"
+        ml_prediction = "- n/a"
     else:
-        latest = anomalies[-1]
+        latest = next(
+            (anomaly for anomaly in reversed(anomalies) if anomaly.incident_id in user_message),
+            anomalies[-1],
+        )
         category_tag = f"[{latest.root_cause_category.replace('_', ' ').title()}] "
         anomaly_line = (
             f"- Latest anomaly: Incident {latest.incident_id} "
@@ -147,6 +158,10 @@ def format_chat_reply(
         )
         root_cause = latest.root_cause or "n/a"
         recommended_fix = latest.recommended_fix or "n/a"
+        ml_prediction = (
+            f"- {latest.ml_class} (confidence {latest.ml_confidence:.2f}; guidance used: {latest.ml_steer_used})"
+            if latest.ml_class and latest.ml_confidence is not None else "- n/a"
+        )
 
     if raw_reply:
         model_insight = raw_reply.strip()
@@ -158,6 +173,10 @@ def format_chat_reply(
         f"- Anomalies detected: {len(anomalies)}\n"
         f"{anomaly_line}\n"
         f"- Request: {user_message}\n\n"
+        "Mantis RCA Prediction:\n"
+        f"{ml_prediction}\n\n"
+        "Final LLM Operational Category:\n"
+        f"- {latest.root_cause_category if anomalies else 'unknown'}\n\n"
         "Root Cause:\n"
         f"- {root_cause}\n\n"
         "Recommended Fix:\n"

@@ -25,6 +25,43 @@ def _mock_llm():
 
 class TestFullGraph:
     @pytest.mark.asyncio
+    async def test_ml_disagreement_keeps_llm_operational_category(self):
+        """A real-looking confident ML label informs context but never selects remediation."""
+        with (
+            patch("ran_rca_service.nodes.classify.classify_node") as classifier,
+            _mock_rag_client(),
+            _mock_llm(),
+        ):
+            classifier.return_value = {
+                "ml_class": "Co-Channel Interference (Severe)",
+                "ml_class_index": 2,
+                "ml_confidence": 0.95,
+                "ml_status": "used",
+                "ml_steer_used": True,
+            }
+            # Compile with a deterministic classify node to isolate the LLM disagreement.
+            from langgraph.graph import END, START, StateGraph
+            from ran_rca_service.models import RCAState
+            from ran_rca_service.nodes.analyze import analyze_node
+            from ran_rca_service.nodes.rag_retrieval import rag_retrieval_node
+
+            graph = StateGraph(RCAState)
+            graph.add_node("classify", classifier)
+            graph.add_node("rag_retrieval", rag_retrieval_node)
+            graph.add_node("analyze", analyze_node)
+            graph.add_edge(START, "classify")
+            graph.add_edge("classify", "rag_retrieval")
+            graph.add_edge("rag_retrieval", "analyze")
+            graph.add_edge("analyze", END)
+            result = await graph.compile().ainvoke(SAMPLE_ANOMALY)
+
+        assert result["ml_class_index"] == 2
+        assert result["ml_status"] == "used"
+        assert result["ml_steer_used"] is True
+        assert "Co-Channel Interference" in result["rag_query_used"]
+        assert result["root_cause_category"] == "antenna_misalignment"
+
+    @pytest.mark.asyncio
     async def test_invoke_returns_enriched_state(self):
         with _mock_rag_client(), _mock_llm():
             graph = build_graph()
@@ -59,6 +96,11 @@ class TestFullGraph:
             "root_cause_category": result["root_cause_category"],
             "root_cause": result["root_cause"],
             "recommended_fix": result["recommended_fix"],
+            "ml_class": result.get("ml_class", ""),
+            "ml_class_index": result.get("ml_class_index"),
+            "ml_confidence": result.get("ml_confidence"),
+            "ml_status": result.get("ml_status", "disabled"),
+            "ml_steer_used": result.get("ml_steer_used", False),
         }
         validator.validate(enriched)
 
