@@ -1040,7 +1040,7 @@ telco-integration-tests:
 	fi; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED=true ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
+	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(if $(ADNR_DETECT_INFERENCE_URL),true,false)' ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:

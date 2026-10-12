@@ -97,10 +97,12 @@ runs:
       shell: bash
 
     - name: Helm Install
-      env:
-        ADNR_DETECT_INFERENCE_URL: ${{ vars.ADNR_DETECT_INFERENCE_URL }}
-        ADNR_DETECT_TOKEN: ${{ secrets.ADNR_DETECT_TOKEN }}
       run: |
+        DETECT_OVERRIDE=""
+        if [ -z "${ADNR_DETECT_INFERENCE_URL}" ]; then
+          echo "ADNR_DETECT_INFERENCE_URL is not set; disabling ranAnomalyDetector for Kind."
+          DETECT_OVERRIDE="--set telco.ranAnomalyDetector.enabled=false"
+        fi
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
@@ -118,7 +120,8 @@ runs:
             --set kafka.kafka.resources.requests.memory=256Mi \
             --set kafka.kafka.resources.limits.cpu=500m \
             --set kafka.kafka.resources.limits.memory=512Mi \
-            --set-string kafka.kafka.jvmHeapOpts='-Xmx384m -Xms256m'"
+            --set-string kafka.kafka.jvmHeapOpts='-Xmx384m -Xms256m' \
+            ${DETECT_OVERRIDE}"
       shell: bash
 
     - name: Wait for Kafka topics to be created
