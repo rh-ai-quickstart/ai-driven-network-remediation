@@ -96,9 +96,10 @@ jobs:
             echo "ADNR_DETECT_INFERENCE_URL is not configured and the shared ran-ml-service URL could not be discovered."
             exit 1
           fi
+          detect_url="${detect_url%/}"
           case "${detect_url}" in
             */v1/detect) ;;
-            *) detect_url="${detect_url%/}/v1/detect" ;;
+            *) detect_url="${detect_url}/v1/detect" ;;
           esac
           echo "ADNR_DETECT_INFERENCE_URL=${detect_url}" >> "${GITHUB_ENV}"
 
