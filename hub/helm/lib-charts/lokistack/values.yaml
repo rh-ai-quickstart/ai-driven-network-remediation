@@ -169,7 +169,8 @@ clusterLogForwarder:
     insecureSkipVerify: true
   pipelines:
     application: true
-    infrastructure: true
+    # Opt in to cluster-wide infrastructure logs only when Loki is sized for them.
+    infrastructure: false
     audit: false
 
 # Test log generator (enable for dev/testing)

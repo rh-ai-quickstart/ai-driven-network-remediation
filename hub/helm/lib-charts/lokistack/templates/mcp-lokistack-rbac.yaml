@@ -1,4 +1,5 @@
 {{- if .Values.mcpLokistack.enabled }}
+{{- $readerRoleName := printf "%s-%s-%s" .Values.mcpLokistack.rbac.serviceAccountName .Release.Namespace .Release.Name }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -13,7 +14,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+  name: {{ $readerRoleName }}
 rules:
   - apiGroups: ["loki.grafana.com"]
     resources: ["application", "infrastructure", "audit"]
@@ -29,11 +30,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+  name: {{ $readerRoleName }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
+  name: {{ $readerRoleName }}
 subjects:
   - kind: ServiceAccount
     name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}
@@ -44,7 +45,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}-application
+  name: {{ $readerRoleName }}-application
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -57,7 +58,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}-infrastructure
+  name: {{ $readerRoleName }}-infrastructure
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -70,7 +71,7 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.mcpLokistack.rbac.serviceAccountName }}-audit
+  name: {{ $readerRoleName }}-audit
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

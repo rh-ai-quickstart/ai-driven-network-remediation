@@ -3,7 +3,7 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+  name: {{ include "lokistack.collectorServiceAccount" . }}
   namespace: {{ .Values.clusterLogForwarder.namespace }}
   labels:
     {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
@@ -11,7 +11,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.clusterLogForwarder.serviceAccountName }}-application
+  name: {{ include "lokistack.collectorServiceAccount" . }}-application
   labels:
     {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
 roleRef:
@@ -20,13 +20,13 @@ roleRef:
   name: collect-application-logs
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    name: {{ include "lokistack.collectorServiceAccount" . }}
     namespace: {{ .Values.clusterLogForwarder.namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.clusterLogForwarder.serviceAccountName }}-infrastructure
+  name: {{ include "lokistack.collectorServiceAccount" . }}-infrastructure
   labels:
     {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
 roleRef:
@@ -35,13 +35,13 @@ roleRef:
   name: collect-infrastructure-logs
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    name: {{ include "lokistack.collectorServiceAccount" . }}
     namespace: {{ .Values.clusterLogForwarder.namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ .Values.clusterLogForwarder.serviceAccountName }}-logs-writer
+  name: {{ include "lokistack.collectorServiceAccount" . }}-logs-writer
   labels:
     {{- include "lokistack.componentLabels" (dict "root" . "component" "log-collector") | nindent 4 }}
 roleRef:
@@ -50,6 +50,6 @@ roleRef:
   name: logging-collector-logs-writer
 subjects:
   - kind: ServiceAccount
-    name: {{ .Values.clusterLogForwarder.serviceAccountName }}
+    name: {{ include "lokistack.collectorServiceAccount" . }}
     namespace: {{ .Values.clusterLogForwarder.namespace }}
 {{- end }}

@@ -87,3 +87,8 @@ Get the Grafana route hostname.
 {{- define "grafana.route.host" -}}
 {{- printf "grafana-%s.%s" (include "lokistack.namespace" .) (include "lokistack.clusterDomain" .) }}
 {{- end }}
+
+{{/* Collector resources live in a shared namespace and must be unique per release. */}}
+{{- define "lokistack.collectorServiceAccount" -}}
+{{- printf "%s-%s-%s" .Values.clusterLogForwarder.serviceAccountName .Release.Namespace .Release.Name }}
+{{- end }}

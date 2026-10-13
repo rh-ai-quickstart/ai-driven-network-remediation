@@ -465,7 +465,7 @@ lokistack:
       insecureSkipVerify: true
     pipelines:
       application: true
-      infrastructure: true
+      infrastructure: false
       audit: false
   testLogGenerator:
     enabled: false
