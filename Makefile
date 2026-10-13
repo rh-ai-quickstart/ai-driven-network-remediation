@@ -788,6 +788,10 @@ build-push-ran-ml-service: build-ran-ml-service-image
 MODEL_SERVING_NS := model-serving
 RAN_ML_SVC_NAME  = $(if $(ADNR_DETECT_INFERENCE_URL),$(shell printf '%s' '$(ADNR_DETECT_INFERENCE_URL)' | sed -E 's|https?://([^.]+)\..*|\1|'),ran-ml-service-predictor)
 RAN_ML_TEST_URL  = $(if $(ADNR_DETECT_INFERENCE_URL),$(shell printf '%s' '$(ADNR_DETECT_INFERENCE_URL)' | sed -E 's|/v1/detect/?$$||'),http://localhost:8009)
+# ML-backed tests are required when a shared predictor URL is configured, but
+# remain optional for local runs without a predictor. Override this explicitly
+# with RAN_ML_SERVICE_REQUIRED=true/false when using a local port-forward.
+RAN_ML_SERVICE_REQUIRED ?= $(if $(strip $(ADNR_DETECT_INFERENCE_URL)),true,false)
 
 .PHONY: build-ran-anomaly-image
 build-ran-anomaly-image:
@@ -1036,13 +1040,13 @@ telco-integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
 	PF_RAN_ML_PID=""; \
-	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ]; then \
+	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ] && [ "$(RAN_ML_SERVICE_REQUIRED)" = "true" ]; then \
 	  oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	  PF_RAN_ML_PID=$$!; \
 	fi; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
+	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:
@@ -1070,13 +1074,13 @@ integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
 	PF_RAN_ML_PID=""; \
-	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ]; then \
+	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ] && [ "$(RAN_ML_SERVICE_REQUIRED)" = "true" ]; then \
 	  oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	  PF_RAN_ML_PID=$$!; \
 	fi; \
 	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic $(if $(filter true,$(ENABLE_TELCO_ORAN)),tests/telco) $(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),tests/network)
+	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic $(if $(filter true,$(ENABLE_TELCO_ORAN)),tests/telco) $(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),tests/network)
 
 # ══════════════════════════════════════════════════════════════════════
 # ServiceNow PDI Bootstrap
