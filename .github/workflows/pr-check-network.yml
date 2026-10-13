@@ -19,4 +19,5 @@ jobs:
       enable_network_remediation: true
       enable_telco_oran: false
       make_target: network-integration-tests
+      detector_url: ${{ vars.ADNR_DETECT_INFERENCE_URL }}
     secrets: inherit
