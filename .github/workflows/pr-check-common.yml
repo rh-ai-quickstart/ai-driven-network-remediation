@@ -105,6 +105,9 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Run ${{ inputs.suite_name }} integration tests
+        env:
+          ADNR_DETECT_INFERENCE_URL: ${{ inputs.detector_url }}
+          ADNR_DETECT_TOKEN: ${{ secrets.ADNR_DETECT_TOKEN }}
         run: make ${{ inputs.make_target }}
 
       - name: Collect ingestion-pipeline diagnostics
