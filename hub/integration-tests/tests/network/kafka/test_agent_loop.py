@@ -90,7 +90,6 @@ def _poll_incident_movie(chatbot_client, incident_id: str) -> dict:
 
 
 @pytest.mark.integration
-@pytest.mark.flaky(reruns=1)
 def test_kafka_agent_loop(chatbot_client):
     """Demo trigger publishes to system-alerts; agent consumes and writes incident-audit."""
     _wait_for_agent_ready()

@@ -9,8 +9,6 @@ import pytest
 
 from .conftest import mcp_call, mcp_list_tools
 
-pytestmark = pytest.mark.flaky(reruns=5)
-
 # Must be in both KAFKA_CONSUME_TOPICS and KAFKA_PRODUCE_TOPICS allowlists
 TEST_TOPIC = "remediation-jobs"
 

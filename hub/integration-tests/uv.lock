@@ -99,7 +99,6 @@ dependencies = [
     { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-order" },
-    { name = "pytest-rerunfailures" },
 ]
 
 [package.metadata]
@@ -107,7 +106,6 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-order", specifier = ">=1.5.0" },
-    { name = "pytest-rerunfailures", specifier = ">=15.0" },
 ]
 
 [[package]]
@@ -163,17 +161,4 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/d8/82a5dc2aad3392f66c9741960fcbeeb45dd4d62eedb218aed6c52eea36eb/pytest_order-1.5.0.tar.gz", hash = "sha256:96acd7587b5a2855dcaa4a898288103d202894a61afd813adbc9b77aab04d90d", size = 54136, upload-time = "2026-06-13T05:39:41.636Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fd/5c/bd6a85b44beb8bd74c0e86ab699ef0e096e260dc90458b84fc54c28e4335/pytest_order-1.5.0-py3-none-any.whl", hash = "sha256:667ba2b7303fe2c529848663e0a41dfb0cc4d64f09f87272e4a9a1751efb52b2", size = 16634, upload-time = "2026-06-13T05:39:40.431Z" },
-]
-
-[[package]]
-name = "pytest-rerunfailures"
-version = "16.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "packaging" },
-    { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/f0/74f8e685be7ecd1572c1256132f18fce3a665d7e07649a3f23b7eb2d3bec/pytest_rerunfailures-16.3.tar.gz", hash = "sha256:37c9b1231c8083e9f4e724f50f7a21241822f9516c15c700ebbf218d6452355c", size = 34148, upload-time = "2026-05-22T06:51:22.292Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/98/58a71d68d3126d7f6a6ed1944c37ec207a4ff3dc66cad3bed7b59d38df61/pytest_rerunfailures-16.3-py3-none-any.whl", hash = "sha256:6bdfb8ffb46c46072e6c16bdedee38b6c13eac620d9415ed5b63152cbf283170", size = 15396, upload-time = "2026-05-22T06:51:20.547Z" },
 ]
