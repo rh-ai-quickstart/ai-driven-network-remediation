@@ -80,10 +80,10 @@ spec:
             {{- end }}
           env:
             - name: KAFKA_NODE_ID
-              value: "1"  # TODO: PRODUCTION: Derive from pod ordinal for replicas>1 (use fieldRef metadata.name)
+              value: "1"  # PRODUCTION: Derive from pod ordinal for replicas>1 (use fieldRef metadata.name)
             - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: "1@kafka-0.kafka-headless.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.kafka.controllerPort }}"  # TODO: PRODUCTION: Generate voter list for all replicas
+              value: "1@kafka-0.kafka-headless.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.kafka.controllerPort }}"  # PRODUCTION: Generate voter list for all replicas
             - name: KAFKA_LISTENERS
               value: "PLAINTEXT://:{{ .Values.kafka.service.port }},CONTROLLER://:{{ .Values.kafka.controllerPort }}{{- if .Values.kafka.tls.enabled }},EXTERNAL://:{{ .Values.kafka.externalPort }}{{- end }}"
             - name: KAFKA_ADVERTISED_LISTENERS

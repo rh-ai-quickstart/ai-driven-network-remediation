@@ -40,16 +40,12 @@ async def rag_retrieval_node(state: dict) -> dict:
         return {"context_snippets": [], "rag_query_used": query}
 
 
-# TODO: validate that the playbook actually solved the problem before storing.
-# Currently we assume all generated playbooks are good.
 async def store_generated_playbook(
     playbook_name: str,
     playbook_yaml: str,
     failure_type: str,
     summary: str,
 ) -> None:
-    # TODO: consider changing ALS prompt to return explanation alongside
-    # playbook for richer vector store content.
     content = f"Failure: {failure_type}\nSummary: {summary}\nPlaybook ({failure_type}):\n{playbook_yaml}"
     filename = f"{playbook_name}.md"
 

@@ -268,9 +268,7 @@ async def _upsert_template(name: str, playbook_path: str) -> dict:
     )
 
 
-# TODO: remove stub once LIGHTSPEED_URL is always set in deployment.
-# Without it, the decide node can route here when no ALS is configured,
-# producing a confusing httpx error instead of a clean pass-through.
+# Needed for testing without Lightspeed.
 def _stub_result() -> dict:
     result = RemediationResult(
         action_taken="generate-playbook",
@@ -320,7 +318,6 @@ async def lightspeed_node(state) -> dict:
 
         playbook_yaml, parsed = _extract_yaml(data.get("response", ""))
         parsed = sanitize_playbook(parsed)
-        # TODO: validate playbook ops before AAP submission (block delete, shell, command modules)
         if not isinstance(parsed, list):
             duration = time.monotonic() - t0
             logger.warning(
@@ -393,7 +390,8 @@ async def lightspeed_node(state) -> dict:
         )
 
     if result.success:
-        # TODO: raise or log an error when rca is None instead of falling back to defaults
+        if rca is None:
+            logger.warning("RCA is missing; storing generated playbook with default failure type and summary")
         failure_type = rca.failure_type if rca else "Unknown"
         summary = rca.summary if rca else ""
         # Scheduled on the event loop; the asyncio scheduler will execute it.

@@ -1,7 +1,7 @@
 kafka:
   enabled: true
-  replicas: 1  # TODO: PRODUCTION: Set to 3 for HA
-  clusterId: "MkU3OEVBNTcwNTJENDM2Qk"  # TODO: PRODUCTION: Generate unique ID (kafka-storage.sh random-uuid)
+  replicas: 1  # PRODUCTION: Set to 3 for high availability.
+  clusterId: "MkU3OEVBNTcwNTJENDM2Qk"  # PRODUCTION: Generate unique ID (kafka-storage.sh random-uuid)
   autoCreateTopics: true
   image:
     repository: apache/kafka
@@ -15,7 +15,7 @@ kafka:
     storageClass: gp3-csi
   retention:
     hours: "168"
-  resources:  # TODO: PRODUCTION: Increase for production workload
+  resources:  # PRODUCTION: Increase for production workload
     requests:
       cpu: 100m
       memory: 512Mi

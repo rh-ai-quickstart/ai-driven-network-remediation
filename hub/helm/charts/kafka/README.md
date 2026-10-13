@@ -3,7 +3,7 @@
 Apache Kafka 4.1.2 in KRaft mode with mTLS for secure cross-cluster access.
 
 > DEVELOPMENT CONFIGURATION**  
-> Current settings are for **development only**. Before production, search for `TODO: PRODUCTION:` in `values.yaml` and review the [Production Checklist](#production-checklist) below.
+> Current settings are for **development only**. Before production, search for `PRODUCTION:` in `values.yaml` and review the [Production Checklist](#production-checklist) below.
 
 ## Quick Start
 
@@ -156,4 +156,4 @@ Before deploying to production, review these critical settings:
 4. **Retention**: Adjust topic retention in `kafka.topics` for production needs
 5. **Storage class**: Verify `kafka.storage.storageClass` matches production storage
 
-**Tip:** Search for `TODO: PRODUCTION:` comments in `values.yaml` for all settings requiring updates.
+**Tip:** Search for `PRODUCTION:` comments in `values.yaml` for all settings requiring updates.
