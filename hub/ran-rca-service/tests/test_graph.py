@@ -63,7 +63,7 @@ class TestFullGraph:
         validator.validate(enriched)
 
     @pytest.mark.asyncio
-    async def test_llm_failure_anomaly_flows_through(self):
+    async def test_llm_failure_raises(self):
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM down"))
 
@@ -72,29 +72,15 @@ class TestFullGraph:
             patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
         ):
             graph = build_graph()
-            result = await graph.ainvoke(SAMPLE_ANOMALY)
-
-        assert result["incident_id"] == "test-001"
-        assert result["ad_confidence"] == 0.94
-        assert result["root_cause"] == ""
-        assert result["recommended_fix"] == ""
-        assert result["root_cause_category"] == "unknown"
+            with pytest.raises(ConnectionError):
+                await graph.ainvoke(SAMPLE_ANOMALY)
 
     @pytest.mark.asyncio
-    async def test_both_rag_and_llm_unavailable(self):
+    async def test_rag_failure_raises(self):
         mock_rag = MagicMock()
         mock_rag.search = AsyncMock(side_effect=ConnectionError("vector store down"))
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM down"))
 
-        with (
-            patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag),
-            patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
-        ):
+        with patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag):
             graph = build_graph()
-            result = await graph.ainvoke(SAMPLE_ANOMALY)
-
-        assert result["incident_id"] == "test-001"
-        assert result["root_cause"] == ""
-        assert result["recommended_fix"] == ""
-        assert result["root_cause_category"] == "unknown"
+            with pytest.raises(ConnectionError):
+                await graph.ainvoke(SAMPLE_ANOMALY)

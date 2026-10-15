@@ -71,22 +71,14 @@ async def notify_node(state: RemediationState) -> dict:
         )
         return {}
 
-    try:
-        payload = _build_payload(state)
-    except Exception as exc:
-        logger.warning("Slack payload build failed: {}", exc)
-        return {}
+    payload = _build_payload(state)
 
     client = WebClient(token=SLACK_BOT_TOKEN, timeout=SLACK_TIMEOUT_SECONDS)
-    try:
-        await asyncio.to_thread(
-            client.chat_postMessage,
-            channel=SLACK_CHANNEL,
-            **payload,
-        )
-        logger.info("Slack remediation notification sent incident_id={}", state.incident_id)
-    except SlackApiError as exc:
-        error = getattr(exc, "response", {}).get("error", str(exc))
-        logger.warning("Slack notification failed: {}", error)
+    await asyncio.to_thread(
+        client.chat_postMessage,
+        channel=SLACK_CHANNEL,
+        **payload,
+    )
+    logger.info("Slack remediation notification sent incident_id={}", state.incident_id)
 
     return {}

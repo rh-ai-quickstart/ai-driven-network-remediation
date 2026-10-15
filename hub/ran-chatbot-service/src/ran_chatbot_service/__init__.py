@@ -269,6 +269,16 @@ async def chat(req: ChatRequest, request: Request) -> dict:
 
     prompt = build_chat_context(msg, anomalies, remediations, history)
     raw_reply, model_source = await call_model(prompt, request.app.state.http_client)
+
+    if model_source != ModelSource.LIVE:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": f"LLM inference unavailable (source: {model_source})",
+                "model": {"name": MODEL_NAME, "source": model_source},
+            },
+        )
+
     reply = format_chat_reply(msg, raw_reply, anomalies)
 
     history.append({"role": "user", "content": msg})
@@ -276,14 +286,8 @@ async def chat(req: ChatRequest, request: Request) -> dict:
     if len(history) > 20:
         del history[:-20]
 
-    # Anything other than a genuine live reply (unreachable, disabled, empty, or an
-    # http-<code> error) means the operator got a deterministic fallback, not a real
-    # model answer, so it should be surfaced as degraded rather than "ok".
-    llm_ok = model_source == ModelSource.LIVE
-    _deps = build_deps({"kafka": kafka_ok, "llm": llm_ok})
-
     return {
-        "_deps": _deps,
+        "_deps": build_deps({"kafka": kafka_ok}),
         "session_id": session_id,
         "timestamp": utc_now(),
         "reply": reply,

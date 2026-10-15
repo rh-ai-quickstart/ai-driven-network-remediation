@@ -89,24 +89,15 @@ class AnomalyDetectionService:
         return [output]
 
     def _call_detect(self, kpi_window: list[dict]) -> dict | None:
-        """POST kpi_window to the detect predictor. Returns None on failure."""
+        """POST kpi_window to the detect predictor. Returns None if not configured."""
         if not DETECT_INFERENCE_URL:
             logger.debug("DETECT_INFERENCE_URL not configured, skipping ML detection")
             return None
 
-        try:
-            client = _get_http_client()
-            request_kwargs: dict[str, Any] = {"json": {"kpi_window": kpi_window}}
-            if DETECT_TOKEN:
-                request_kwargs["headers"] = {"Authorization": f"Bearer {DETECT_TOKEN}"}
-            resp = client.post(DETECT_INFERENCE_URL, **request_kwargs)
-            if resp.status_code != 200:
-                logger.warning("Detect predictor returned HTTP {}: {}", resp.status_code, resp.text[:200])
-                return None
-            return resp.json()
-        except httpx.TimeoutException:
-            logger.warning("Detect predictor timed out at {}", DETECT_INFERENCE_URL)
-            return None
-        except Exception:
-            logger.exception("Failed to call detect predictor")
-            return None
+        client = _get_http_client()
+        request_kwargs: dict[str, Any] = {"json": {"kpi_window": kpi_window}}
+        if DETECT_TOKEN:
+            request_kwargs["headers"] = {"Authorization": f"Bearer {DETECT_TOKEN}"}
+        resp = client.post(DETECT_INFERENCE_URL, **request_kwargs)
+        resp.raise_for_status()
+        return resp.json()

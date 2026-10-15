@@ -23,11 +23,15 @@ def _patch_detect_url():
         yield
 
 
+_DETECT_REQUEST = httpx.Request("POST", "http://predictor:8080/v1/detect")
+
+
 def _mock_detect_response(label: str, confidence: float):
     """Create a mock httpx.Response for the detect predictor."""
     response = httpx.Response(
         200,
         json={"label": label, "confidence": confidence, "class_index": 1 if label == "anomalous" else 0},
+        request=_DETECT_REQUEST,
     )
     return response
 
@@ -83,25 +87,23 @@ class TestAnomalyDetectionService:
 
         assert outputs == []
 
-    def test_detect_http_failure_produces_no_output(self):
+    def test_detect_http_failure_propagates(self):
         service = AnomalyDetectionService()
         msg = synthetic_fixture_message("antenna_failure")
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
-            mock_client.return_value.post.return_value = httpx.Response(500, text="Internal Server Error")
-            outputs = service.process_message(msg)
+            mock_client.return_value.post.return_value = httpx.Response(500, text="Internal Server Error", request=_DETECT_REQUEST)
+            with pytest.raises(httpx.HTTPStatusError):
+                service.process_message(msg)
 
-        assert outputs == []
-
-    def test_detect_timeout_produces_no_output(self):
+    def test_detect_timeout_propagates(self):
         service = AnomalyDetectionService()
         msg = synthetic_fixture_message("antenna_failure")
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
             mock_client.return_value.post.side_effect = httpx.TimeoutException("timed out")
-            outputs = service.process_message(msg)
-
-        assert outputs == []
+            with pytest.raises(httpx.TimeoutException):
+                service.process_message(msg)
 
     def test_empty_message_returns_no_output(self):
         service = AnomalyDetectionService()

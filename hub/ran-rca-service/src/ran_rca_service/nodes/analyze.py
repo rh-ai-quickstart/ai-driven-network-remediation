@@ -141,29 +141,25 @@ async def analyze_node(state: RCAState) -> dict:
         HumanMessage(content=user_content),
     ]
 
-    try:
-        logger.debug(f"RCA LLM prompt for {state.incident_id}:\n{user_content[:800]}")
-        if critical_kpis:
-            logger.info(f"Critical indicators for {state.incident_id}: {critical_kpis.replace(chr(10), ' ')}")
-        response = await get_llm().ainvoke(
-            messages,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": "RCAAnalysis", "schema": _RESPONSE_SCHEMA},
-            },
-        )
-        if not isinstance(response.content, str):
-            raise TypeError("LLM response content must be a JSON string")
-        parsed = json.loads(response.content)
-        logger.info(
-            f"RCA category selected for {state.incident_id}: {parsed.get('root_cause_category', 'unknown')} "
-            f"(zone={state.zone}, app={state.application})"
-        )
-        return {
-            "root_cause_category": parsed.get("root_cause_category", "unknown"),
-            "root_cause": parsed.get("root_cause", ""),
-            "recommended_fix": parsed.get("recommended_fix", ""),
-        }
-    except Exception:  # noqa: BLE001 - graceful degradation must handle provider and parsing errors.
-        logger.exception("LLM analysis failed — anomaly will flow through unenriched")
-        return {"root_cause_category": "unknown", "root_cause": "", "recommended_fix": ""}
+    logger.debug(f"RCA LLM prompt for {state.incident_id}:\n{user_content[:800]}")
+    if critical_kpis:
+        logger.info(f"Critical indicators for {state.incident_id}: {critical_kpis.replace(chr(10), ' ')}")
+    response = await get_llm().ainvoke(
+        messages,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "RCAAnalysis", "schema": _RESPONSE_SCHEMA},
+        },
+    )
+    if not isinstance(response.content, str):
+        raise TypeError("LLM response content must be a JSON string")
+    parsed = json.loads(response.content)
+    logger.info(
+        f"RCA category selected for {state.incident_id}: {parsed.get('root_cause_category', 'unknown')} "
+        f"(zone={state.zone}, app={state.application})"
+    )
+    return {
+        "root_cause_category": parsed.get("root_cause_category", "unknown"),
+        "root_cause": parsed.get("root_cause", ""),
+        "recommended_fix": parsed.get("recommended_fix", ""),
+    }

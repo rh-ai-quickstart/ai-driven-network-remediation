@@ -194,10 +194,10 @@ def test_chat_model_unavailable(mock_model, client, sample_anomalies):
     client.app.state.kafka_consumer.is_connected = True
 
     resp = client.post("/api/chat", json={"message": "Status?"})
-    assert resp.status_code == 200
+    assert resp.status_code == 503
     data = resp.json()
-    assert data["_deps"] == {"status": "degraded", "unavailable": ["llm"]}
-    assert "fallback" in data["reply"].lower()
+    assert data["model"]["source"] == "unreachable"
+    assert "error" in data
 
 
 def test_chat_empty_message(client):

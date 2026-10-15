@@ -54,8 +54,8 @@ def _handle_anomaly_message(
         loop = _get_consumer_loop()
         result = loop.run_until_complete(graph.ainvoke(anomaly))
     except Exception:  # noqa: BLE001 - Kafka consumption must survive graph failures.
-        logger.exception("Graph invocation failed, forwarding anomaly unenriched")
-        result = {**anomaly, "root_cause_category": "unknown", "root_cause": "", "recommended_fix": ""}
+        logger.exception("LLM analysis failed — anomaly will not be forwarded for remediation")
+        return
 
     enriched = {
         "incident_id": result.get("incident_id", ""),

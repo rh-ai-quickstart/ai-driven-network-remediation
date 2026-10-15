@@ -26,9 +26,5 @@ async def rag_retrieval_node(state: RCAState) -> dict:
     query = f"5G anomaly detection zone={state.zone} application={state.application} AD confidence={state.ad_confidence:.2f}"
     if kpi_hint:
         query += f" top KPIs: {kpi_hint}"
-    try:
-        snippets = await _get_rag_client().search(query)
-        return {"context_snippets": snippets, "rag_query_used": query}
-    except Exception:
-        logger.exception("LlamaStack search failed")
-        return {"context_snippets": [], "rag_query_used": query}
+    snippets = await _get_rag_client().search(query)
+    return {"context_snippets": snippets, "rag_query_used": query}

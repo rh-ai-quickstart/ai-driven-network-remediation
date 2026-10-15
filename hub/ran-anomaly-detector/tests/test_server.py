@@ -189,7 +189,7 @@ class TestKafkaLifespan:
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_http:
             mock_http.return_value.post.return_value = httpx.Response(
-                200, json={"label": "anomalous", "confidence": 0.92, "class_index": 1}
+                200, request=httpx.Request("POST", "http://predictor:8080/v1/detect"), json={"label": "anomalous", "confidence": 0.92, "class_index": 1}
             )
 
             with TestClient(app):
