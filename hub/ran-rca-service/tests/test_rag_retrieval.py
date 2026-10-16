@@ -63,12 +63,10 @@ class TestSearchResults:
 
 class TestErrorHandling:
     @pytest.mark.asyncio
-    async def test_search_error_returns_empty_context(self):
+    async def test_search_error_propagates(self):
         mock = MagicMock()
         mock.search = AsyncMock(side_effect=ConnectionError("LlamaStack unreachable"))
 
         with _patch_rag_client(mock):
-            result = await rag_retrieval_node(make_state())
-
-        assert result["context_snippets"] == []
-        assert result["rag_query_used"] != ""
+            with pytest.raises(ConnectionError):
+                await rag_retrieval_node(make_state())

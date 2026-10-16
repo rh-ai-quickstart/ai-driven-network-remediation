@@ -65,18 +65,12 @@ def publish_remediation_record(
 
 def audit_node(state: RemediationState) -> dict:
     payload = build_audit_payload(state)
-    try:
-        offset = publish_remediation_record(payload)
-        logger.info(
-            "Remediation audit published incident_id={} success={} topic={} offset={}",
-            state.incident_id,
-            state.success,
-            KAFKA_REMEDIATION_TOPIC,
-            offset,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to publish remediation audit record incident_id={}",
-            state.incident_id,
-        )
+    offset = publish_remediation_record(payload)
+    logger.info(
+        "Remediation audit published incident_id={} success={} topic={} offset={}",
+        state.incident_id,
+        state.success,
+        KAFKA_REMEDIATION_TOPIC,
+        offset,
+    )
     return {"total_duration_ms": payload["total_duration_ms"]}

@@ -10,7 +10,11 @@ from ran_anomaly_detector.server import app
 
 @pytest.fixture
 def client():
-    with patch("ran_anomaly_detector.server.TopicConsumer"), patch("ran_anomaly_detector.server.KafkaProducer"):
+    with (
+        patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect"),
+        patch("ran_anomaly_detector.server.TopicConsumer"),
+        patch("ran_anomaly_detector.server.KafkaProducer"),
+    ):
         with TestClient(app) as test_client:
             yield test_client
 
@@ -48,14 +52,6 @@ class TestReadyEndpoint:
 
         assert _check_predictor_ready() is True
         mock_get.assert_called_once_with("http://predictor:8080/ready", timeout=3.0)
-
-    @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", False)
-    @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "")
-    def test_ready_passes_when_no_predictor_url(self, client):
-        """No URL configured = predictor not required, pod is ready."""
-        response = client.get("/ready")
-        assert response.status_code == 200
-        assert response.json() == {"ready": True}
 
     @patch("ran_anomaly_detector.server._check_predictor_ready", return_value=True)
     def test_ready_returns_true_when_all_deps_up(self, mock_pred, client):
@@ -142,6 +138,7 @@ class TestKafkaLifespan:
     @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch.multiple(
         "ran_anomaly_detector.server",
+        DETECT_INFERENCE_URL="http://predictor:8080/v1/detect",
         KAFKA_CONSUMER_ENABLED=True,
         KAFKA_BOOTSTRAP="kafka.test:9092",
         KAFKA_METRICS_TOPIC="ran-combined-metrics",
@@ -164,6 +161,7 @@ class TestKafkaLifespan:
 
     @patch("ran_anomaly_detector.server.KafkaProducer")
     @patch("ran_anomaly_detector.server.TopicConsumer")
+    @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", False)
     def test_lifespan_skips_consumer_when_disabled(self, TopicConsumer, KafkaProducer):
         with TestClient(app):
@@ -173,6 +171,7 @@ class TestKafkaLifespan:
     @patch("ran_anomaly_detector.server.KafkaProducer")
     @patch("ran_anomaly_detector.server.TopicConsumer")
     @patch("ran_anomaly_detector.server.KAFKA_CONSUMER_ENABLED", True)
+    @patch("ran_anomaly_detector.server.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect")
     @patch("ran_anomaly_detector.detection.DETECT_INFERENCE_URL", "http://predictor:8080/v1/detect")
     def test_handler_publishes_anomaly_to_kafka(self, TopicConsumer, KafkaProducer):
         import httpx
@@ -189,7 +188,7 @@ class TestKafkaLifespan:
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_http:
             mock_http.return_value.post.return_value = httpx.Response(
-                200, json={"label": "anomalous", "confidence": 0.92, "class_index": 1}
+                200, request=httpx.Request("POST", "http://predictor:8080/v1/detect"), json={"label": "anomalous", "confidence": 0.92, "class_index": 1}
             )
 
             with TestClient(app):

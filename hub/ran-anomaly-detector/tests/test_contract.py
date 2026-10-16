@@ -35,7 +35,7 @@ class TestRanAnomaliesContract:
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
             mock_client.return_value.post.return_value = httpx.Response(
-                200, json={"label": "anomalous", "confidence": 0.94, "class_index": 1}
+                200, request=httpx.Request("POST", "http://predictor:8080/v1/detect"), json={"label": "anomalous", "confidence": 0.94, "class_index": 1}
             )
             outputs = service.process_message(msg)
 
@@ -49,7 +49,7 @@ class TestRanAnomaliesContract:
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
             mock_client.return_value.post.return_value = httpx.Response(
-                200, json={"label": "anomalous", "confidence": 0.87, "class_index": 1}
+                200, request=httpx.Request("POST", "http://predictor:8080/v1/detect"), json={"label": "anomalous", "confidence": 0.87, "class_index": 1}
             )
             outputs = service.process_message(msg)
 
@@ -69,7 +69,7 @@ class TestRanAnomaliesContract:
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
             mock_client.return_value.post.return_value = httpx.Response(
-                200, json={"label": "normal", "confidence": 0.99, "class_index": 0}
+                200, request=httpx.Request("POST", "http://predictor:8080/v1/detect"), json={"label": "normal", "confidence": 0.99, "class_index": 0}
             )
             outputs = service.process_message(msg)
 
@@ -82,7 +82,7 @@ class TestRanAnomaliesContract:
 
         with patch("ran_anomaly_detector.detection._get_http_client") as mock_client:
             mock_client.return_value.post.return_value = httpx.Response(
-                200, json={"label": "anomalous", "confidence": 0.91, "class_index": 1}
+                200, request=httpx.Request("POST", "http://predictor:8080/v1/detect"), json={"label": "anomalous", "confidence": 0.91, "class_index": 1}
             )
             outputs = service.process_message(msg)
 

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import SAMPLE_ANOMALY
+from helpers import SAMPLE_ANOMALY, make_llm_response
 from ran_rca_service.server import _handle_anomaly_message, app
 
 
@@ -180,7 +180,7 @@ class TestHandleAnomalyMessage:
 
         assert len(buffer) == 1
 
-    def test_graph_error_forwards_anomaly_unenriched(self):
+    def test_graph_error_does_not_forward(self):
         from collections import deque
 
         graph = MagicMock()
@@ -190,11 +190,7 @@ class TestHandleAnomalyMessage:
         raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")
         _handle_anomaly_message(raw, graph, None, "topic", buffer)
 
-        assert len(buffer) == 1
-        assert buffer[0]["incident_id"] == "test-001"
-        assert buffer[0]["root_cause_category"] == "unknown"
-        assert buffer[0]["root_cause"] == ""
-        assert buffer[0]["recommended_fix"] == ""
+        assert len(buffer) == 0
 
 
 class TestKafkaLifespan:
@@ -245,9 +241,12 @@ class TestKafkaLifespan:
 
         mock_rag = MagicMock()
         mock_rag.search = AsyncMock(return_value=[])
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=make_llm_response())
 
         with (
             patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag),
+            patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),
             TestClient(app) as client,
         ):
             raw = json.dumps(SAMPLE_ANOMALY).encode("utf-8")

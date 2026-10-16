@@ -58,11 +58,9 @@ class AnomalyDetectionService:
             return []
 
         detect_result = self._call_detect(kpi_window)
-        if detect_result is None:
-            return []
 
-        label = detect_result.get("label", "normal")
-        confidence = detect_result.get("confidence", 0.0)
+        label = detect_result["label"]
+        confidence = detect_result["confidence"]
 
         if label != "anomalous":
             return []
@@ -88,25 +86,12 @@ class AnomalyDetectionService:
         )
         return [output]
 
-    def _call_detect(self, kpi_window: list[dict]) -> dict | None:
-        """POST kpi_window to the detect predictor. Returns None on failure."""
-        if not DETECT_INFERENCE_URL:
-            logger.debug("DETECT_INFERENCE_URL not configured, skipping ML detection")
-            return None
-
-        try:
-            client = _get_http_client()
-            request_kwargs: dict[str, Any] = {"json": {"kpi_window": kpi_window}}
-            if DETECT_TOKEN:
-                request_kwargs["headers"] = {"Authorization": f"Bearer {DETECT_TOKEN}"}
-            resp = client.post(DETECT_INFERENCE_URL, **request_kwargs)
-            if resp.status_code != 200:
-                logger.warning("Detect predictor returned HTTP {}: {}", resp.status_code, resp.text[:200])
-                return None
-            return resp.json()
-        except httpx.TimeoutException:
-            logger.warning("Detect predictor timed out at {}", DETECT_INFERENCE_URL)
-            return None
-        except Exception:
-            logger.exception("Failed to call detect predictor")
-            return None
+    def _call_detect(self, kpi_window: list[dict]) -> dict:
+        """POST kpi_window to the detect predictor."""
+        client = _get_http_client()
+        request_kwargs: dict[str, Any] = {"json": {"kpi_window": kpi_window}}
+        if DETECT_TOKEN:
+            request_kwargs["headers"] = {"Authorization": f"Bearer {DETECT_TOKEN}"}
+        resp = client.post(DETECT_INFERENCE_URL, **request_kwargs)
+        resp.raise_for_status()
+        return resp.json()

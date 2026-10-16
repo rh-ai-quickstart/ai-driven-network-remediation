@@ -42,19 +42,11 @@ def _handle_metrics_message(
         logger.info("RAN anomaly detected: incident_id={}", anomaly.get("incident_id"))
         recent_anomalies.append(anomaly)
         if producer is not None:
-            try:
-                producer.send(anomalies_topic, json.dumps(anomaly).encode("utf-8"))
-            except Exception:
-                logger.exception("Failed to publish anomaly to Kafka")
+            producer.send(anomalies_topic, json.dumps(anomaly).encode("utf-8"))
 
 
 def _check_predictor_ready() -> bool:
-    """Check if the detect predictor is reachable and ready.
-
-    No URL configured = predictor not required (return True).
-    """
-    if not DETECT_INFERENCE_URL:
-        return True
+    """Check if the detect predictor is reachable and ready."""
     try:
         base_url = DETECT_INFERENCE_URL.rsplit("/", 2)[0]
         request_kwargs: dict[str, Any] = {"timeout": 3.0}
@@ -68,6 +60,9 @@ def _check_predictor_ready() -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not DETECT_INFERENCE_URL:
+        raise RuntimeError("DETECT_INFERENCE_URL is required — the anomaly detector cannot operate without a predictor endpoint")
+
     detection_service = AnomalyDetectionService()
     recent_anomalies: AnomalyBuffer = deque(maxlen=RECENT_ANOMALIES_LIMIT)
 

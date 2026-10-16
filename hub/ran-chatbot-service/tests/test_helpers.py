@@ -164,9 +164,9 @@ class TestFormatChatReply:
         assert "Anomalies detected: 0" in reply
         assert "No RAN anomalies currently detected." in reply
 
-    def test_falls_back_when_model_reply_is_empty(self):
+    def test_empty_model_reply_produces_empty_model_output(self):
         reply = format_chat_reply("Status?", "", [])
-        assert "fallback" in reply.lower()
+        assert "Model Output:\n- " in reply
 
     def test_blank_root_cause_and_fix_render_as_na(self, sample_anomaly):
         anomaly = sample_anomaly.model_copy(update={"root_cause": "", "recommended_fix": ""})

@@ -188,10 +188,10 @@ def test_publish_remediation_record_calls_kafka():
     mock_producer.close.assert_called_once()
 
 
-def test_audit_node_kafka_failure_does_not_raise():
+def test_audit_node_kafka_failure_propagates():
     state = _audit_state()
     with sync_patch(
         "ran_remediation_service.nodes.audit.publish_remediation_record", side_effect=Exception("kafka down")
     ):
-        result = audit_node(state)
-    assert "total_duration_ms" in result
+        with pytest.raises(Exception, match="kafka down"):
+            audit_node(state)

@@ -148,10 +148,7 @@ def format_chat_reply(
         root_cause = latest.root_cause or "n/a"
         recommended_fix = latest.recommended_fix or "n/a"
 
-    if raw_reply:
-        model_insight = raw_reply.strip()
-    else:
-        model_insight = "Live model unavailable; using deterministic operational fallback."
+    model_insight = raw_reply.strip()
 
     return (
         category_tag + "Summary:\n"

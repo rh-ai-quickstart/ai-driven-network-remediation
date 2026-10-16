@@ -1,4 +1,4 @@
-"""Tests for the analyze node — real LLM call with graceful degradation."""
+"""Tests for the analyze node — LLM call and failure propagation."""
 
 from __future__ import annotations
 
@@ -98,34 +98,28 @@ class TestContextTruncation:
         assert len(context_section) <= 5000
 
 
-class TestGracefulDegradation:
+class TestLlmFailurePropagation:
     @pytest.mark.asyncio
-    async def test_llm_error_returns_empty_fields(self):
+    async def test_connection_error_propagates(self):
         llm = AsyncMock()
         llm.ainvoke = AsyncMock(side_effect=ConnectionError("LLM unreachable"))
 
         with patch("ran_rca_service.nodes.analyze.get_llm", return_value=llm):
             from ran_rca_service.nodes.analyze import analyze_node
 
-            result = await analyze_node(make_state(context_snippets=["some context"]))
-
-        assert result["root_cause"] == ""
-        assert result["recommended_fix"] == ""
-        assert result["root_cause_category"] == "unknown"
+            with pytest.raises(ConnectionError):
+                await analyze_node(make_state(context_snippets=["some context"]))
 
     @pytest.mark.asyncio
-    async def test_malformed_json_returns_empty_fields(self):
+    async def test_malformed_json_propagates(self):
         llm = AsyncMock()
         llm.ainvoke = AsyncMock(return_value=make_llm_response(content="not json"))
 
         with patch("ran_rca_service.nodes.analyze.get_llm", return_value=llm):
             from ran_rca_service.nodes.analyze import analyze_node
 
-            result = await analyze_node(make_state())
-
-        assert result["root_cause"] == ""
-        assert result["recommended_fix"] == ""
-        assert result["root_cause_category"] == "unknown"
+            with pytest.raises(json.JSONDecodeError):
+                await analyze_node(make_state())
 
     @pytest.mark.asyncio
     async def test_no_context_snippets_still_calls_llm(self, mock_llm):
@@ -137,18 +131,15 @@ class TestGracefulDegradation:
         assert result["root_cause"] != ""
 
     @pytest.mark.asyncio
-    async def test_empty_anomaly_with_llm_error_flows_through(self):
+    async def test_timeout_error_propagates(self):
         llm = AsyncMock()
         llm.ainvoke = AsyncMock(side_effect=TimeoutError("timeout"))
 
         with patch("ran_rca_service.nodes.analyze.get_llm", return_value=llm):
             from ran_rca_service.nodes.analyze import analyze_node
 
-            result = await analyze_node(make_state(anomaly="", context_snippets=[]))
-
-        assert result["root_cause"] == ""
-        assert result["recommended_fix"] == ""
-        assert result["root_cause_category"] == "unknown"
+            with pytest.raises(TimeoutError):
+                await analyze_node(make_state(anomaly="", context_snippets=[]))
 
 
 class TestContractValidation:
@@ -164,18 +155,3 @@ class TestContractValidation:
 
         validator.validate(project_enriched(state, result))
 
-    @pytest.mark.asyncio
-    async def test_degraded_output_matches_schema(self):
-        schema = json.loads((CONTRACTS_DIR / "ran-anomaly-enriched.schema.json").read_text())
-        validator = jsonschema.Draft202012Validator(schema)
-
-        llm = AsyncMock()
-        llm.ainvoke = AsyncMock(side_effect=ConnectionError("down"))
-
-        with patch("ran_rca_service.nodes.analyze.get_llm", return_value=llm):
-            from ran_rca_service.nodes.analyze import analyze_node
-
-            state = make_state()
-            result = await analyze_node(state)
-
-        validator.validate(project_enriched(state, result))
