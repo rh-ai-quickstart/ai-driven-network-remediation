@@ -134,13 +134,6 @@ class TestAnomalyDetectionService:
         assert output["ad_label"] == "anomalous"
         assert 0 <= output["ad_confidence"] <= 1
 
-    def test_no_inference_url_returns_no_output(self):
-        with patch("ran_anomaly_detector.detection.DETECT_INFERENCE_URL", ""):
-            service = AnomalyDetectionService()
-            msg = synthetic_fixture_message("antenna_failure")
-            outputs = service.process_message(msg)
-            assert outputs == []
-
     def test_generates_incident_id_if_not_in_message(self):
         service = AnomalyDetectionService()
         fixture = synthetic_fixture("antenna_failure")

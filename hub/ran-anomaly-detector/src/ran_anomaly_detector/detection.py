@@ -58,11 +58,9 @@ class AnomalyDetectionService:
             return []
 
         detect_result = self._call_detect(kpi_window)
-        if detect_result is None:
-            return []
 
-        label = detect_result.get("label", "normal")
-        confidence = detect_result.get("confidence", 0.0)
+        label = detect_result["label"]
+        confidence = detect_result["confidence"]
 
         if label != "anomalous":
             return []
@@ -88,12 +86,8 @@ class AnomalyDetectionService:
         )
         return [output]
 
-    def _call_detect(self, kpi_window: list[dict]) -> dict | None:
-        """POST kpi_window to the detect predictor. Returns None if not configured."""
-        if not DETECT_INFERENCE_URL:
-            logger.debug("DETECT_INFERENCE_URL not configured, skipping ML detection")
-            return None
-
+    def _call_detect(self, kpi_window: list[dict]) -> dict:
+        """POST kpi_window to the detect predictor."""
         client = _get_http_client()
         request_kwargs: dict[str, Any] = {"json": {"kpi_window": kpi_window}}
         if DETECT_TOKEN:
