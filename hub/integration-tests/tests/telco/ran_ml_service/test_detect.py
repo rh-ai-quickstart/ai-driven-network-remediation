@@ -22,8 +22,6 @@ FIXTURES_DIR = Path(__file__).resolve().parents[4] / "telco-oran" / "src" / "tel
 
 def _load_fixture_kpi_window(name: str) -> list[dict]:
     path = FIXTURES_DIR / f"{name}.json"
-    if not path.exists():
-        pytest.skip(f"Fixture {name}.json not found at {FIXTURES_DIR}")
     fixture = json.loads(path.read_text())
     return fixture["kpi_window"]
 
