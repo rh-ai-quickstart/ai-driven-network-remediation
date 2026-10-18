@@ -2,7 +2,7 @@
 
 Deploy AI-Driven Network Remediation (ADNR) with one standard command: `make deploy`. Topology is controlled by `CLUSTER_COUNT`. ACM is used automatically when you deploy multi-cluster (`CLUSTER_COUNT>=2`). Single-cluster (`CLUSTER_COUNT=1`) uses Argo CD / GitOps for the edge chart and does not require ACM.
 
-For hub-only Helm installs without edge orchestration, see [manual-deploy.md](manual-deploy.md). For AAP playbook routing through the ACM cluster proxy, see [RHACM multicluster (ACM hub proxy)](../README.md#rhacm-multicluster-acm-hub-proxy) in the README. That flag is separate from topology (details below).
+For hub-only Helm installs without edge orchestration, see [manual-deploy.md](manual-deploy.md). For AAP playbook routing through the ACM cluster proxy, see [cluster credentials](integration-setup.md#cluster-credentials). That flag is separate from topology (details below).
 
 ## Overview
 
@@ -35,7 +35,7 @@ Do not confuse these. They solve different problems.
 
 `CLUSTER_COUNT>=2` deploys edge ADNR and per-spoke MCP kubeconfigs. It does **not** turn on AAP multicluster auth.
 
-`ENABLE_MULTICLUSTER=true` needs `CLUSTER_PROXY_URL`, `RHACM_HUB_TOKEN`, and usually `ENABLE_AAP_MOCK=false`. You can use it with either topology mode when AAP should call spoke APIs through the hub proxy. See the README section linked above.
+`ENABLE_MULTICLUSTER=true` needs `CLUSTER_PROXY_URL`, `RHACM_HUB_TOKEN`, and usually `ENABLE_AAP_MOCK=false`. You can use it with either topology mode when AAP should call spoke APIs through the hub proxy. See the cluster credentials guide linked above.
 
 ## Naming conventions
 

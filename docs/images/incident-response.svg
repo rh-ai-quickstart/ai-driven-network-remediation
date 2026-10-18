@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="450" viewBox="0 0 1000 450" role="img" aria-labelledby="title description">
+  <title id="title">Network and RAN incident response</title>
+  <desc id="description">Workload alerts feed Network diagnosis; radio measurements feed RAN detection and diagnosis. Shared model and reference services support both. AAP executes remediation, ServiceNow handles Network escalation, and both workflows report to linked dashboards.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#536878"/></marker>
+    <style>
+      text { font: 17px sans-serif; fill: #172b3a; text-anchor: middle; }
+      .label { font-size: 14px; }
+      .box { fill: #edf4f8; stroke: #536878; stroke-width: 2; rx: 10; }
+      .shared { fill: #fff2db; }
+      .flow { fill: none; stroke: #536878; stroke-width: 2; marker-end: url(#arrow); }
+      .support { stroke-dasharray: 6 4; }
+    </style>
+  </defs>
+  <rect width="1000" height="450" fill="#fff"/>
+  <rect class="box" x="20" y="100" width="180" height="65"/>
+  <text x="110" y="139">Workload alerts</text>
+  <rect class="box" x="20" y="245" width="180" height="65"/>
+  <text x="110" y="273">Radio</text><text x="110" y="296">measurements</text>
+  <rect class="box" x="270" y="100" width="210" height="65"/>
+  <text x="375" y="127">Network</text><text x="375" y="150">diagnosis</text>
+  <rect class="box" x="270" y="245" width="210" height="65"/>
+  <text x="375" y="273">RAN detection</text><text x="375" y="296">and diagnosis</text>
+  <rect class="box shared" x="270" y="15" width="460" height="55"/>
+  <text x="500" y="48">Shared model and reference documents</text>
+  <rect class="box" x="550" y="180" width="180" height="65"/>
+  <text x="640" y="207">AAP</text><text x="640" y="230">remediation</text>
+  <rect class="box" x="550" y="90" width="180" height="60"/>
+  <text x="640" y="115">ServiceNow</text><text x="640" y="138">escalation</text>
+  <rect class="box" x="800" y="135" width="180" height="150"/>
+  <text x="890" y="174">Network</text><text x="890" y="198">dashboard</text>
+  <text class="label" x="890" y="222">linked to</text>
+  <text x="890" y="248">RAN dashboard</text>
+  <path class="flow" d="M200 132 H270"/>
+  <path class="flow" d="M200 277 H270"/>
+  <path class="flow" d="M480 132 H515 V120 H550"/>
+  <path class="flow" d="M480 145 H510 V200 H550"/>
+  <path class="flow" d="M480 277 H510 V225 H550"/>
+  <path class="flow" d="M730 120 H765 V170 H800"/>
+  <path class="flow" d="M730 212 H800"/>
+  <path class="flow support" d="M375 70 V100"/>
+  <path class="flow support" d="M290 70 H240 V220 H375 V245"/>
+  <text class="label" x="500" y="370">Kafka carries events between workflow services.</text>
+  <text class="label" x="500" y="400">Dashed arrows show shared AI support for diagnosis.</text>
+</svg>
