@@ -18,7 +18,6 @@ from ran_remediation_service.config import (
 )
 from ran_remediation_service.models import RemediationState
 from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 from slack_sdk.models.attachments import BlockAttachment
 from slack_sdk.models.blocks import DividerBlock, HeaderBlock, SectionBlock
 

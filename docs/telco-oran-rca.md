@@ -16,8 +16,8 @@ ran-anomaly-detector (ML-detected anomaly)
 - **`rag_retrieval`** — queries the `telco_oran_docs` vector store via LlamaStack for
   relevant documentation snippets, using zone + application + AD confidence as context
 - **`analyze`** — sends anomaly context to Granite LLM, returns a structured
-  `root_cause_category`, `root_cause`, and `recommended_fix`; falls back to
-  `unknown` and empty fields on LLM failure
+  `root_cause_category`, `root_cause`, and `recommended_fix`; LLM or RAG
+  failures propagate — the anomaly is not forwarded for remediation
 
 ## Contracts
 

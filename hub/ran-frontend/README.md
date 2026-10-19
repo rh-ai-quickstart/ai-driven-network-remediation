@@ -77,9 +77,8 @@ Both BFF endpoints include a `_deps` field, same convention as `hub/frontend`:
 ```
 
 `_deps.status === "degraded"` shows an amber banner at the top of the page, and the header's
-"Kafka Feed" metric switches to "Unavailable". `/api/chat` can additionally report `llm`
-unavailable if the model endpoint is unreachable — that's annotated inline on the affected chat
-reply instead.
+"Kafka Feed" metric switches to "Unavailable". `/api/chat` returns HTTP 503 when the LLM
+endpoint is unreachable — `_deps` on chat responses only reports Kafka status.
 
 ### Clearing the anomaly list
 

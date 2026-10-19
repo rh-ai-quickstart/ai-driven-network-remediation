@@ -154,4 +154,3 @@ class TestContractValidation:
         result = await analyze_node(state)
 
         validator.validate(project_enriched(state, result))
-
