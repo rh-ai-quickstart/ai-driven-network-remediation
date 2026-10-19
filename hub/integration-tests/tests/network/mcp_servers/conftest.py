@@ -124,7 +124,11 @@ def _wait_for_all_services():
 
 def _make_client(name: str) -> httpx.Client:
     svc = _SERVICES[name]
-    return httpx.Client(base_url=svc.base_url, timeout=svc.timeout)
+    return httpx.Client(
+        base_url=svc.base_url,
+        timeout=svc.timeout,
+        limits=httpx.Limits(keepalive_expiry=5),
+    )
 
 
 @pytest.fixture(scope="session")

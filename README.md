@@ -97,6 +97,18 @@ For AAP operator installation on OpenShift, see the [AAP Operator Installation G
 
 The MCP AAP server authenticates using an API token. Create one in the AAP web UI:
 
+To access the AAP web console, find its route on the cluster:
+
+   ```bash
+   oc get routes -n aap
+   ```
+
+   Open the route URL (e.g., `https://aap-aap.apps.<cluster-domain>`) in your browser and log in with the AAP admin credentials. The default username is `admin`; retrieve the password from the cluster:
+
+   ```bash
+   oc get secret aap-admin-password -n aap -o jsonpath='{.data.password}' | base64 -d
+   ```
+
 1. Navigate to **Access Management > OAuth Applications > Create OAuth Application**. Set a name (e.g., `noc-bot`), select your organization, and set **Authorization grant type** to `Resource owner password-based` with **Client type** `Confidential`. Save the Client ID and Client Secret; they are only displayed once.
 2. Navigate to **Access Management > API Tokens > Create token**. Select the OAuth application created above (e.g., `noc-bot`), set **Scope** to `Write`.
 3. Copy the token and refresh token immediately. They are only displayed once and cannot be retrieved after closing the dialog. Tokens expire after 1 year by default. To renew, create a new token from the AAP UI or use the refresh token with the Client ID/Secret via the AAP `/o/token/` endpoint.
