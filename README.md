@@ -90,11 +90,13 @@ The following steps install Network and RAN on one hub cluster, with edge worklo
    | `AAP_NAMESPACE` | Controller namespace; defaults to `aap` |
    | `ENABLE_LIGHTSPEED` | `true`; deployment discovers the Lightspeed URL and token when unset |
    | `LIGHTSPEED_VERIFY_SSL` | `true`; use a Lightspeed endpoint with a trusted certificate as described in the [setup guide](docs/integration-setup.md#lightspeed) |
-   | `SERVICENOW_INSTANCE_URL` | Your ServiceNow base URL for incident links |
-   | `HELM_EXTRA_ARGS` | Uncomment and customize the real-integration override example in `.env.example` for RAN's AAP endpoint and ServiceNow |
+   | `SERVICENOW_INSTANCE_URL`, `SERVICENOW_API_KEY` | ServiceNow base URL and the API key from `make servicenow-bootstrap`; used when `ENABLE_SERVICENOW_MOCK=false` |
+   | `HELM_EXTRA_ARGS` | Uncomment and customize the real-integration override example in `.env.example` for RAN's AAP endpoint |
    | `FRONTEND_AUTH_ENABLED` | `true` to require OpenShift login for both dashboards |
 
    Keep `ENABLE_NETWORK_REMEDIATION=true` and `ENABLE_TELCO_ORAN=true`. Customize the real-integration example in `.env.example`; see [integration endpoints](docs/integration-setup.md#integration-endpoints) for controller addresses and ServiceNow credentials.
+
+   **Real ServiceNow setup:** Run `make servicenow-bootstrap` once with your PDI admin credentials to provision the integration account and an API key. Then set `SERVICENOW_INSTANCE_URL` and `SERVICENOW_API_KEY`, and set `ENABLE_SERVICENOW_MOCK=false`. See [scripts/servicenow-bootstrap/README.md](scripts/servicenow-bootstrap/README.md) for details.
 
    **Current limitation:** Authenticated ServiceNow incident counts are unavailable in the Network dashboard through this deployment configuration. The escalation integration is configured separately.
 

@@ -54,11 +54,17 @@ make servicenow-wake
 
 ## Deploy with a real ServiceNow instance
 
-After bootstrapping, plug the credentials into your Helm deployment:
+After bootstrapping, copy the generated API key from `.servicenow-creds.json` (the
+`api_key` field) into your environment or `.env` as `SERVICENOW_API_KEY`, set
+`SERVICENOW_INSTANCE_URL`, set `ENABLE_SERVICENOW_MOCK=false`, then run
+`make helm-install` (or `make deploy`). No `HELM_EXTRA_ARGS` needed.
 
 ```bash
-make helm-install \
-  HELM_EXTRA_ARGS="--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=https://dev12345.service-now.com \
-                   --set network.mcpSecrets.servicenow.username=noc_agent \
-                   --set network.mcpSecrets.servicenow.password=<generated>"
+export SERVICENOW_INSTANCE_URL="https://dev12345.service-now.com"
+export SERVICENOW_API_KEY="<api_key from .servicenow-creds.json>"
+export ENABLE_SERVICENOW_MOCK=false
+make helm-install
 ```
+
+If you do not use an API key, the MCP server falls back to Basic auth with
+`SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD`.

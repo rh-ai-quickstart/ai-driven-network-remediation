@@ -14,7 +14,7 @@ from typing import Any, Dict
 
 import requests
 
-from .creds import merge_creds_file
+from .creds import load_creds_file, merge_creds_file
 from .servicenow_client import ServiceNowClient
 
 
@@ -40,6 +40,11 @@ class ServiceNowAPIAutomation(ServiceNowClient):
             merge_creds_file({"api_key": resolved.strip()})
             print("API key token saved to .servicenow-creds.json")
             return resolved
+
+        existing = str(load_creds_file().get("api_key", "")).strip()
+        if existing:
+            print("Reusing existing API key token from .servicenow-creds.json")
+            return existing
 
         print(
             "WARNING: Could not retrieve API key token automatically.\n"

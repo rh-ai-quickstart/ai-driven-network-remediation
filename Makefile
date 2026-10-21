@@ -141,6 +141,9 @@ SLACK_BOT_TOKEN        ?=
 SLACK_CHANNEL          ?= \#ai-driven-network
 SERVICENOW_INSTANCE_URL ?=
 SERVICENOW_CREATE_RESOLVED ?= false
+SERVICENOW_API_KEY  ?=
+SERVICENOW_USERNAME ?=
+SERVICENOW_PASSWORD ?=
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -272,6 +275,15 @@ helm_mock_args = \
 	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set network.aapCredential.enabled=true,) \
 	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set-string network.aapCredential.saNamespace='$(EDGE_NAMESPACE)',)
 
+# Real ServiceNow wiring - emitted only when the mock is disabled.
+# URL reuses SERVICENOW_INSTANCE_URL (same var as bootstrap + dashboard links).
+# MCP server prefers the API key and falls back to Basic Auth automatically.
+helm_servicenow_real_args = \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_INSTANCE_URL),--set-string network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL='$(SERVICENOW_INSTANCE_URL)',),) \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_API_KEY),--set-string network.mcpSecrets.servicenow.apiKey='$(SERVICENOW_API_KEY)',),) \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_USERNAME),--set-string network.mcpSecrets.servicenow.username='$(SERVICENOW_USERNAME)',),) \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_PASSWORD),--set-string network.mcpSecrets.servicenow.password='$(SERVICENOW_PASSWORD)',),)
+
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
 	$(if $(GITEA_ADMIN_USER),--set-string gitea.gitea.adminUser='$(GITEA_ADMIN_USER)' --set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_OWNER='$(GITEA_ADMIN_USER)' --set-string network.gitea.adminUser='$(GITEA_ADMIN_USER)',) \
@@ -280,8 +292,7 @@ helm_gitea_args = \
 	$(if $(GITEA_URL),--set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL='$(GITEA_URL)',) \
 	$(if $(GITEA_REPO),--set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_REPO='$(GITEA_REPO)',) \
 	$(if $(filter true,$(GITEA_EXTERNAL)),$(if $(GITEA_TOKEN),--set network.mcpSecrets.gitea.create=true,),) \
-	$(if $(GITEA_TOKEN),--set-string network.mcpSecrets.gitea.token='$(GITEA_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,)
+	$(if $(GITEA_TOKEN),--set-string network.mcpSecrets.gitea.token='$(GITEA_TOKEN)',)
 
 helm_lokistack_args = \
 	--set network.lokistack.enabled=$(ENABLE_LOKISTACK) \
@@ -368,6 +379,7 @@ helm_all_args = \
 	$(helm_mcp_image_args) \
 	$(helm_mock_args) \
 	$(helm_gitea_args) \
+	$(helm_servicenow_real_args) \
 	$(helm_adnr_llm_args) \
 	$(helm_adnr_detect_args) \
 	$(helm_autorag_args) \
@@ -665,6 +677,9 @@ ifeq ($(ENABLE_LIGHTSPEED),true)
 	$(MAKE) _check-lightspeed-operator
 endif
 ifeq ($(ENABLE_HUB),true)
+ifeq ($(ENABLE_SERVICENOW_MOCK),false)
+	$(MAKE) check-servicenow-config
+endif
 	$(MAKE) check-adnr-llm-config
 	helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
@@ -725,6 +740,22 @@ check-adnr-llm-config:
 		echo "ERROR: Missing required ADNR LLM configuration:$$missing"; \
 		echo "Set ADNR_LLM_ID, ADNR_LLM_URL, and ADNR_LLM_TOKEN before running 'make helm-install'."; \
 		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
+		exit 1; \
+	fi
+
+.PHONY: check-servicenow-config
+check-servicenow-config:
+	@missing=""; \
+	[ -n "$(SERVICENOW_INSTANCE_URL)" ] || missing="$$missing SERVICENOW_INSTANCE_URL"; \
+	if [ -z "$(SERVICENOW_API_KEY)" ] && { [ -z "$(SERVICENOW_USERNAME)" ] || [ -z "$(SERVICENOW_PASSWORD)" ]; }; then \
+		missing="$$missing SERVICENOW_API_KEY(or SERVICENOW_USERNAME+SERVICENOW_PASSWORD)"; \
+	fi; \
+	if [ -n "$$missing" ]; then \
+		echo "ERROR: ENABLE_SERVICENOW_MOCK=false requires real ServiceNow config:$$missing"; \
+		echo "Recommended: run 'make servicenow-bootstrap' (needs admin creds), then set"; \
+		echo "SERVICENOW_INSTANCE_URL and SERVICENOW_API_KEY in .env."; \
+		echo "Basic auth alternative: SERVICENOW_INSTANCE_URL + SERVICENOW_USERNAME + SERVICENOW_PASSWORD."; \
+		echo "Or keep the mock: ENABLE_SERVICENOW_MOCK=true."; \
 		exit 1; \
 	fi
 
