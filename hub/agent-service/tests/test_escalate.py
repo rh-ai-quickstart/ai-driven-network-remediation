@@ -20,19 +20,22 @@ def _stub_rca(**overrides):
     return RootCauseAnalysis(**defaults)
 
 
+_FAKE_URL = "https://dev.service-now.com/incident.do?sys_id=abc123"
+
+
 def _make_capture_invoke(number="INC0012345"):
     captured = {}
 
     async def _capture_invoke(tool_name, kwargs):
         captured.update({"tool_name": tool_name, "kwargs": kwargs})
-        return {"success": True, "number": number}
+        return {"success": True, "ticket_number": number, "incident_url": _FAKE_URL}
 
     return captured, _capture_invoke
 
 
 async def _fake_invoke(tool_name, kwargs):
     if tool_name == "create_incident":
-        return {"success": True, "number": "INC0012345"}
+        return {"success": True, "ticket_number": "INC0012345", "incident_url": _FAKE_URL}
     return {}
 
 
@@ -43,6 +46,30 @@ class TestEscalateHappyPath:
             result = await escalate_node(state)
 
         assert result["servicenow_ticket"] == "INC0012345"
+
+    async def test_reads_ticket_number_key_not_number(self):
+        state = make_state(root_cause_analysis=_stub_rca())
+
+        async def _legacy_key_invoke(tool_name, kwargs):
+            return {"success": True, "number": "INC0012345"}
+
+        with patch("agent_service.nodes.escalate._invoke_tool", _legacy_key_invoke):
+            result = await escalate_node(state)
+
+        assert result["servicenow_ticket"] == ""
+
+    async def test_logs_ticket_number_and_url(self):
+        state = make_state(root_cause_analysis=_stub_rca())
+
+        with (
+            patch("agent_service.nodes.escalate._invoke_tool", _fake_invoke),
+            patch("agent_service.nodes.escalate.logger") as mock_logger,
+        ):
+            await escalate_node(state)
+
+        logged = mock_logger.info.call_args[0][0]
+        assert "INC0012345" in logged
+        assert _FAKE_URL in logged
 
     async def test_does_not_set_decision(self):
         state = make_state(root_cause_analysis=_stub_rca())

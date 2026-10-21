@@ -71,6 +71,7 @@ async def escalate_node(state) -> dict:
         logger.warning(f"ServiceNow escalation failed: {reason}")
         return {"servicenow_ticket": "", "error_message": reason}
 
-    ticket = response.get("number", "")
-    logger.info(f"ServiceNow ticket created: {ticket}")
+    ticket = response.get("ticket_number", "")
+    incident_url = response.get("incident_url", "")
+    logger.info(f"ServiceNow ticket created: {ticket} url={incident_url}")
     return {"servicenow_ticket": ticket}
