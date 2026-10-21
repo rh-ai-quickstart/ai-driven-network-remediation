@@ -125,7 +125,7 @@ _als_mock = AsyncMock(return_value=_ALS_STUB_RESPONSE)
 
 async def _mock_escalate_invoke(tool_name, kwargs):
     if tool_name == "create_incident":
-        return {"success": True, "number": "INC0000001"}
+        return {"success": True, "ticket_number": "INC0000001"}
     return {}
 
 
