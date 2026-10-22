@@ -51,10 +51,12 @@ def test_runbooks_sync_ingest_and_content_flow(ingestion_client):
         or "runbooks/nginx-crashloop.md" in sync_data["skipped_objects"]
     )
 
-    ingest_response = ingestion_client.post("/runbooks/ingest", timeout=60.0)
+    # The first attachment can initialize the embedding model in a fresh cluster.
+    ingest_response = ingestion_client.post("/runbooks/ingest", timeout=600.0)
     assert ingest_response.status_code == 200
     ingest_data = ingest_response.json()
     assert ingest_data["prefix"] == "runbooks/"
+    assert ingest_data["failed_count"] == 0, ingest_data["failed"]
     assert ingest_data["ingested_count"] > 0
     assert ingest_data["objects"][0]["id"]
     assert ingest_data["objects"][0]["vector_store_id"]

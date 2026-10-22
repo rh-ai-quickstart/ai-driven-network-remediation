@@ -96,6 +96,8 @@ def _make_graph(success: bool = True):
             "job_status": "successful",
             "success": success,
             "output_summary": "ok=3",
+            "failure_stage": "aap_job" if not success else "",
+            "failure_reason": "AAP job failed" if not success else "",
             "timestamp": "2026-09-22T10:00:00Z",
         }
     )
@@ -118,6 +120,11 @@ def test_handle_enriched_message_failed_graph():
     raw = json.dumps(_VALID_MESSAGE).encode()
     _handle_enriched_message(raw, graph, buffer)
     assert buffer[0]["success"] is False
+    assert buffer[0]["template_name"] == "ran-antenna-tilt-adjust"
+    assert buffer[0]["job_id"] == "7"
+    assert buffer[0]["failure_stage"] == "aap_job"
+    assert buffer[0]["failure_reason"] == "AAP job failed"
+    assert buffer[0]["timestamp"] == "2026-09-22T10:00:00Z"
 
 
 def test_handle_enriched_message_malformed_json():

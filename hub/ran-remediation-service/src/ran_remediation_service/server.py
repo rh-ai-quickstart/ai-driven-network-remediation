@@ -66,6 +66,8 @@ def _handle_enriched_message(
         "job_status": result.get("job_status", ""),
         "success": result.get("success", False),
         "output_summary": result.get("output_summary", ""),
+        "failure_stage": result.get("failure_stage", ""),
+        "failure_reason": result.get("failure_reason", ""),
         "timestamp": result.get("timestamp", ""),
     }
     logger.info(

@@ -12,9 +12,14 @@ _CATEGORY_TO_TEMPLATE = {
     "antenna_misalignment": "ran-antenna-tilt-adjust",
     "interference": "ran-interference-mitigation",
     "scheduler_degradation": "ran-scheduler-optimize",
+    "resource_allocation_fault": "ran-resource-allocation-correction",
     "congestion": "ran-load-balance",
+    "buffer_overflow": "ran-buffer-relief",
     "capacity_exhaustion": "ran-capacity-expand",
     "cell_failure": "ran-cell-recovery",
+    "rf_filter_fault": "ran-rf-filter-response",
+    "doppler_shift": "ran-doppler-shift-response",
+    "handover_fault": "ran-handover-stabilization",
     "unknown": _FALLBACK_TEMPLATE,
 }
 

@@ -39,6 +39,8 @@ def build_audit_payload(state: RemediationState) -> dict:
         "success": state.success,
         "timed_out": state.timed_out,
         "output_summary": state.output_summary,
+        "failure_stage": state.failure_stage,
+        "failure_reason": state.failure_reason,
         "total_duration_ms": total_ms,
     }
 

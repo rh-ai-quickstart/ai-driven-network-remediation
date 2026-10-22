@@ -1,0 +1,33 @@
+{
+  "runs": {
+    "used": {
+      "incident_id": "9334e533",
+      "zone": "A",
+      "application": "File",
+      "threshold": "0",
+      "classify_url": "http://ran-rca-ml-service-predictor.model-serving.svc.cluster.local/v1/classify",
+      "ml_status": "used",
+      "ml_steer_used": true,
+      "ml_class": "Co-Channel Interference (Severe)",
+      "ml_confidence": 0.9502,
+      "root_cause_category": "interference",
+      "root_cause": "Poor signal (RSRP mean=-105.59 dBm) and high error rate (BLER mean=0.14) with variable UL_SNR (4.79-21.20 dB) indicate RF interference/noise, likely from nearby cells or poor user device coverage.",
+      "recommended_fix": "Adjust UL power control parameters (e.g., increase target SINR or P0) and apply UL interference mitigation features (UL CoMP, ICIC). Check for faulty antennas, PIM (Passive Intermodulation), or feeder issues. Also, verify and adjust PCI planning to avoid conflicts and ensure unique identifiers for each gNB within the network (sections 7.10, 'Configure PCI' in vendor documentation).",
+      "remediation_template": "ran-interference-mitigation",
+      "chat_reply": "[Interference] Summary:\n- Anomalies detected: 4\n- Latest anomaly: Incident 9334e533 (zone=A, app=File) [AD confidence: 1.00]\n- Request: Explain incident 9334e533\n\nMantis RCA Prediction:\n- accepted advisory prediction: Co-Channel Interference (Severe) (confidence 0.95); guidance used: true\n\nFinal LLM Operational Category:\n- interference\n\nRoot Cause:\n- Poor signal (RSRP mean=-105.59 dBm) and high error rate (BLER mean=0.14) with variable UL_SNR (4.79-21.20 dB) indicate RF interference/noise, likely from nearby cells or poor user device coverage.\n\nRecommended Fix:\n- Adjust UL power control parameters (e.g., increase target SINR or P0) and apply UL interference mitigation features (UL CoMP, ICIC). Check for faulty antennas, PIM (Passive Intermodulation), or feeder issues. Also, verify and adjust PCI planning to avoid conflicts and ensure unique identifiers for each gNB within the network (sections 7.10, 'Configure PCI' in vendor documentation).\n\nModel Output:\n- Incident 9334e533 (zone=A, app=File) has an AD confidence score of 1.00. The Mantis RCA classification status is accepted advisory prediction: Co-Channel Interference (Severe) with a confidence of 0.95.\n\nThe final LLM diagnosis categorizes this incident as interference. The root cause analysis indicates poor signal (RSRP mean=-105.59 dBm) and high error rate (BLER mean=0.14) with variable UL_SNR (4.79-21.20 dB), suggesting RF interference/noise, likely from nearby cells or poor user device coverage.\n\nThe recommended fix is to adjust UL power control parameters (e.g., increase target SINR or P0) and apply UL interference mitigation features (UL CoMP, ICIC). Additionally, check for faulty antennas, PIM (Passive Intermodulation), or feeder issues. Verify and adjust PCI planning to avoid conflicts and ensure unique identifiers for each gNB within the network, as per sections 7.10, 'Configure PCI' in the vendor documentation.\n\nThe remediation status for this incident is failed, with the job template 'ran-interference-mitigation' not found, and it did not time out.",
+      "rca_instance": "hub-ran-rca-service-5877697bc8-22dj4\n1208575201",
+      "invalid_incident_id": "invalid-rca-01d31b2be0fd49c5a0747128676ebfed"
+    }
+  },
+  "prediction": {
+    "class": "Co-Channel Interference (Severe)",
+    "class_index": 2,
+    "confidence": 0.9502
+  },
+  "sequence": [
+    {
+      "mode": "used",
+      "incident_id": "9334e533"
+    }
+  ]
+}
