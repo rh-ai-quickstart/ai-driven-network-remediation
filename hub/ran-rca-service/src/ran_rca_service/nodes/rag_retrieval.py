@@ -25,5 +25,7 @@ async def rag_retrieval_node(state: RCAState) -> dict:
     query = f"5G anomaly detection zone={state.zone} application={state.application} AD confidence={state.ad_confidence:.2f}"
     if kpi_hint:
         query += f" top KPIs: {kpi_hint}"
+    if state.ml_steer_used:
+        query += f" possible root cause: {state.ml_class} (Mantis RCA confidence {state.ml_confidence:.2f})"
     snippets = await _get_rag_client().search(query)
     return {"context_snippets": snippets, "rag_query_used": query}

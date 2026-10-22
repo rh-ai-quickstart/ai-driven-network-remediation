@@ -36,25 +36,27 @@ from pydantic import BaseModel, Field
 from shared.probes import probe_http
 from shared.utils import build_deps, normalize_session_id, utc_now
 
-from .chat import build_chat_context, call_model, format_chat_reply
+from .chat import build_chat_context, call_model, format_chat_reply, select_anomaly
 from .config import (
     APP_VERSION,
     CORS_ORIGINS,
     DEMO_METRICS_TOPIC,
     ENRICHED_ANOMALIES_MAX_MESSAGES,
     ENRICHED_ANOMALIES_TOPIC,
+    INCIDENT_STATUS_TOPIC,
     KAFKA_BOOTSTRAP,
     MODEL_API_URL,
     MODEL_HEALTH_URL,
     MODEL_NAME,
     MODEL_TIMEOUT_SECONDS,
+    RCA_READY_URL,
     REMEDIATION_RESULTS_MAX_MESSAGES,
     REMEDIATION_RESULTS_TOPIC,
     SSL_VERIFY,
 )
 from .demo import DEFAULT_SCENARIO, build_demo_sample, publish_demo_metrics
 from .kafka import AnomaliesConsumer, RemediationConsumer
-from .models import EnrichedAnomaly, ModelSource
+from .models import EnrichedAnomaly, IncidentStatus, ModelSource
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,18 @@ async def lifespan(app: FastAPI):
     consumer.start()
     app.state.kafka_consumer = consumer
 
+    recent_statuses: deque[IncidentStatus] = deque(maxlen=ENRICHED_ANOMALIES_MAX_MESSAGES)
+    app.state.recent_statuses = recent_statuses
+    status_consumer = AnomaliesConsumer(
+        recent_statuses,
+        bootstrap_servers=KAFKA_BOOTSTRAP,
+        topic=INCIDENT_STATUS_TOPIC,
+        max_messages=ENRICHED_ANOMALIES_MAX_MESSAGES,
+        record_model=IncidentStatus,
+    )
+    status_consumer.start()
+    app.state.status_consumer = status_consumer
+
     recent_remediations: deque[dict] = deque(maxlen=REMEDIATION_RESULTS_MAX_MESSAGES)
     app.state.recent_remediations = recent_remediations
 
@@ -98,6 +112,7 @@ async def lifespan(app: FastAPI):
     yield
 
     consumer.stop()
+    status_consumer.stop()
     remediation_consumer.stop()
     await app.state.http_client.aclose()
 
@@ -129,6 +144,11 @@ class DemoTriggerRequest(BaseModel):
     scenario: str = DEFAULT_SCENARIO
 
 
+async def _rca_ready() -> bool:
+    probe = await probe_http(RCA_READY_URL, timeout=2.0, verify=SSL_VERIFY)
+    return bool(probe["http_code"] == 200)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────
 
 
@@ -147,17 +167,19 @@ async def ready(request: Request):
     """
     checks: dict[str, bool] = {
         "kafka": request.app.state.kafka_consumer.is_connected,
+        "incident_status_kafka": request.app.state.status_consumer.is_connected,
         "remediation_kafka": request.app.state.remediation_consumer.is_connected,
     }
 
     llm_probe = await probe_http(MODEL_HEALTH_URL, timeout=2.0, verify=SSL_VERIFY)
     checks["llm"] = llm_probe["reachable"]
+    checks["rca_service"] = await _rca_ready()
 
     return {"status": "ready", "checks": checks}
 
 
 @app.get("/api/anomalies")
-def anomalies(request: Request) -> dict:
+async def anomalies(request: Request) -> dict:
     """Recently detected RAN anomalies, newest first, with remediation status joined in.
 
     Reads both in-memory buffers — anomalies and remediation results — and joins
@@ -168,6 +190,8 @@ def anomalies(request: Request) -> dict:
     recent = list(reversed(request.app.state.recent_anomalies))
     kafka_ok = request.app.state.kafka_consumer.is_connected
     remediation_kafka_ok = request.app.state.remediation_consumer.is_connected
+    status_kafka_ok = request.app.state.status_consumer.is_connected
+    rca_ok = await _rca_ready()
 
     # Build a lookup of the latest remediation result per incident_id.
     # Iterating forward means later entries overwrite earlier ones — most recent wins.
@@ -175,17 +199,71 @@ def anomalies(request: Request) -> dict:
     for r in request.app.state.recent_remediations:
         remediation_index[r["incident_id"]] = r
 
+    status_index: dict[str, IncidentStatus] = {}
+    for status in request.app.state.recent_statuses:
+        status_index[status.incident_id] = status
+
     result = []
     for a in recent:
+        status = status_index.get(a.incident_id)
+        if status is not None and status.stage == "rca_classification":
+            continue
+        if status is not None and status.stage == "rca_explanation" and (a.root_cause or a.recommended_fix):
+            continue
         data = a.model_dump()
+        if data["timestamp"] is None:
+            del data["timestamp"]
+        data["incident_status"] = status.model_dump() if status else None
         r = remediation_index.get(a.incident_id)
         data["remediation_status"] = ("completed" if r.get("success") else "failed") if r else None
         data["remediation_job_id"] = r.get("job_id") if r else None
+        data["remediation_template_name"] = r.get("template_name") if r else None
+        data["remediation_job_status"] = r.get("job_status") if r else None
+        data["remediation_output_summary"] = r.get("output_summary") if r else None
         data["remediation_timestamp"] = r.get("timestamp") if r else None
+        data["remediation_failure_stage"] = r.get("failure_stage") if r else None
+        data["remediation_failure_reason"] = r.get("failure_reason") if r else None
         result.append(data)
 
+    failures = []
+    for status in reversed(list(status_index.values())):
+        if status.stage != "rca_classification":
+            continue
+        failures.append({
+            "incident_id": status.incident_id,
+            "zone": status.zone,
+            "application": status.application,
+            "kpi_window": [],
+            "ad_label": status.ad_label,
+            "ad_confidence": status.ad_confidence,
+            "root_cause_category": "",
+            "root_cause": "",
+            "recommended_fix": "",
+            "ml_class": "",
+            "ml_confidence": None,
+            "incident_status": status.model_dump(),
+            "remediation_status": None,
+            "remediation_job_id": None,
+            "remediation_template_name": None,
+            "remediation_job_status": None,
+            "remediation_output_summary": None,
+            "remediation_timestamp": None,
+            "remediation_failure_stage": None,
+            "remediation_failure_reason": None,
+        })
+    result = failures + result
+    result.sort(
+        key=lambda item: item["incident_status"]["timestamp"] if item["incident_status"] else item.get("timestamp") or "",
+        reverse=True,
+    )
+
     return {
-        "_deps": build_deps({"kafka": kafka_ok, "remediation_kafka": remediation_kafka_ok}),
+        "_deps": build_deps({
+            "kafka": kafka_ok,
+            "remediation_kafka": remediation_kafka_ok,
+            "incident_status_kafka": status_kafka_ok,
+            "rca_service": rca_ok,
+        }),
         "count": len(result),
         "anomalies": result,
     }
@@ -203,11 +281,17 @@ def clear_anomalies(request: Request) -> dict:
     """
     request.app.state.recent_anomalies.clear()
     request.app.state.recent_remediations.clear()
+    request.app.state.recent_statuses.clear()
     kafka_ok = request.app.state.kafka_consumer.is_connected
     remediation_kafka_ok = request.app.state.remediation_consumer.is_connected
+    status_kafka_ok = request.app.state.status_consumer.is_connected
 
     return {
-        "_deps": build_deps({"kafka": kafka_ok, "remediation_kafka": remediation_kafka_ok}),
+        "_deps": build_deps({
+            "kafka": kafka_ok,
+            "remediation_kafka": remediation_kafka_ok,
+            "incident_status_kafka": status_kafka_ok,
+        }),
         "status": "cleared",
         "count": 0,
     }
@@ -270,7 +354,9 @@ async def chat(req: ChatRequest, request: Request) -> dict:
     prompt = build_chat_context(msg, anomalies, remediations, history)
     raw_reply, model_source = await call_model(prompt, request.app.state.http_client)
 
-    if model_source != ModelSource.LIVE:
+    selected = select_anomaly(msg, anomalies)
+    explanation_unavailable = selected is not None and (not selected.root_cause or not selected.recommended_fix)
+    if model_source != ModelSource.LIVE and not explanation_unavailable:
         return JSONResponse(
             status_code=503,
             content={

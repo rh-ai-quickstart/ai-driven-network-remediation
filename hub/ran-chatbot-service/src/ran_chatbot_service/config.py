@@ -13,6 +13,7 @@ KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 # Topic ran-rca-service publishes LLM-enriched anomalies to (root_cause +
 # recommended_fix added). See kafka.py:AnomaliesConsumer.
 ENRICHED_ANOMALIES_TOPIC = os.getenv("ENRICHED_ANOMALIES_TOPIC", "ran-anomalies-enriched")
+INCIDENT_STATUS_TOPIC = os.getenv("INCIDENT_STATUS_TOPIC", "ran-incident-status")
 ENRICHED_ANOMALIES_MAX_MESSAGES = int(os.getenv("ENRICHED_ANOMALIES_MAX_MESSAGES", "50"))
 
 # Topic ran-remediation-service publishes audit records to after each remediation
@@ -31,6 +32,7 @@ MODEL_HEALTH_URL = f"{_parsed_model_url.scheme}://{_parsed_model_url.netloc}/v1/
 MODEL_NAME = os.getenv("MODEL_NAME", "")
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "20"))
 MODEL_MAX_TOKENS = int(os.getenv("MODEL_MAX_TOKENS", "280"))
+RCA_READY_URL = os.getenv("RCA_READY_URL", "http://hub-ran-rca-service:8003/ready")
 
 CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 

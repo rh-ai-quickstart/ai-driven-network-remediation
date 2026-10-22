@@ -8,11 +8,13 @@ from unittest.mock import MagicMock
 
 from ran_rca_service.models import RCAState
 
+_FIXTURE_PATH = Path(__file__).resolve().parents[3] / "hub/telco-oran/src/telco_oran/fixtures/antenna_failure.json"
+_FIXTURE = json.loads(_FIXTURE_PATH.read_text())
 SAMPLE_ANOMALY = {
     "incident_id": "test-001",
     "zone": "A",
     "application": "Twitch",
-    "kpi_window": [{"RSRP": -85.0, "DL_BLER": 0.1}] * 128,
+    "kpi_window": _FIXTURE["kpi_window"],
     "ad_label": "anomalous",
     "ad_confidence": 0.94,
 }
@@ -54,4 +56,6 @@ def project_enriched(state: RCAState, result: dict) -> dict:
         "root_cause_category": result["root_cause_category"],
         "root_cause": result["root_cause"],
         "recommended_fix": result["recommended_fix"],
+        "ml_class": result.get("ml_class", state.ml_class),
+        "ml_confidence": result.get("ml_confidence", state.ml_confidence or 0.0),
     }

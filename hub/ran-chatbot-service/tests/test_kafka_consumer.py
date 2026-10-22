@@ -9,7 +9,7 @@ from collections import deque
 import pytest
 import ran_chatbot_service.kafka as kafka_module
 from ran_chatbot_service.kafka import AnomaliesConsumer
-from ran_chatbot_service.models import EnrichedAnomaly
+from ran_chatbot_service.models import EnrichedAnomaly, IncidentStatus
 
 _SAMPLE_ANOMALY_1 = {
     "incident_id": "inc-001",
@@ -131,6 +131,22 @@ def test_topic_is_required():
         AnomaliesConsumer(deque(), bootstrap_servers="kafka:9092", topic="", max_messages=50)
 
 
+def test_legacy_kafka_record_preserves_identity_and_unrecorded_status():
+    from ran_chatbot_service.chat import format_chat_reply
+
+    buffer: deque[EnrichedAnomaly] = deque(maxlen=50)
+    consumer = AnomaliesConsumer(buffer, bootstrap_servers="kafka:9092", topic=_TOPIC, max_messages=50)
+    consumer._running = True
+    consumer._dispatch({(_TOPIC, 0): [_FakeMessage(0, json.dumps(_SAMPLE_ANOMALY_1))]})
+    assert len(buffer) == 1
+    anomaly = buffer[0]
+    assert (anomaly.incident_id, anomaly.zone, anomaly.application) == ("inc-001", "A", "Twitch")
+    assert anomaly.ml_class == ""
+    reply = format_chat_reply("Explain inc-001", "Diagnosis", list(buffer))
+    assert "Mantis RCA Prediction:\n- unavailable" in reply
+    assert "zone=A, app=Twitch" in reply
+
+
 def test_is_connected_false_before_start():
     consumer = AnomaliesConsumer(deque(), bootstrap_servers="kafka:9092", topic=_TOPIC, max_messages=50)
     assert consumer.is_connected is False
@@ -151,6 +167,39 @@ def test_seed_recent_history_prepopulates_buffer_on_connect(monkeypatch):
     consumer.stop()
 
     assert [a.incident_id for a in buffer] == ["inc-001", "inc-002"]
+
+
+def test_status_topic_seeds_failed_incidents_on_connect(monkeypatch):
+    status = {
+        "incident_id": "failed-001",
+        "stage": "rca_classification",
+        "outcome": "failed",
+        "error_reason": "classifier unavailable",
+        "timestamp": "2026-10-22T10:30:00+00:00",
+        "zone": "A",
+        "application": "Twitch",
+        "ad_label": "anomalous",
+        "ad_confidence": 0.94,
+    }
+    messages = [_FakeMessage(0, json.dumps(status))]
+    monkeypatch.setattr(
+        kafka_module, "KafkaConsumer", lambda *a, **kw: _FakeKafkaConsumer(deliver_on_call=2, messages=messages)
+    )
+    buffer: deque[IncidentStatus] = deque(maxlen=50)
+    consumer = AnomaliesConsumer(
+        buffer,
+        bootstrap_servers="kafka:9092",
+        topic="ran-incident-status",
+        max_messages=50,
+        poll_timeout_ms=50,
+        record_model=IncidentStatus,
+    )
+    consumer.start()
+    _wait_until(lambda: len(buffer) == 1)
+    consumer.stop()
+
+    assert buffer[0].incident_id == "failed-001"
+    assert buffer[0].error_reason == "classifier unavailable"
 
 
 def test_poll_loop_dispatches_new_messages_to_buffer(monkeypatch):

@@ -1,5 +1,5 @@
 from collections import deque
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -46,6 +46,9 @@ def client():
     with (
         patch("ran_chatbot_service.AnomaliesConsumer", return_value=mock_anomalies_consumer),
         patch("ran_chatbot_service.RemediationConsumer", return_value=mock_remediation_consumer),
+        patch("ran_chatbot_service.probe_http", new_callable=AsyncMock, return_value={
+            "status": "up", "http_code": 200, "reachable": True,
+        }),
     ):
         with TestClient(app) as test_client:
             test_client.app.state.recent_remediations = deque(maxlen=100)
