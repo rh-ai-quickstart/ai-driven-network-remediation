@@ -69,7 +69,8 @@ class LlamaStackVectorStoreClient:
         embedding_model: str | None = None,
         chunk_size_tokens: int = 800,
         chunk_overlap_tokens: int = 80,
-        timeout_seconds: float = 30,
+        # The first file attachment can download and initialize the embedding model.
+        timeout_seconds: float = 300,
     ) -> None:
         self._client = OgxClient(base_url=base_url, timeout=timeout_seconds)
         self._vector_store_name = vector_store_name

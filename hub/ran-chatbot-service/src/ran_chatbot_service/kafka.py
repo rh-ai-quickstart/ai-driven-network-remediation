@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnomaliesConsumer:
-    """Continuously consume ran-anomalies-enriched into a bounded in-memory buffer.
+    """Continuously consume enriched anomalies or incident statuses into a bounded buffer.
 
     The buffer is in ascending Kafka offset order (oldest first): messages are
     always appended in the order they're dispatched, so the newest anomaly is
@@ -49,14 +49,16 @@ class AnomaliesConsumer:
         topic: str,
         max_messages: int,
         poll_timeout_ms: int = 1000,
+        record_model: type = EnrichedAnomaly,
     ) -> None:
         if not topic:
-            raise ValueError("An enriched-anomalies Kafka topic is required")
+            raise ValueError("A Kafka topic is required")
         self._buffer = buffer
         self._bootstrap_servers = bootstrap_servers
         self._topic = topic
         self._max_messages = max_messages
         self._poll_timeout_ms = poll_timeout_ms
+        self._record_model = record_model
         self._consumer: KafkaConsumer | None = None
         self._running = False
         self._stop_event = threading.Event()
@@ -173,12 +175,9 @@ class AnomaliesConsumer:
                 if not self._running:
                     return
                 try:
-                    self._buffer.append(EnrichedAnomaly.model_validate_json(msg.value))
+                    self._buffer.append(self._record_model.model_validate_json(msg.value))
                 except ValidationError:
-                    logger.warning(
-                        "Skipping enriched anomaly that failed schema validation at offset %s",
-                        msg.offset,
-                    )
+                    logger.warning("Skipping invalid %s record at offset %s", self._topic, msg.offset)
 
 
 class RemediationConsumer:

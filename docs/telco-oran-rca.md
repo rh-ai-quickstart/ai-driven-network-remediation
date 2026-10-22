@@ -9,15 +9,18 @@ root cause and recommended fix using RAG + IBM Granite, and publishes the enrich
 ```
 ran-anomaly-detector (ML-detected anomaly)
   → Kafka: ran-anomalies
-  → ran-rca-service (LangGraph: rag_retrieval → analyze)
+  → ran-rca-service (LangGraph: classify → rag_retrieval → analyze)
   → Kafka: ran-anomalies-enriched
 ```
 
 - **`rag_retrieval`** — queries the `telco_oran_docs` vector store via LlamaStack for
   relevant documentation snippets, using zone + application + AD confidence as context
-- **`analyze`** — sends anomaly context to Granite LLM, returns a structured
-  `root_cause_category`, `root_cause`, and `recommended_fix`; LLM or RAG
-  failures propagate — the anomaly is not forwarded for remediation
+- **`classify`** — obtains and validates the Mantis RCA label and confidence;
+  the label determines the operational category
+- **`analyze`** — sends anomaly context to Granite LLM for `root_cause` and
+  `recommended_fix`; the LLM cannot change the Mantis-derived category. An LLM
+  failure publishes empty explanation fields and an incident status while the
+  classified anomaly continues to remediation. A RAG failure still stops enrichment
 
 ## Contracts
 
@@ -25,22 +28,26 @@ ran-anomaly-detector (ML-detected anomaly)
 |---|---|---|
 | `ran-anomalies` | Consumed | [`contracts/ran-anomalies.schema.json`](../contracts/ran-anomalies.schema.json) |
 | `ran-anomalies-enriched` | Produced | [`contracts/ran-anomaly-enriched.schema.json`](../contracts/ran-anomaly-enriched.schema.json) |
+| `ran-incident-status` | Produced for classification or explanation failure | [`contracts/ran-incident-status.schema.json`](../contracts/ran-incident-status.schema.json) |
 
-The output is the input record plus the three fields this service adds:
-`root_cause_category`, `root_cause`, and `recommended_fix`. The schemas are the
+The output is the input record plus `ml_class`, `ml_confidence`,
+`root_cause_category`, `root_cause`, and `recommended_fix`. The two confidence
+fields distinguish RCA from anomaly detection. The schemas are the
 authoritative field lists and are validated in `tests/test_analyze.py` and
 `tests/test_graph.py`, so they are deliberately not duplicated here.
 
 `root_cause_category` is a closed enum — `ran-remediation-service` maps it
 directly to an AAP job template, so adding a value requires a matching template
 on the remediation side.
+When the explanation fails, `root_cause` and `recommended_fix` are empty strings;
+the status record carries the short reason and timestamp separately.
 
 ## Endpoints
 
 | Path | Purpose |
 |---|---|
 | `GET /health` | Liveness probe |
-| `GET /ready` | Readiness (Kafka consumer thread alive) |
+| `GET /ready` | Readiness (Kafka consumer and configured classifier model) |
 | `GET /anomalies` | Recent enriched anomalies (in-memory buffer) |
 
 ## Config (env vars)

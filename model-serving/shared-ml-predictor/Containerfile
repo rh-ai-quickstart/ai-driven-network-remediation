@@ -1,4 +1,4 @@
-# Build context: model-serving/ran-ml-service/ (self-contained, no shared dep).
+# Build context: model-serving/shared-ml-predictor/ (used by both ML services).
 FROM python:3.13-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -16,13 +16,14 @@ COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-install-project --no-editable --no-dev
 
-COPY . /app/
+COPY README.md ./
+COPY src/ ./src/
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable --no-dev
 
 # Pre-download the HuggingFace backbone so the image works air-gapped.
-RUN uv run python -c "from huggingface_hub import snapshot_download; snapshot_download('paris-noah/Mantis-8M')"
+RUN uv run python -c "from huggingface_hub import snapshot_download; snapshot_download('paris-noah/Mantis-8M', revision='bc7d5ab40c02133386a28e2c127f35c17c86901d')"
 
 FROM python:3.13-slim
 
@@ -38,7 +39,8 @@ RUN chmod -R a+rX /app /opt/huggingface
 ENV PATH="/app/.venv/bin:$PATH" \
     HF_HOME=/opt/huggingface \
     HF_HUB_CACHE=/opt/huggingface/hub \
-    HF_HUB_OFFLINE=1
+    HF_HUB_OFFLINE=1 \
+    MANTIS_CHECKPOINT=/opt/huggingface/hub/models--paris-noah--Mantis-8M/snapshots/bc7d5ab40c02133386a28e2c127f35c17c86901d
 
 EXPOSE 8080
 CMD ["ran-ml-service"]

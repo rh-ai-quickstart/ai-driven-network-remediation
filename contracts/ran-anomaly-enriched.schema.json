@@ -4,7 +4,7 @@
   "title": "Enriched RAN Anomaly (ran-anomalies-enriched topic)",
   "description": "Schema for enriched anomaly records published to the ran-anomalies-enriched Kafka topic by the ran-rca-service after LLM-powered root cause analysis on ML-detected anomalies.",
   "type": "object",
-  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause_category", "root_cause", "recommended_fix"],
+  "required": ["incident_id", "zone", "application", "kpi_window", "ad_label", "ad_confidence", "root_cause_category", "root_cause", "recommended_fix", "ml_class", "ml_confidence"],
   "properties": {
     "incident_id": {
       "type": "string",
@@ -40,16 +40,19 @@
     },
     "root_cause_category": {
       "type": "string",
-      "enum": ["antenna_misalignment", "interference", "scheduler_degradation", "congestion", "capacity_exhaustion", "cell_failure", "unknown"],
-      "description": "Discrete RCA classification used to select the remediation playbook."
+      "enum": ["antenna_misalignment", "interference", "scheduler_degradation", "resource_allocation_fault", "congestion", "buffer_overflow", "capacity_exhaustion", "cell_failure", "rf_filter_fault", "doppler_shift", "handover_fault", "unknown"],
+      "description": "Mantis RCA-derived category used to select the remediation playbook."
     },
     "root_cause": {
       "type": "string",
-      "description": "LLM-determined root cause of the anomaly."
+      "description": "LLM-determined root cause of the anomaly; empty when explanation is unavailable."
     },
     "recommended_fix": {
       "type": "string",
-      "description": "LLM-recommended remediation action referencing vendor documentation."
-    }
+      "description": "LLM-recommended remediation action referencing vendor documentation; empty when explanation is unavailable."
+    },
+    "ml_class": {"type": "string", "description": "Original Mantis RCA label; empty when unavailable."},
+    "ml_confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "Mantis RCA confidence, separate from anomaly-detection confidence."},
+    "timestamp": {"type": "string", "format": "date-time", "description": "Time RCA enrichment completed, for incident ordering."}
   }
 }

@@ -1,5 +1,5 @@
 {
-  "notebook": "model-serving/ran-ml-service/notebooks/telecomts_model_evaluation.ipynb",
+  "notebook": "model-serving/shared-ml-predictor/notebooks/telecomts_model_evaluation.ipynb",
   "notebook_sha256": "7710e3fbd47e8a7237ac1cef1629b8c844d08b855012d837daef64de320c3cc4",
   "dataset": {
     "repository": "AliMaatouk/TelecomTS",

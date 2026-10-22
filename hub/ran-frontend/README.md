@@ -78,7 +78,19 @@ Both BFF endpoints include a `_deps` field, same convention as `hub/frontend`:
 
 `_deps.status === "degraded"` shows an amber banner at the top of the page, and the header's
 "Kafka Feed" metric switches to "Unavailable". `/api/chat` returns HTTP 503 when the LLM
-endpoint is unreachable — `_deps` on chat responses only reports Kafka status.
+endpoint is unreachable, except when the selected incident has an unavailable
+RCA explanation; then it returns the incident summary with the explanation and
+fix marked unavailable. `_deps` on chat responses only reports Kafka status.
+The anomalies response also checks `ran-rca-service` readiness. If its classifier is
+unconfigured or unavailable, or the RCA service is down, `_deps.unavailable` includes
+`rca_service` and the banner appears even when no incident status event was published.
+The banner clears after the service and classifier recover; the BFF does not create an
+incident result from a dependency probe.
+After installing the RCA and BFF dev environments and frontend packages, run
+`python3 scripts/check_classifier_dependency_banner.py` from the repository root
+to check this path over live local HTTP services and render the banner from the
+BFF response. The check runs without a Kafka broker, so unrelated Kafka entries
+remain degraded after classifier recovery.
 
 ### Clearing the anomaly list
 

@@ -115,3 +115,6 @@ local/
 /.postman/
 /postman/
 TelecomTS/
+
+# Private RCA recovery artifacts (never commit model weights)
+model-serving/ran-rca-ml-service/.private-artifacts/

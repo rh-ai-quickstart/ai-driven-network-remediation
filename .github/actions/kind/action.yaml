@@ -103,6 +103,12 @@ runs:
           echo "ADNR_DETECT_INFERENCE_URL is not set; disabling ranAnomalyDetector for Kind."
           DETECT_OVERRIDE="--set telco.ranAnomalyDetector.enabled=false"
         fi
+        RCA_READINESS_OVERRIDE=""
+        if [ -z "${ADNR_CLASSIFY_INFERENCE_URL:-}" ]; then
+          # Keep the RCA consumer reachable for the fail-closed Kind test while
+          # /ready continues to report that the classifier is unavailable.
+          RCA_READINESS_OVERRIDE="--set telco.ranRcaService.readinessProbe.httpGet.path=/health"
+        fi
         make helm-install REGISTRY=localhost:5001 ROUTES_ENABLED=false ENABLE_KAFKA_UI=false \
           ENABLE_SERVICENOW_MOCK=true AUTO_INGEST_ON_STARTUP=false \
           HELM_EXTRA_ARGS="\
@@ -121,7 +127,8 @@ runs:
             --set kafka.kafka.resources.limits.cpu=500m \
             --set kafka.kafka.resources.limits.memory=512Mi \
             --set-string kafka.kafka.jvmHeapOpts='-Xmx384m -Xms256m' \
-            ${DETECT_OVERRIDE}"
+            ${DETECT_OVERRIDE} \
+            ${RCA_READINESS_OVERRIDE}"
       shell: bash
 
     - name: Wait for Kafka topics to be created

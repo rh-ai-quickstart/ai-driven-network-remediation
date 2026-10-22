@@ -981,6 +981,7 @@ source = { editable = "." }
 dependencies = [
     { name = "click" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "kafka-python-ng" },
     { name = "langchain-openai" },
     { name = "langgraph" },
@@ -1004,6 +1005,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.0" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "kafka-python-ng", specifier = ">=2.2" },
     { name = "langchain-openai", specifier = ">=0.3" },
     { name = "langgraph", specifier = ">=0.2" },

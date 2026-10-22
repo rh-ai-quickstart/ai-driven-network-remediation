@@ -1,0 +1,103 @@
+{
+  "source": "Pinned local inference with the recovered issue-196 checkpoint; values are serving reference observations, not original notebook output.",
+  "checkpoint_sha256": "0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe",
+  "preprocessing_sha256": "1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae",
+  "notebook_sha256": "7710e3fbd47e8a7237ac1cef1629b8c844d08b855012d837daef64de320c3cc4",
+  "dataset_revision": "1b3a88a440f4922edfcd1e230e42c003c0e13bdf",
+  "split_seed": 42,
+  "backbone_revision": "bc7d5ab40c02133386a28e2c127f35c17c86901d",
+  "classes": [
+    "Antenna Failure",
+    "Co-Channel Interference (Mild)",
+    "Co-Channel Interference (Severe)",
+    "Faulty RF Filters (Temporal)",
+    "Doppler Shift (Severe)",
+    "Faulty Handover Algorithm (Too Frequent)",
+    "Buffer Overflow (Gradual Buildup)",
+    "Resource Allocation Bugs",
+    "High Network Congestion (Gradual Buildup)",
+    "High Network Congestion (Sudden Spike)"
+  ],
+  "tolerances": {
+    "confidence_absolute": 0.0001,
+    "logits_absolute": 0.0001
+  },
+  "cases": [
+    {
+      "fixture": "antenna_failure.json",
+      "fixture_sha256": "f28a2eecf0026e47d85c7392fa1702f7cfae4b28c007fb7067fe2b1462f84c89",
+      "class": "Antenna Failure",
+      "class_index": 0,
+      "confidence": 0.9293,
+      "logits": [
+        5.199463367462158,
+        -0.7927156686782837,
+        -0.31959033012390137,
+        -0.18847492337226868,
+        0.6555284857749939,
+        0.2220883071422577,
+        1.8959884643554688,
+        0.11084801703691483,
+        -0.826960563659668,
+        -0.9434028267860413
+      ]
+    },
+    {
+      "fixture": "co_channel_interference_severe.json",
+      "fixture_sha256": "004680ad79057187f3abbf3699f0d3571d41b231a8b22a694916f847b6924488",
+      "class": "Co-Channel Interference (Severe)",
+      "class_index": 2,
+      "confidence": 0.9502,
+      "logits": [
+        -0.16346058249473572,
+        -0.1341269612312317,
+        4.901012420654297,
+        -1.4329384565353394,
+        -0.4399261474609375,
+        0.7548801898956299,
+        0.00241272896528244,
+        -0.754542887210846,
+        -1.387382984161377,
+        -0.534668505191803
+      ]
+    },
+    {
+      "fixture": "doppler_shift_severe.json",
+      "fixture_sha256": "58eb81c862019a8f34f696aa883cc67afd81a42dd7841da0c5249bdd51ad7fc0",
+      "class": "Doppler Shift (Severe)",
+      "class_index": 4,
+      "confidence": 0.9568,
+      "logits": [
+        0.46379905939102173,
+        -1.2232623100280762,
+        -0.42045876383781433,
+        -1.3772028684616089,
+        4.8773298263549805,
+        0.09080777317285538,
+        -0.1532657891511917,
+        -0.6695522665977478,
+        -1.3242628574371338,
+        -0.898753821849823
+      ]
+    },
+    {
+      "fixture": "high_congestion_sudden.json",
+      "fixture_sha256": "887f88c55b491f8d559f2f8f385c63da5dfaf4e6f8d19821154e3d1643211808",
+      "class": "High Network Congestion (Sudden Spike)",
+      "class_index": 9,
+      "confidence": 0.8996,
+      "logits": [
+        -1.662273645401001,
+        1.2440242767333984,
+        0.5345884561538696,
+        -0.7953598499298096,
+        -0.8940664529800415,
+        0.12530013918876648,
+        -2.0376832485198975,
+        -1.2506099939346313,
+        0.5270201563835144,
+        4.441288471221924
+      ]
+    }
+  ]
+}

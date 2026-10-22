@@ -4,7 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
+      - "model-serving/shared-ml-predictor/**"
       - "model-serving/ran-ml-service/**"
+      - "model-serving/ran-rca-ml-service/**"
+      - "scripts/generate_fixtures.py"
       - ".github/workflows/pr-ran-ml-parity.yml"
   workflow_dispatch:
 
@@ -18,11 +21,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HF_HUB_OFFLINE: "1"
+      RCA_ARTIFACT_COMMIT: 1ffdc117e0f0c93ba779f0b5f69323d5f1c38163
     steps:
       - name: Set model paths
         run: |
           echo "MODEL_DIR=${{ runner.temp }}/ran-ml-models" >> "${GITHUB_ENV}"
           echo "MANTIS_MODEL_PATH=${{ runner.temp }}/ran-ml-models/mantis_pretrained_ad.pt" >> "${GITHUB_ENV}"
+          echo "RCA_CHECKPOINT_PATH=${{ runner.temp }}/ran-ml-models/mantis_pretrained_rca.pt" >> "${GITHUB_ENV}"
 
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -32,27 +37,44 @@ jobs:
         with:
           python-version: "3.13"
           enable-cache: true
-          cache-dependency-glob: model-serving/ran-ml-service/uv.lock
+          cache-dependency-glob: model-serving/shared-ml-predictor/uv.lock
 
       - name: Install test dependencies
-        working-directory: model-serving/ran-ml-service
+        working-directory: model-serving/shared-ml-predictor
         run: uv sync --locked --group dev
 
+      - name: Generate TelecomTS fixtures
+        env:
+          HF_HUB_OFFLINE: "0"
+        run: make generate-fixtures
+
       - name: Download pinned model artifacts
-        working-directory: model-serving/ran-ml-service
+        working-directory: model-serving/shared-ml-predictor
         env:
           HF_HUB_OFFLINE: "0"
         run: |
           mkdir -p "${MODEL_DIR}"
+          if [[ ! "${RCA_ARTIFACT_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "RCA_ARTIFACT_COMMIT must be the published 40-character RCA repository commit SHA" >&2
+            exit 1
+          fi
           curl --fail --location --retry 3 \
             --output "${MANTIS_MODEL_PATH}" \
             "https://huggingface.co/TomerG2/mantis-ad-telecomts/resolve/9f1ff8a3f59f3f2d74ce001d7f0dbb6695676ec4/mantis_pretrained_ad.pt"
           echo "9b00f1a5705c196d218110bf7c39027bedf811675aada74e8742f8d0c953a078  ${MANTIS_MODEL_PATH}" | sha256sum --check
+          curl --fail --location --retry 3 \
+            --output "${RCA_CHECKPOINT_PATH}" \
+            "https://huggingface.co/TomerG2/mantis-rca-telecomts/resolve/${RCA_ARTIFACT_COMMIT}/mantis_pretrained_rca.pt"
+          curl --fail --location --retry 3 \
+            --output "${MODEL_DIR}/rca_preprocessing.json" \
+            "https://huggingface.co/TomerG2/mantis-rca-telecomts/resolve/${RCA_ARTIFACT_COMMIT}/rca_preprocessing.json"
+          echo "0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe  ${RCA_CHECKPOINT_PATH}" | sha256sum --check
+          echo "1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae  ${MODEL_DIR}/rca_preprocessing.json" | sha256sum --check
           backbone_path=$(uv run python -c "from huggingface_hub import snapshot_download; print(snapshot_download('paris-noah/Mantis-8M', revision='bc7d5ab40c02133386a28e2c127f35c17c86901d'))")
           echo "MANTIS_CHECKPOINT=${backbone_path}" >> "${GITHUB_ENV}"
 
       - name: Run notebook parity and unit tests
-        working-directory: model-serving/ran-ml-service
+        working-directory: model-serving/shared-ml-predictor
         env:
           HF_HUB_OFFLINE: "0"
         run: uv run pytest -o "addopts="

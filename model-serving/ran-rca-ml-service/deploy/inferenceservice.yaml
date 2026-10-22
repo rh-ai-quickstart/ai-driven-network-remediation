@@ -1,0 +1,51 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: ran-rca-ml-service
+  namespace: model-serving
+  labels:
+    app.kubernetes.io/name: ran-rca-ml-service
+    app.kubernetes.io/part-of: ai-driven-network-remediation
+  annotations:
+    sidecar.istio.io/inject: "false"
+    ai.redhat.com/notebook: model-serving/shared-ml-predictor/notebooks/telecomts_model_evaluation.ipynb
+    ai.redhat.com/dataset-revision: 1b3a88a440f4922edfcd1e230e42c003c0e13bdf
+    ai.redhat.com/backbone-revision: bc7d5ab40c02133386a28e2c127f35c17c86901d
+    ai.redhat.com/rca-checkpoint-sha256: 0ecd02d50eed50130476c0c543503f9f3d1595507502664d3e5b8fb01c3eccfe
+    ai.redhat.com/rca-preprocessing-sha256: 1a8e0144bb4a65f48133c4ad36491aba6432b817d64b8d3521a3c8de913ddeae
+    ai.redhat.com/rca-provenance: docs/model-runs/issue-196-rca-validation.json
+spec:
+  predictor:
+    containers:
+      - name: kserve-container
+        image: quay.io/rh-ai-quickstart/noc-ran-ml-service:REPLACE_WITH_BUILT_TAG
+        imagePullPolicy: Always
+        env:
+          - name: TASK
+            value: classify
+          - name: MANTIS_MODEL_PATH
+            value: /mnt/models/mantis_pretrained_rca.pt
+          - name: STORAGE_URI
+            value: hf://TomerG2/mantis-rca-telecomts:1ffdc117e0f0c93ba779f0b5f69323d5f1c38163
+        ports:
+          - containerPort: 8080
+            name: http
+        resources:
+          requests:
+            cpu: "500m"
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10

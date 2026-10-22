@@ -195,7 +195,7 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 
 | Component | Role |
 |---|---|
-| **`ran-ml-service`** | Self-contained ML predictor (lives in `model-serving/ran-ml-service/`, decoupled from the hub chart). Serves the Mantis AD model via `POST /v1/detect` (128×18 kpi_window → `anomalous`/`normal` + confidence). Deployed as a KServe `InferenceService` or standalone container. `/ready` requires model loaded. |
+| **`ran-ml-service`** | Detect deployment in `model-serving/ran-ml-service/`, using the shared predictor in `model-serving/shared-ml-predictor/`. Serves the Mantis AD model via `POST /v1/detect` (128×18 kpi_window → `anomalous`/`normal` + confidence). Deployed as a KServe `InferenceService` or standalone container. `/ready` requires model loaded. |
 | **`ran-anomaly-detector`** | Kafka consumer + orchestrator. Deserializes JSON samples, calls the predictor, publishes only anomalous windows. `/ready` requires both Kafka and predictor. |
 | **`ran-rca-service`** | LangGraph pipeline (rag_retrieval → analyze). Adds `root_cause_category` + `root_cause` + `recommended_fix` via RAG + Granite LLM. |
 | **`ran-chatbot-service`** | Thin BFF. Buffers enriched anomalies, exposes `/api/chat` + `/api/anomalies` + `/api/demo/trigger`. |
@@ -210,7 +210,9 @@ inverse-frequency class weights for the 96/4 normal/anomaly imbalance.
 
 | What | Where |
 |---|---|
-| ML predictor service | [`model-serving/ran-ml-service/`](../model-serving/ran-ml-service/) (self-contained, decoupled from hub) |
+| ML predictor source and image | [`model-serving/shared-ml-predictor/`](../model-serving/shared-ml-predictor/) (shared by detect and RCA, separate from hub) |
+| AD deployment | [`model-serving/ran-ml-service/`](../model-serving/ran-ml-service/) |
+| RCA classifier deployment | [`model-serving/ran-rca-ml-service/`](../model-serving/ran-rca-ml-service/) |
 | Training notebook | [`model-serving/training/notebooks/telecomts_model_evaluation.ipynb`](../model-serving/training/notebooks/telecomts_model_evaluation.ipynb) |
 | Anomaly detection orchestrator | [`hub/ran-anomaly-detector/`](../hub/ran-anomaly-detector/) |
 | Root cause analysis service | [`hub/ran-rca-service/`](../hub/ran-rca-service/), see [`docs/telco-oran-rca.md`](telco-oran-rca.md) |

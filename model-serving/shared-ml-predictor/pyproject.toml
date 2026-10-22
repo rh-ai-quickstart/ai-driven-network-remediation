@@ -41,6 +41,10 @@ asyncio_mode = "auto"
 addopts = "--cov --cov-report=term-missing"
 
 [dependency-groups]
+train = [
+    "datasets==5.0.1",
+    "scikit-learn==1.9.0",
+]
 dev = [
     "httpx2>=0.1",
     "pytest>=7.4.0",

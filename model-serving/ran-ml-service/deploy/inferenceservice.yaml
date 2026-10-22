@@ -9,7 +9,8 @@
 #
 # Then wire the endpoint into the hub chart.
 # {.status.url} is in-cluster only. Callers outside the cluster use the Route
-# applied by publish-and-deploy.sh (ran-ml-service-external):
+# applied by model-serving/shared-ml-predictor/deploy/publish-and-deploy.sh
+# (ran-ml-service-external):
 #   oc get route ran-ml-service-external -n model-serving \
 #     -o jsonpath='https://{.spec.host}/v1/detect'
 apiVersion: serving.kserve.io/v1beta1
@@ -36,7 +37,7 @@ spec:
     # so KServe injects a single-URI init container that mounts /mnt/models.
     containers:
       - name: kserve-container
-        # Default matches Makefile REGISTRY/VERSION. publish-and-deploy.sh
+        # Default matches Makefile REGISTRY/VERSION. The shared deploy command
         # substitutes the image ref from those env vars before `oc apply`.
         image: quay.io/rh-ai-quickstart/noc-ran-ml-service:0.1.5
         imagePullPolicy: Always

@@ -17,17 +17,31 @@ logger = logging.getLogger(__name__)
 _MAX_ITEMS_IN_PROMPT = 5
 
 
+def select_anomaly(user_message: str, anomalies: list[EnrichedAnomaly]) -> EnrichedAnomaly | None:
+    if not anomalies:
+        return None
+    return next((anomaly for anomaly in reversed(anomalies) if anomaly.incident_id in user_message), anomalies[-1])
+
+
+def _ml_explanation(anomaly: EnrichedAnomaly) -> str:
+    if anomaly.ml_class and anomaly.ml_confidence is not None:
+        return f"{anomaly.ml_class} (RCA confidence {anomaly.ml_confidence:.2f})"
+    return "unavailable"
+
+
 def _format_anomalies(anomalies: list[EnrichedAnomaly]) -> str:
     """Format enriched RAN anomalies for LLM context."""
     if not anomalies:
         return "No recent RAN anomalies detected."
     lines = []
     for a in anomalies[-_MAX_ITEMS_IN_PROMPT:]:
+        ml_advice = f"Mantis RCA classification: {_ml_explanation(a)}.\n    "
         lines.append(
             f"  - Incident {a.incident_id} (zone={a.zone}, app={a.application}) "
             f"[AD confidence: {a.ad_confidence:.2f}]\n"
-            f"    Root cause: {a.root_cause or 'n/a'}\n"
-            f"    Recommended fix: {a.recommended_fix or 'n/a'}"
+            f"    {ml_advice}ML-derived operational category: {a.root_cause_category}; "
+            f"LLM explanation: {a.root_cause or 'unavailable'}\n"
+            f"    Recommended fix: {a.recommended_fix or 'unavailable'}"
         )
     return "\n".join(lines)
 
@@ -83,10 +97,14 @@ def build_chat_context(
         "Answer the operator's request directly with concise, actionable analysis about the "
         "detected anomalies below.\n"
         "When discussing an anomaly, mention: the incident ID, zone, application context, "
-        "the AD confidence score, the likely root cause, and the recommended fix (including "
+        "the AD confidence score, Mantis RCA label and separate RCA confidence, "
+        "the ML-derived operational category, LLM explanation, and recommended fix (including "
         "which vendor documentation section it references).\n"
         "When discussing remediation status, mention whether the fix succeeded, failed, or is "
         "pending (outcome not yet known), the job status, and whether it timed out.\n"
+        "Treat the ML-derived operational category as fixed. Use your text to explain the "
+        "evidence and fix; do not choose a category or remediation job. "
+        "When the explanation or fix is unavailable, say so without inventing replacement text.\n"
         "Do NOT mention cell IDs, bands, or rule-based anomaly types — this system uses "
         "ML-based detection on full KPI windows.\n"
         "Keep output under 250 words.\n\n"
@@ -137,28 +155,35 @@ def format_chat_reply(
         anomaly_line = "- No RAN anomalies currently detected."
         root_cause = "n/a"
         recommended_fix = "n/a"
+        ml_prediction = "- n/a"
     else:
-        latest = anomalies[-1]
+        latest = select_anomaly(user_message, anomalies)
+        assert latest is not None
         category_tag = f"[{latest.root_cause_category.replace('_', ' ').title()}] "
         anomaly_line = (
             f"- Latest anomaly: Incident {latest.incident_id} "
             f"(zone={latest.zone}, app={latest.application}) "
             f"[AD confidence: {latest.ad_confidence:.2f}]"
         )
-        root_cause = latest.root_cause or "n/a"
-        recommended_fix = latest.recommended_fix or "n/a"
+        root_cause = latest.root_cause or "unavailable"
+        recommended_fix = latest.recommended_fix or "unavailable"
+        ml_prediction = f"- {_ml_explanation(latest)}"
 
-    model_insight = raw_reply.strip()
+    model_insight = raw_reply.strip() if not anomalies or (latest.root_cause and latest.recommended_fix) else "unavailable"
 
     return (
         category_tag + "Summary:\n"
         f"- Anomalies detected: {len(anomalies)}\n"
         f"{anomaly_line}\n"
         f"- Request: {user_message}\n\n"
-        "Root Cause:\n"
+        "Mantis RCA Prediction:\n"
+        f"{ml_prediction}\n\n"
+        "ML-Derived Operational Category:\n"
+        f"- {latest.root_cause_category if anomalies else 'unknown'}\n\n"
+        "LLM Explanation:\n"
         f"- {root_cause}\n\n"
         "Recommended Fix:\n"
         f"- {recommended_fix}\n\n"
-        "Model Output:\n"
+        "Additional LLM Explanation:\n"
         f"- {model_insight}"
     )

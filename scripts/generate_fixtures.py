@@ -17,6 +17,7 @@ from datasets import load_dataset
 
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "hub" / "telco-oran" / "src" / "telco_oran" / "fixtures"
 SEED = 42
+DATASET_REVISION = "1b3a88a440f4922edfcd1e230e42c003c0e13bdf"
 
 KPI_CHANNELS = [
     "RSRP",
@@ -44,8 +45,13 @@ PROTOCOL_MAP = {"TCP": 0, "UDP": 1, None: 2, "None": 2}
 WANTED_SCENARIOS = {
     "Antenna Failure": "antenna_failure",
     "High Network Congestion (Sudden Spike)": "high_congestion_sudden",
+    "High Network Congestion (Gradual Buildup)": "high_congestion_gradual",
     "Co-Channel Interference (Severe)": "co_channel_interference_severe",
+    "Faulty RF Filters (Temporal)": "rf_filter_fault",
     "Doppler Shift (Severe)": "doppler_shift_severe",
+    "Faulty Handover Algorithm (Too Frequent)": "handover_fault",
+    "Buffer Overflow (Gradual Buildup)": "buffer_overflow",
+    "Resource Allocation Bugs": "resource_allocation_bugs",
 }
 
 
@@ -86,6 +92,7 @@ def main():
     dataset = load_dataset(
         "AliMaatouk/TelecomTS",
         data_files={"full": "**/chunked.jsonl"},
+        revision=DATASET_REVISION,
     )["full"]
 
     random.seed(SEED)

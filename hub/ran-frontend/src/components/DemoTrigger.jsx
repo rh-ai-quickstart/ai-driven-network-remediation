@@ -2,9 +2,14 @@ import { useState } from "react";
 
 const SCENARIOS = [
   { id: "antenna_failure", label: "Antenna Failure" },
-  { id: "high_congestion_sudden", label: "High Congestion (Sudden)" },
+  { id: "high_congestion_gradual", label: "High Network Congestion (Gradual Buildup)" },
+  { id: "high_congestion_sudden", label: "High Network Congestion (Sudden Spike)" },
   { id: "co_channel_interference_severe", label: "Co-Channel Interference" },
+  { id: "rf_filter_fault", label: "Faulty RF Filters (Temporal)" },
   { id: "doppler_shift_severe", label: "Doppler Shift (Severe)" },
+  { id: "handover_fault", label: "Faulty Handover Algorithm (Too Frequent)" },
+  { id: "buffer_overflow", label: "Buffer Overflow (Gradual Buildup)" },
+  { id: "resource_allocation_bugs", label: "Resource Allocation Bugs" },
   { id: "normal_traffic", label: "Normal Traffic (No Anomaly)" },
 ];
 

@@ -1,0 +1,17 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ran-rca-ml-service-external
+  namespace: model-serving
+  labels:
+    app.kubernetes.io/name: ran-rca-ml-service
+spec:
+  to:
+    kind: Service
+    name: ran-rca-ml-service-predictor
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

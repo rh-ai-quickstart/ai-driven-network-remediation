@@ -62,9 +62,38 @@ def _seed() -> None:
             "Reduce interference via power/beam adjustment",
         ),
         ("ran-scheduler-optimize", "playbooks/ran-scheduler-optimize.yml", "Tune RAN scheduler parameters"),
-        ("ran-load-balance", "playbooks/ran-load-balance.yml", "Redistribute UEs across adjacent cells"),
+        (
+            "ran-load-balance",
+            "playbooks/ran-load-balance.yml",
+            "Simulate UE load balancing across adjacent cells without changing a RAN device",
+        ),
+        (
+            "ran-buffer-relief",
+            "playbooks/ran-buffer-relief.yml",
+            "Simulate uplink buffer relief and queue-drain planning without changing a RAN device",
+        ),
         ("ran-capacity-expand", "playbooks/ran-capacity-expand.yml", "Expand PRB allocation or trigger offload"),
         ("ran-cell-recovery", "playbooks/ran-cell-recovery.yml", "Cell restart and recovery sequence"),
+        (
+            "ran-rf-filter-response",
+            "playbooks/ran-rf-filter-response.yml",
+            "Simulate RF filter diagnostics and maintenance dispatch without changing a RAN device",
+        ),
+        (
+            "ran-doppler-shift-response",
+            "playbooks/ran-doppler-shift-response.yml",
+            "Simulate Doppler frequency-offset tracking and compensation planning without changing a RAN device",
+        ),
+        (
+            "ran-handover-stabilization",
+            "playbooks/ran-handover-stabilization.yml",
+            "Simulate handover threshold and timer stabilization without changing a RAN device",
+        ),
+        (
+            "ran-resource-allocation-correction",
+            "playbooks/ran-resource-allocation-correction.yml",
+            "Simulate PRB allocation correction without changing a RAN device",
+        ),
         ("ran-generic-remediation", "playbooks/ran-generic-remediation.yml", "Generic RAN remediation fallback"),
     ]:
         job_templates_db[_next_template_id] = {
@@ -135,6 +164,9 @@ def launch_template(template_id: int, body: dict[str, Any] | None = None):
 
     global _next_job_id, _next_event_id
     tmpl = job_templates_db[template_id]
+    mock_outcome = tmpl.get("mock_outcome", "successful")
+    if mock_outcome == "launch_error":
+        raise HTTPException(503, "Simulated AAP launch error")
     job_id = _next_job_id
     _next_job_id += 1
 
@@ -142,30 +174,66 @@ def launch_template(template_id: int, body: dict[str, Any] | None = None):
     job = {
         "id": job_id,
         "name": tmpl["name"],
-        "status": "successful",
+        "status": {"timeout": "running", "failed": "failed"}.get(mock_outcome, "successful"),
         "started": now,
-        "finished": now,
+        "finished": None if mock_outcome == "timeout" else now,
         "elapsed": 1.5,
-        "failed": False,
+        "failed": mock_outcome == "failed",
         "job_template": template_id,
         "inventory": tmpl.get("inventory", 1),
         "project": tmpl.get("project", 1),
         "playbook": tmpl.get("playbook", "main.yml"),
         "extra_vars": body.get("extra_vars", "{}") if body else "{}",
-        "result_traceback": "",
+        "result_traceback": "Simulated AAP job failure" if mock_outcome == "failed" else "",
         "url": f"{router.prefix}/jobs/{job_id}/",
     }
     jobs_db[job_id] = job
 
     events = []
+    simulated_actions = {
+        "ran-load-balance": [
+            "TASK [Simulate load balancing across adjacent cells] ***",
+            "Load balancing: simulated UE redistribution plan for congested cells; no RAN device changed",
+            f"Result: load balancing simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-resource-allocation-correction": [
+            "TASK [Simulate PRB allocation correction] ***",
+            "Resource allocation correction: simulated PRB assignment review and corrected allocation plan; no RAN device changed",
+            f"Result: PRB allocation correction simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-rf-filter-response": [
+            "TASK [Simulate RF filter diagnostics and maintenance dispatch] ***",
+            "RF filter response: simulated inspection and replacement dispatch; no RAN device changed",
+            f"Result: RF filter response simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-doppler-shift-response": [
+            "TASK [Simulate Doppler frequency-offset tracking] ***",
+            "Doppler shift response: simulated frequency-offset tracking and compensation plan; no RAN device changed",
+            f"Result: Doppler frequency-tracking simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-handover-stabilization": [
+            "TASK [Simulate handover stabilization] ***",
+            "Handover response: simulated threshold and timer tuning to reduce excessive handovers; no RAN device changed",
+            f"Result: handover stabilization simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-buffer-relief": [
+            "TASK [Simulate uplink buffer relief] ***",
+            "Buffer relief: simulated queue drain and traffic shaping plan for gradual uplink buffer buildup; no RAN device changed",
+            f"Result: buffer relief simulation {mock_outcome}; no RAN device changed",
+        ],
+    }
+    action_lines = simulated_actions.get(tmpl["name"], [])
+    changed = 0 if action_lines else 1
+    failed = 1 if mock_outcome == "failed" else 0
     for line in [
         f"PLAY [{tmpl['name']}] ***",
         "TASK [Gathering Facts] ***",
         "ok: [host1]",
         f"TASK [{tmpl['playbook']}] ***",
-        "changed: [host1]",
+        *action_lines,
+        "ok: [host1]" if action_lines else "changed: [host1]",
         "PLAY RECAP ***",
-        "host1 : ok=2 changed=1 unreachable=0 failed=0",
+        f"host1 : ok=2 changed={changed} unreachable=0 failed={failed}",
     ]:
         events.append(
             {
@@ -209,6 +277,10 @@ def patch_template(template_id: int, body: dict[str, Any]):
         raise HTTPException(404, "Job template not found")
 
     tmpl = job_templates_db[template_id]
+    if "mock_outcome" in body:
+        if body["mock_outcome"] not in ("successful", "launch_error", "timeout", "failed"):
+            raise HTTPException(422, "Invalid mock outcome")
+        tmpl["mock_outcome"] = body["mock_outcome"]
     for key in ("name", "playbook", "description", "ask_variables_on_launch", "ask_credential_on_launch", "project"):
         if key in body:
             tmpl[key] = body[key]

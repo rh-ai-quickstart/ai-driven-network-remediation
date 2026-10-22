@@ -1,58 +1,20 @@
-# ran-ml-service
+# Mantis anomaly detection deployment
 
-Mantis time-series ML predictor for TelecomTS anomaly detection (TASK=detect) and root cause analysis (TASK=classify).
+This directory contains the `ran-ml-service` detect InferenceService and Route.
+It uses the predictor package and image in
+[`../shared-ml-predictor/`](../shared-ml-predictor/) with `TASK=detect` and the
+AD checkpoint from `hf://TomerG2/mantis-ad-telecomts`. The RCA deployment in
+[`../ran-rca-ml-service/`](../ran-rca-ml-service/) uses that same image with a
+different task and separate RCA artifacts.
 
-## Deploy or refresh
-
-Use the deploy script rather than applying the InferenceService by hand:
-
-```sh
-# Re-apply the existing InferenceService without rebuilding the image
-# or re-uploading model weights.
-SKIP_HF_UPLOAD=1 SKIP_BUILD=1 \
-  ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
-```
-
-For predictor source changes, build and deploy a new, immutable image tag so
-KServe creates a new revision:
+From the repository root, use the shared deploy command:
 
 ```sh
-SKIP_HF_UPLOAD=1 VERSION=<new-image-tag> \
-  ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
+TASK=detect SKIP_HF_UPLOAD=1 SKIP_BUILD=1 \
+  ./model-serving/shared-ml-predictor/deploy/publish-and-deploy.sh
 ```
 
-### Building on macOS
-
-On macOS, podman machine volume mounts may be unreliable. Use OpenShift BuildConfig to build on the cluster instead:
-
-```sh
-# Build on OpenShift cluster (recommended for macOS)
-SKIP_HF_UPLOAD=1 USE_OPENSHIFT_BUILD=1 \
-  ./model-serving/ran-ml-service/deploy/publish-and-deploy.sh
-```
-
-This uploads the build context to the cluster and uses the `ran-ml-overlay` BuildConfig to build the image.
-The BuildConfig outputs to an ImageStreamTag that the InferenceService references.
-
-The script rewrites `metadata.namespace` from `ISVC_NAMESPACE` (default `model-serving`) and waits for the InferenceService to become ready. KServe's `{.status.url}` is the in-cluster Service (`*.svc.cluster.local`). Callers outside the cluster use the Route `ran-ml-service-external`:
-
-```bash
-oc get route ran-ml-service-external -n "$ISVC_NAMESPACE" -o jsonpath='https://{.spec.host}/v1/detect'
-```
-
-Set that value as `ADNR_DETECT_INFERENCE_URL`. `ADNR_DETECT_TOKEN` is optional; the detector sends `Authorization: Bearer` only when it is set. A same-cluster caller can use `{.status.url}/v1/detect` instead.
-
-## Endpoints
-
-- `POST /v1/detect` — Binary anomaly detection on a 128x18 KPI window
-- `GET /health` — Liveness probe
-- `GET /ready` — Readiness probe (model loaded)
-
-## Configuration
-
-| Env Var | Description |
-|---------|-------------|
-| `TASK` | `detect` or `classify` |
-| `MANTIS_MODEL_PATH` | Local path to `.pt` weights file |
-| `MANTIS_CHECKPOINT` | HuggingFace backbone ID (default: `paris-noah/Mantis-8M`, baked into image) |
-| `PORT` | HTTP port (default: 8080) |
+For source changes, build and push the shared image with
+`make build-push-ran-ml-service`, then deploy both services with the new image
+reference as needed. The detect deployment serves `POST /v1/detect`; configure
+the hub with its full URL via `ADNR_DETECT_INFERENCE_URL`.
