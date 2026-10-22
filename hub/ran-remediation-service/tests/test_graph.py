@@ -102,6 +102,57 @@ async def test_graph_cell_outage_routes_to_recovery():
 
 
 @pytest.mark.asyncio
+async def test_graph_launches_cell_recovery_when_llm_explanation_is_unavailable():
+    graph = build_graph()
+    enriched = {**_OUTAGE_SAMPLE, "root_cause": "", "recommended_fix": ""}
+    with (
+        patch("ran_remediation_service.nodes.remediate.launch_job", new_callable=AsyncMock, return_value=42) as launch,
+        patch("ran_remediation_service.nodes.remediate.get_job_status", new_callable=AsyncMock, return_value={
+            "status": "successful", "failed": False, "elapsed": 1.0, "finished": "2026-10-22T10:31:00Z",
+        }),
+        patch("ran_remediation_service.nodes.remediate.get_job_output", new_callable=AsyncMock, return_value="cell recovered"),
+        patch("ran_remediation_service.nodes.audit.publish_remediation_record", return_value=0),
+        patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", False),
+    ):
+        result = await graph.ainvoke(enriched)
+
+    assert result["template_name"] == "ran-cell-recovery"
+    assert result["job_status"] == "successful"
+    assert result["success"] is True
+    launch.assert_awaited_once()
+    assert launch.await_args.args[0] == "ran-cell-recovery"
+    assert launch.await_args.args[1]["root_cause"] == ""
+    assert launch.await_args.args[1]["recommended_fix"] == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("label", ["Co-Channel Interference (Mild)", "Co-Channel Interference (Severe)"])
+async def test_graph_launches_interference_mock_job_for_either_low_confidence_label(label):
+    graph = build_graph()
+    enriched = {
+        **_ANTENNA_SAMPLE,
+        "root_cause_category": "interference",
+        "ml_class": label,
+        "ml_confidence": 0.001,
+    }
+    with (
+        patch("ran_remediation_service.nodes.remediate.launch_job", new_callable=AsyncMock, return_value=21) as launch,
+        patch("ran_remediation_service.nodes.remediate.get_job_status", new_callable=AsyncMock, return_value={
+            "status": "successful", "failed": False, "elapsed": 1.0, "finished": "2026-09-21T10:00:00Z",
+        }),
+        patch("ran_remediation_service.nodes.remediate.get_job_output", new_callable=AsyncMock, return_value="ok"),
+        patch("ran_remediation_service.nodes.audit.publish_remediation_record", return_value=0),
+        patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", False),
+    ):
+        result = await graph.ainvoke(enriched)
+
+    assert result["template_name"] == "ran-interference-mitigation"
+    assert result["success"] is True
+    launch.assert_awaited_once()
+    assert launch.await_args.args[0] == "ran-interference-mitigation"
+
+
+@pytest.mark.asyncio
 async def test_graph_unknown_root_cause_uses_generic_template():
     graph = build_graph()
 

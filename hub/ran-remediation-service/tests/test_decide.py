@@ -33,6 +33,34 @@ def test_unmapped_category_uses_generic_template():
     assert result["template_name"] == _FALLBACK_TEMPLATE
 
 
+@pytest.mark.parametrize("label", ["Co-Channel Interference (Mild)", "Co-Channel Interference (Severe)"])
+def test_interference_enriched_record_selects_mock_job_even_with_near_zero_confidence(label):
+    enriched = {
+        "incident_id": "interference-001",
+        "root_cause_category": "interference",
+        "ml_class": label,
+        "ml_confidence": 0.001,
+    }
+    result = decide_node(RemediationState.model_validate(enriched))
+    assert result["template_name"] == "ran-interference-mitigation"
+    assert result["template_name"] != "ran-generic-remediation"
+
+
+def test_confident_ml_disagreement_does_not_choose_playbook():
+    enriched = {
+        "incident_id": "pinned-incident",
+        "root_cause_category": "antenna_misalignment",
+        "ml_class": "Co-Channel Interference (Severe)",
+        "ml_class_index": 2,
+        "ml_confidence": 0.99,
+        "ml_status": "used",
+        "ml_steer_used": True,
+    }
+    result = decide_node(RemediationState.model_validate(enriched))
+    assert result["template_name"] == "ran-antenna-tilt-adjust"
+    assert result["extra_vars"]["root_cause_category"] == "antenna_misalignment"
+
+
 def test_decide_node_returns_template_and_extra_vars():
     state = RemediationState(
         incident_id="abc123",

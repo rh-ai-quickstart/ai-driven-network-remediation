@@ -28,6 +28,8 @@ class RemediationState(BaseModel):
     success: bool = False
     timed_out: bool = False
     output_summary: str = ""
+    failure_stage: str = ""
+    failure_reason: str = ""
     timestamp: str = ""
 
     # ── Set by audit node ─────────────────────────────────────────
