@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: ran-rca-service
-          image: "{{ .Values.image.registry }}/{{ .Values.image.ranRcaService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ .Values.ranRcaService.image | default (printf "%s/%s:%s" .Values.image.registry .Values.image.ranRcaService (.Values.image.tag | default .Chart.AppVersion)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: LLAMASTACK_HOST
@@ -37,12 +37,18 @@ spec:
               value: {{ .Values.ranRcaService.env.kafkaAnomaliesTopic | quote }}
             - name: KAFKA_ENRICHED_TOPIC
               value: {{ .Values.ranRcaService.env.kafkaEnrichedTopic | quote }}
+            - name: KAFKA_INCIDENT_STATUS_TOPIC
+              value: {{ .Values.ranRcaService.env.kafkaIncidentStatusTopic | quote }}
             - name: KAFKA_GROUP_ID
               value: {{ .Values.ranRcaService.env.kafkaGroupId | quote }}
             - name: KAFKA_CONSUMER_ENABLED
               value: {{ .Values.ranRcaService.env.kafkaConsumerEnabled | quote }}
             - name: RECENT_ANOMALIES_LIMIT
               value: {{ .Values.ranRcaService.env.recentAnomaliesLimit | quote }}
+            - name: CLASSIFY_INFERENCE_URL
+              value: {{ .Values.ranRcaService.env.classifyInferenceUrl | quote }}
+            - name: CLASSIFY_TOKEN
+              value: {{ .Values.ranRcaService.env.classifyToken | quote }}
           ports:
             - name: http
               containerPort: 8003

@@ -23,6 +23,23 @@ class EnrichedAnomaly(BaseModel):
     root_cause_category: str
     root_cause: str
     recommended_fix: str
+    ml_class: str = ""
+    ml_confidence: float | None = None
+    timestamp: str | None = None
+
+
+class IncidentStatus(BaseModel):
+    """Failed RCA status published independently of routable anomalies."""
+
+    incident_id: str
+    stage: str
+    outcome: str
+    error_reason: str
+    timestamp: str
+    zone: str
+    application: str
+    ad_label: str
+    ad_confidence: float
 
 
 class ModelSource(StrEnum):

@@ -37,6 +37,32 @@ class TestBuildDemoSample:
         payload = json.loads(json_blob)
         assert len(payload["kpi_window"]) == 128
 
+    def test_handover_fault_scenario(self):
+        json_blob, meta = build_demo_sample("handover_fault")
+
+        assert meta["scenario"] == "handover_fault"
+        payload = json.loads(json_blob)
+        assert len(payload["kpi_window"]) == 128
+        assert len(payload["kpi_window"][0]) == 18
+
+    def test_buffer_overflow_scenario(self):
+        json_blob, meta = build_demo_sample("buffer_overflow")
+
+        assert meta["scenario"] == "buffer_overflow"
+        payload = json.loads(json_blob)
+        assert payload["incident_id"] == meta["incident_id"]
+        assert len(payload["kpi_window"]) == 128
+        assert len(payload["kpi_window"][0]) == 18
+
+    def test_resource_allocation_scenario(self):
+        json_blob, meta = build_demo_sample("resource_allocation_bugs")
+
+        assert meta["scenario"] == "resource_allocation_bugs"
+        payload = json.loads(json_blob)
+        assert payload["incident_id"] == meta["incident_id"]
+        assert len(payload["kpi_window"]) == 128
+        assert len(payload["kpi_window"][0]) == 18
+
     def test_unknown_scenario_falls_back_to_default(self):
         json_blob, meta = build_demo_sample("not-a-real-scenario")
 

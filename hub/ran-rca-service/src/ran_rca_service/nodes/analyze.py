@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 from ran_rca_service.config import get_llm
 from ran_rca_service.models import RCAState
+from ran_rca_service.nodes.classify import RCA_CLASS_CATEGORIES
 
 _SYSTEM_PROMPT = """\
 You are a senior telco radio engineer specialising in RAN (Radio Access Network) root cause analysis.
@@ -18,14 +19,9 @@ Analyze the anomaly context and any vendor documentation, then produce a structu
 
 When recommending fixes, reference specific vendor documentation sections from the provided context where available.
 
-Classify the root cause as exactly one category:
-- antenna_misalignment: antenna tilt, azimuth, or alignment is degrading coverage.
-- interference: noise, SINR degradation, or RF interference is the primary cause.
-- scheduler_degradation: radio scheduling or resource-allocation behavior is degrading service.
-- congestion: excess active-user demand is causing a transient load imbalance.
-- capacity_exhaustion: sustained PRB or resource capacity is exhausted and must be expanded.
-- cell_failure: a cell, radio, or supporting component has failed or is unavailable.
-- unknown: the evidence does not support one of the other categories.
+Mantis RCA supplies the operational category used for remediation. Explain the
+predicted fault and recommend a fix using the KPI and vendor evidence. Do not
+select a different category or remediation job.
 
 RSRP INTERPRETATION (5G signal strength):
   > -90 dBm = Excellent signal
@@ -50,10 +46,9 @@ congestion:
   Variable: Estimated_UL_Buffer (40 → 47,000!), TX_Bytes spikes, PRB bursts
   Key: GOOD signal but buffer exhaustion = too much traffic
 
-scheduler_degradation:
-  Critical: RSRP mean=-85, SNR mean=20, BLER mean=0.05
-  Variable: Poor MCS despite good SNR, inefficient PRB allocation
-  Key: Good signal but inefficient resource use = scheduler problem
+resource_allocation_fault:
+  Variable: Poor MCS despite adequate SNR, inefficient PRB allocation
+  Key: Resource Allocation Bugs indicates an allocation fault; explain the KPI evidence and propose a correction plan
 
 capacity_exhaustion:
   Critical: RSRP mean=-85, SNR mean=20
@@ -64,7 +59,6 @@ MATCHING RULE: Compare the "Critical absolute indicators" and "Top 8 most variab
 
 Respond ONLY with valid JSON matching the provided schema:
 {
-  "root_cause_category": "<one of the defined categories>",
   "root_cause": "<concise root cause explanation referencing 5G KPIs>",
   "recommended_fix": "<specific remediation steps referencing vendor doc sections>"
 }"""
@@ -96,22 +90,10 @@ def _extract_critical_kpis(kpi_window: list[dict]) -> str:
 _RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "root_cause_category": {
-            "type": "string",
-            "enum": [
-                "antenna_misalignment",
-                "interference",
-                "scheduler_degradation",
-                "congestion",
-                "capacity_exhaustion",
-                "cell_failure",
-                "unknown",
-            ],
-        },
         "root_cause": {"type": "string"},
         "recommended_fix": {"type": "string"},
     },
-    "required": ["root_cause_category", "root_cause", "recommended_fix"],
+    "required": ["root_cause", "recommended_fix"],
 }
 
 
@@ -126,13 +108,20 @@ async def analyze_node(state: RCAState) -> dict:
     user_content = (
         f"Incident: {state.incident_id}\n"
         f"Zone: {state.zone}, Application: {state.application}\n"
-        f"AD Label: {state.ad_label}, Confidence: {state.ad_confidence:.3f}\n"
+        f"AD Label: {state.ad_label}, AD Confidence: {state.ad_confidence:.3f}\n"
         f"KPI Window: {len(state.kpi_window)} timesteps x 18 channels (TelecomTS 5G lab trace)"
     )
     if kpi_summary:
         user_content += f"\n\nTop 8 most variable KPIs:\n{kpi_summary}"
     if critical_kpis:
         user_content += f"\n\n{critical_kpis}"
+    if state.ml_class:
+        user_content += (
+            f"\n\nMantis RCA prediction: {state.ml_class} "
+            f"(confidence {state.ml_confidence:.3f}); operational category: "
+            f"{RCA_CLASS_CATEGORIES.get(state.ml_class, 'unknown')}. "
+            "Explain this diagnosis and recommend a fix; do not choose a category or job."
+        )
     if context:
         user_content += f"\n\nVendor documentation context:\n{context}"
 
@@ -144,22 +133,32 @@ async def analyze_node(state: RCAState) -> dict:
     logger.debug(f"RCA LLM prompt for {state.incident_id}:\n{user_content[:800]}")
     if critical_kpis:
         logger.info(f"Critical indicators for {state.incident_id}: {critical_kpis.replace(chr(10), ' ')}")
-    response = await get_llm().ainvoke(
-        messages,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {"name": "RCAAnalysis", "schema": _RESPONSE_SCHEMA},
-        },
-    )
-    if not isinstance(response.content, str):
-        raise TypeError("LLM response content must be a JSON string")
-    parsed = json.loads(response.content)
-    logger.info(
-        f"RCA category selected for {state.incident_id}: {parsed.get('root_cause_category', 'unknown')} "
-        f"(zone={state.zone}, app={state.application})"
-    )
-    return {
-        "root_cause_category": parsed.get("root_cause_category", "unknown"),
-        "root_cause": parsed.get("root_cause", ""),
-        "recommended_fix": parsed.get("recommended_fix", ""),
-    }
+    category = RCA_CLASS_CATEGORIES.get(state.ml_class, "unknown")
+    try:
+        response = await get_llm().ainvoke(
+            messages,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {"name": "RCAAnalysis", "schema": _RESPONSE_SCHEMA},
+            },
+        )
+        if not isinstance(response.content, str):
+            raise ValueError("invalid LLM response")
+        parsed = json.loads(response.content)
+        if not isinstance(parsed, dict) or not all(
+            isinstance(parsed.get(field), str) and parsed[field].strip()
+            for field in ("root_cause", "recommended_fix")
+        ):
+            raise ValueError("invalid LLM explanation")
+    except Exception as exc:  # noqa: BLE001 - an explanation failure must not stop remediation.
+        logger.warning("LLM explanation failed for incident_id={}: {}", state.incident_id, type(exc).__name__)
+        if isinstance(exc, TimeoutError):
+            reason = "LLM timed out"
+        elif isinstance(exc, (json.JSONDecodeError, ValueError, TypeError)):
+            reason = "invalid LLM response"
+        else:
+            reason = "LLM unavailable"
+        return {"root_cause_category": category, "root_cause": "", "recommended_fix": "", "llm_error_reason": reason}
+
+    logger.info("Mantis RCA category for {}: {} (zone={}, app={})", state.incident_id, category, state.zone, state.application)
+    return {"root_cause_category": category, "root_cause": parsed["root_cause"], "recommended_fix": parsed["recommended_fix"], "llm_error_reason": ""}
