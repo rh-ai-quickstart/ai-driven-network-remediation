@@ -668,6 +668,7 @@ acm-teardown:
 	@echo "WARN: 'make acm-teardown' is deprecated; use 'make teardown'"
 	$(MAKE) teardown
 
+# @ hides command previews; make -n, tracing and Helm output remain unfiltered.
 .PHONY: helm-install
 helm-install: namespace helm-depend validate-topology
 ifeq ($(ENABLE_AAP_MOCK),false)
@@ -681,7 +682,7 @@ ifeq ($(ENABLE_SERVICENOW_MOCK),false)
 	$(MAKE) check-servicenow-config
 endif
 	$(MAKE) check-adnr-llm-config
-	helm upgrade --install $(RELEASE) hub/helm \
+	@helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		-f $(SPOKES_GENERATED) \
 		$(helm_all_args) \
@@ -695,7 +696,7 @@ endif
 
 .PHONY: helm-erase-hub
 helm-erase-hub:
-	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+	@helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc s4-data --namespace $(NAMESPACE) --ignore-not-found
@@ -704,14 +705,14 @@ helm-erase-hub:
 .PHONY: helm-uninstall
 helm-uninstall:
 ifeq ($(ENABLE_HUB),true)
-	helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+	@helm uninstall $(RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc pg-data-pgvector-0 --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app=kafka --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc s4-data --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc data-gitea-0 --namespace $(NAMESPACE) --ignore-not-found
 
 ifeq ($(ENABLE_LANGFUSE),true)
-	helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
+	@helm uninstall $(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete pvc -l app.kubernetes.io/instance=$(LANGFUSE_RELEASE) --namespace $(NAMESPACE) --ignore-not-found
 	oc delete secret langfuse-secrets --namespace $(NAMESPACE) --ignore-not-found
 endif
@@ -727,8 +728,8 @@ namespace:
 
 .PHONY: helm-depend
 helm-depend:
-	cd hub/helm/charts/network && helm dependency update
-	cd hub/helm && helm dependency update
+	@cd hub/helm/charts/network && helm dependency update
+	@cd hub/helm && helm dependency update
 
 .PHONY: check-adnr-llm-config
 check-adnr-llm-config:
@@ -919,10 +920,10 @@ deploy-edge-workload:
 
 .PHONY: _langfuse-deploy
 _langfuse-deploy:
-	helm repo add $(LANGFUSE_CHART_REPO) $(LANGFUSE_CHART_URL) || true
-	helm repo update
+	@helm repo add $(LANGFUSE_CHART_REPO) $(LANGFUSE_CHART_URL) || true
+	@helm repo update
 	bash $(LANGFUSE_SECRET_SCRIPT) $(NAMESPACE)
-	helm upgrade --install $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
+	@helm upgrade --install $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
 		--namespace $(NAMESPACE) \
 		--values $(LANGFUSE_VALUES) \
 		--version $(LANGFUSE_CHART_VERSION) \
@@ -930,8 +931,8 @@ _langfuse-deploy:
 
 .PHONY: langfuse-upgrade
 langfuse-upgrade:
-	helm repo update
-	helm upgrade $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
+	@helm repo update
+	@helm upgrade $(LANGFUSE_RELEASE) $(LANGFUSE_CHART_REPO)/langfuse \
 		--namespace $(NAMESPACE) \
 		--values $(LANGFUSE_VALUES) \
 		--version $(LANGFUSE_CHART_VERSION)
@@ -1022,7 +1023,7 @@ unit-tests:
 multi-cluster-template-tests: helm-depend
 	$(MAKE) validate-topology CLUSTER_COUNT=1 SKIP_OC_CHECK=1
 	$(MAKE) validate-topology CLUSTER_COUNT=2 SKIP_OC_CHECK=1
-	helm lint edge/helm
+	@helm lint edge/helm
 	@helm template edge-site-01 edge/helm \
 		--set siteId=edge-01 \
 		--set namespace=dark-noc-edge \
