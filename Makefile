@@ -331,13 +331,14 @@ helm_multicluster_args = \
 	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string network.aapCredential.multicluster.clusterProxyUrl='$(CLUSTER_PROXY_URL)',) \
 	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set-string network.aapCredential.multicluster.hubToken='$(RHACM_HUB_TOKEN)',)
 
+# Gitea stores Network playbooks and depends on secrets from the Network chart.
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 	--set kafka.kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
 	--set s4.enabled=$(ENABLE_S4) \
 	--set s4.route.enabled=$(ROUTES_ENABLED) \
-	--set gitea.enabled=$(ENABLE_GITEA)
+	--set gitea.enabled=$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(ENABLE_GITEA),false)
 
 # network.topology.* comes solely from -f $(SPOKES_GENERATED) (see helm-install).
 # Do not also --set those fields here; duplicated sources drift.
