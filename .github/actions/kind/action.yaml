@@ -93,7 +93,10 @@ runs:
     - name: Pre-load LlamaStack image into Kind
       run: |
         docker pull ogxai/distribution-starter:0.6.1
-        kind load docker-image ogxai/distribution-starter:0.6.1
+        # Export only the runner platform; other platform manifests may lack local content.
+        docker image save --platform linux/amd64 --output /tmp/llamastack-image.tar ogxai/distribution-starter:0.6.1
+        kind load image-archive /tmp/llamastack-image.tar
+        rm /tmp/llamastack-image.tar
       shell: bash
 
     - name: Helm Install
