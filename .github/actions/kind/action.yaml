@@ -4,6 +4,12 @@ description: Install Kind and create a local Kubernetes cluster
 runs:
   using: composite
   steps:
+    # Run before setup so image-import failures still leave a runner control.
+    - name: Probe runner inference
+      continue-on-error: true
+      run: timeout 60s python3 scripts/ci/probe-inference.py runner
+      shell: bash
+
     # This action builds the local images. The RAN chatbot image generates
     # TelecomTS fixtures during its build, which requires uv.
     - name: Setup uv
@@ -136,4 +142,11 @@ runs:
           echo "Waiting for ${label}..."
           oc wait --for=condition=Ready pod -l "app.kubernetes.io/name=${label}" -n hub --timeout=120s
         done
+      shell: bash
+
+    # Temporary boundary checks for CI inference failures. Keep E2E tests running
+    # even if inference or the diagnostic itself fails.
+    - name: Probe pod and LlamaStack inference
+      continue-on-error: true
+      run: timeout 120s python3 scripts/ci/probe-inference.py pod-exec
       shell: bash
