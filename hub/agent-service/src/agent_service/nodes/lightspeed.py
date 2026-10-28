@@ -151,6 +151,7 @@ def _build_prompt(
     log_event,
     llm_summary: dict | None = None,
     extra_evidence: str = "",
+    resource_specs: str = "",
 ) -> str:
     """Build the ALS prompt, omitting fields that have no useful value."""
     summary = rca.summary if rca else ""
@@ -170,10 +171,15 @@ def _build_prompt(
     if extra_evidence:
         evidence_str = (evidence_str + "\n\n" + extra_evidence) if evidence_str else extra_evidence
 
+    edge_site_id = build_launch_extra_vars(
+        log_event,
+        llm_summary=llm_summary,
+        resource_specs=resource_specs,
+    ).get("edge_site_id", "")
     fields = [
         ("Failure type", rca.failure_type if rca else "Unknown"),
         ("Severity", rca.estimated_severity if rca else "unknown"),
-        ("Edge site cluster", log_event.edge_site_id if log_event else ""),
+        ("Edge site cluster", edge_site_id),
         ("Namespace", log_event.namespace if log_event else "unknown"),
         ("Target component", target_component),
         ("Summary", summary),
@@ -305,7 +311,7 @@ def _stub_result() -> dict:
         action_taken="generate-playbook",
         tool_used="lightspeed",
         success=True,
-        job_id="lightspeed-disabled",
+        job_id="",
         duration_seconds=0.0,
         output_summary="Lightspeed not configured (LIGHTSPEED_URL is empty)",
         timestamp=now_iso(),
@@ -336,7 +342,13 @@ async def lightspeed_node(state) -> dict:
             except Exception:
                 logger.opt(exception=True).warning("LLM summarization failed, falling back to template-only prompt")
 
-        prompt = _build_prompt(rca, log_event, llm_summary, investigation_evidence)
+        prompt = _build_prompt(
+            rca,
+            log_event,
+            llm_summary,
+            investigation_evidence,
+            resource_specs=state.resource_specs,
+        )
         pod_logs = get_pod_logs_for_attachment(state)
         structured = get_structured_attachments(state)
         attachments = _build_attachments(rca, log_event, pod_logs=pod_logs, extra_attachments=structured)
@@ -353,7 +365,8 @@ async def lightspeed_node(state) -> dict:
                 action_taken="generate-playbook",
                 tool_used="lightspeed",
                 success=False,
-                job_id=data.get("conversation_id", ""),
+                job_id="",
+                lightspeed_conversation_id=data.get("conversation_id") or None,
                 duration_seconds=round(duration, 2),
                 output_summary=f"Generated playbook failed validation: {validation_error}",
                 timestamp=now_iso(),
@@ -369,12 +382,12 @@ async def lightspeed_node(state) -> dict:
             action_taken="generate-playbook",
             tool_used="lightspeed",
             success=True,
-            job_id=data.get("conversation_id", ""),
+            job_id="",
+            lightspeed_conversation_id=data.get("conversation_id") or None,
             duration_seconds=round(duration, 2),
             output_summary=f"Generated playbook: {playbook_name}",
             timestamp=now_iso(),
             generated_template_name=playbook_name,
-            generated_template_id=data.get("conversation_id", ""),
             generated_playbook_name=playbook_name,
             generated_playbook_preview=playbook_yaml,
         )
@@ -563,7 +576,17 @@ async def _execute_in_aap(
     job_id = str(launch.get("job_id", ""))
     logger.info(f"AAP job launched: job_id={job_id} template='{name}'")
 
-    outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+    try:
+        outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+    except Exception as exc:
+        return result.model_copy(
+            update={
+                "job_id": job_id,
+                "success": False,
+                "output_summary": f"AAP job {job_id} monitoring failed: {exc}"[:1000],
+                "timestamp": now_iso(),
+            }
+        )
     logger.info(f"AAP job {job_id} for '{name}' finished: success={outcome.success} timed_out={outcome.timed_out}")
     return result.model_copy(
         update={

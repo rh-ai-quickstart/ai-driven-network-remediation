@@ -25,6 +25,14 @@ CLUSTER_COUNT      ?= 1
 SPOKE_NAME_PREFIX  ?= edge-site
 ACM_HUB_CLUSTER    ?= local-cluster
 CLUSTER_CREATE     ?= false
+ENABLE_CPU_DEMO    ?= $(if $(and $(filter true,$(ENABLE_LIGHTSPEED)),$(filter true,$(ENABLE_NETWORK_REMEDIATION))),true,false)
+ifeq ($(CLUSTER_COUNT),1)
+  CPU_DEMO_SITE_A ?= $(EDGE_SITE_ID)
+  CPU_DEMO_SITE_B ?= $(CPU_DEMO_SITE_A)
+else
+  CPU_DEMO_SITE_A ?= $(SPOKE_NAME_PREFIX)-01
+  CPU_DEMO_SITE_B ?= $(SPOKE_NAME_PREFIX)-02
+endif
 GITOPS_REPO_URL    ?= https://github.com/rh-ai-quickstart/ai-driven-network-remediation.git
 GITOPS_REVISION    ?= main
 SKIP_OC_CHECK      ?=
@@ -191,10 +199,13 @@ TELCO_IMAGES := \
 EDGE_IMAGES := \
 	$(EDGE_FAST_PATH_HEALER_IMG)
 
+CPU_DEMO_IMAGES := $(addprefix $(REGISTRY)/,showcase-client:$(VERSION) showcase-microservice-a:$(VERSION) showcase-microservice-b:$(VERSION))
+
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(MCP_IMAGES) $(NETWORK_IMAGES) $(EDGE_IMAGES)) \
-	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES))
+	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES)) \
+	$(if $(filter true,$(ENABLE_CPU_DEMO)),$(CPU_DEMO_IMAGES))
 
 EXTRA_BUILD_PUSH_IMAGES := \
 	$(AAP_MOCK_IMG) \
@@ -299,7 +310,7 @@ helm_lokistack_args = \
 	--set network.mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
 	--set-string network.lokistack.name='$(LOKISTACK_NAME)' \
 	--set-string network.lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
-	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
+	$(if $(and $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(filter true,$(ENABLE_LOKISTACK))),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
 
 ifeq ($(ENABLE_LIGHTSPEED),true)
 ifndef LIGHTSPEED_URL
@@ -334,6 +345,7 @@ helm_multicluster_args = \
 # Gitea stores Network playbooks and depends on secrets from the Network chart.
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
+	--set network.mcp-servers.mcp-servers.noc-kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 	--set kafka.kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
 	--set s4.enabled=$(ENABLE_S4) \
@@ -346,7 +358,7 @@ helm_infra_args = \
 helm_network_remediation_mcp_args = \
 	--set-string llama-stack.mcp-servers.noc-openshift.uri=http://mcp-noc-openshift:8000/mcp \
 	--set-string llama-stack.mcp-servers.noc-aap.uri=http://mcp-noc-aap:8000/mcp \
-	--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp \
+	$(if $(filter true,$(ENABLE_KAFKA)),--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp,) \
 	--set-string llama-stack.mcp-servers.noc-servicenow.uri=http://mcp-noc-servicenow:8000/mcp
 
 helm_all_args = \
@@ -372,6 +384,7 @@ helm_all_args = \
 	--set-string network.edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	--set-string network.chatbotService.env.demoWorkload='$(DEMO_WORKLOAD)' \
 	--set-string network.chatbotService.env.edgeSiteId='$(EDGE_SITE_ID)' \
+	$(if $(filter true,$(ENABLE_CPU_DEMO)),--set-string network.chatbotService.env.cpuDemoSiteA='$(CPU_DEMO_SITE_A)' --set-string network.chatbotService.env.cpuDemoSiteB='$(CPU_DEMO_SITE_B)',) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(helm_network_remediation_mcp_args),) \
 	--set-string network.mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \
@@ -399,6 +412,18 @@ render-spokes:
 	EDGE_NAMESPACE='$(EDGE_NAMESPACE)' \
 	SPOKE_NAME_PREFIX='$(SPOKE_NAME_PREFIX)' \
 	python3 scripts/topology/render-spokes.py -o '$(SPOKES_GENERATED)'
+
+CPU_DEMO_TARGETS := cpu-demo-build-images cpu-demo-push-images cpu-demo-deploy cpu-demo-undeploy cpu-demo-reset
+.PHONY: $(CPU_DEMO_TARGETS)
+$(CPU_DEMO_TARGETS):
+	$(MAKE) -C e2e-showcase/cpu-misconfiguration $(patsubst cpu-demo-%,%,$@) \
+		RELEASE=cpu-misconfiguration CLUSTER_COUNT='$(CLUSTER_COUNT)' \
+		EDGE_NAMESPACE='$(EDGE_NAMESPACE)' REGISTRY='$(REGISTRY)' \
+		VERSION='$(VERSION)' SITE_A='$(CPU_DEMO_SITE_A)' SITE_B='$(CPU_DEMO_SITE_B)' \
+		CONTAINER_TOOL='$(CONTAINER_TOOL)' ARCH='$(ARCH)' PUSH_EXTRA_ARGS='$(PUSH_EXTRA_ARGS)'
+
+.PHONY: cpu-demo-deploy-enabled
+cpu-demo-deploy-enabled: $(if $(filter true,$(ENABLE_CPU_DEMO)),cpu-demo-deploy)
 
 .PHONY: generate-fixtures
 generate-fixtures:
@@ -633,11 +658,25 @@ endif
 	$(MAKE) argocd-wait-spokes
 	@echo "OK: deploy hub-spoke complete ($(SPOKE_COUNT) spokes)"
 endif
+ifeq ($(ENABLE_CPU_DEMO),true)
+	$(MAKE) cpu-demo-deploy
+endif
 
 .PHONY: teardown
 teardown: validate-topology
 	@# Always invoke the script: it refuses CLUSTER_COUNT=1 when hub-spoke leftovers exist.
 	@echo "=== teardown (CLUSTER_COUNT=$(CLUSTER_COUNT)) ==="
+ifeq ($(ENABLE_CPU_DEMO),true)
+ifneq ($(filter --dry-run,$(ACM_TEARDOWN_ARGS)),)
+	@echo "SKIP: cpu-demo-undeploy (ACM_TEARDOWN_ARGS includes --dry-run)"
+else
+ifneq ($(filter true TRUE yes YES 1,$(SKIP_OC_CHECK)),)
+	@echo "SKIP: cpu-demo-undeploy (SKIP_OC_CHECK set)"
+else
+	$(MAKE) cpu-demo-undeploy
+endif
+endif
+endif
 	CLUSTER_COUNT='$(CLUSTER_COUNT)' \
 	CLUSTER_CREATE='$(CLUSTER_CREATE)' \
 	SPOKES_GENERATED='$(SPOKES_GENERATED)' \
@@ -799,7 +838,8 @@ edge-rbac-teardown:
 .PHONY: build-all-images
 build-all-images: build-ingestion-image \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
-	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image)
+	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image) \
+	$(if $(filter true,$(ENABLE_CPU_DEMO)),cpu-demo-build-images)
 
 .PHONY: build-ingestion-image
 build-ingestion-image:

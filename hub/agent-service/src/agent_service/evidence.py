@@ -24,6 +24,10 @@ def build_evidence_prompt(state) -> str:
     if state.resource_specs:
         sections.append("## Resource Configuration\n" + state.resource_specs)
 
+    pod_logs = get_pod_logs_for_attachment(state)
+    if pod_logs:
+        sections.append("## Pod Logs\n" + pod_logs)
+
     for attr, heading, limit in _PROMPT_SECTIONS:
         data = getattr(state, attr)
         if data:
@@ -37,8 +41,9 @@ def get_pod_logs_for_attachment(state) -> str:
     if not state.pod_logs:
         return ""
     lines = state.pod_logs.splitlines()[-_MAX_POD_LOG_LINES_ATTACHMENT:]
-    text = "\n".join(lines)
-    return text[-_MAX_POD_LOG_CHARS:]
+    while len(lines) > 1 and len("\n".join(lines)) > _MAX_POD_LOG_CHARS:
+        lines.pop(0)
+    return "\n".join(lines)[:_MAX_POD_LOG_CHARS]
 
 
 def get_structured_attachments(state) -> list[dict]:
@@ -60,6 +65,10 @@ def build_grounding_text(state) -> str:
 
     if state.resource_specs:
         sections.append(state.resource_specs)
+
+    pod_logs = get_pod_logs_for_attachment(state)
+    if pod_logs:
+        sections.append(pod_logs)
 
     for attr, _, limit in _PROMPT_SECTIONS + _ATTACHMENT_SECTIONS:
         data = getattr(state, attr, None)

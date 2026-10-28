@@ -104,6 +104,8 @@ chatbotService:
     demoTopic: "system-alerts"
     demoWorkload: "edge-nginx"
     edgeSiteId: "edge-site-01"
+    cpuDemoSiteA: ""
+    cpuDemoSiteB: ""
     auditTopic: "incident-audit"
   resources: {}
   livenessProbe:

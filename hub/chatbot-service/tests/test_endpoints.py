@@ -229,3 +229,34 @@ def test_demo_uses_configured_target(mock_publish, client, monkeypatch):
         assert response.json()["namespace"] == "edge-test"
         assert response.json()["workload"] == "edge-nginx"
         assert response.json()["site"] == "edge-site-01"
+
+
+@patch("chatbot_service.publish_demo_event")
+def test_cpu_misconfiguration_trigger_targets_configured_source(mock_publish, client, monkeypatch):
+    import chatbot_service.kafka as demo_kafka
+
+    monkeypatch.setattr(demo_kafka, "EDGE_NAMESPACE", "edge-workloads")
+    monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_A", "edge-site-01")
+    monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_B", "edge-site-02")
+    mock_publish.return_value = 44
+
+    response = client.post(
+        "/api/demo/trigger",
+        json={"scenario": "cpu-misconfiguration", "site": "ignored-site"},
+    )
+
+    assert response.status_code == 200
+    assert mock_publish.call_count == 1
+    event = mock_publish.call_args.args[0]
+    assert event["labels"]["dark_noc_scenario"] == "cpu-misconfiguration"
+    assert event["labels"]["edge_site_id"] == "edge-site-01"
+    assert event["kubernetes"]["namespace_name"] == "edge-workloads"
+    assert event["kubernetes"]["pod_name"] == "microservice-a"
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["scenario"] == "cpu-misconfiguration"
+    assert body["site"] == "edge-site-01"
+    assert body["namespace"] == "edge-workloads"
+    assert body["workload"] == "microservice-a"
+    assert "edge-site-02" in body["event_message"]
+    assert body["kafka_offset"] == 44

@@ -3,6 +3,20 @@ import importlib
 import pytest
 
 
+@pytest.mark.parametrize("enabled_servers", ["noc-openshift, noc-aap", ""])
+def test_enabled_mcp_servers_from_environment(monkeypatch, enabled_servers):
+    config = importlib.import_module("agent_service.config")
+    with monkeypatch.context() as environment:
+        environment.setenv("ENABLED_MCP_SERVERS", enabled_servers)
+        try:
+            importlib.reload(config)
+            expected_servers = frozenset({"noc-openshift", "noc-aap"}) if enabled_servers else frozenset()
+            assert config.ENABLED_MCP_SERVERS == expected_servers
+        finally:
+            environment.undo()
+            importlib.reload(config)
+
+
 def test_kafka_defaults_match_alert_topics():
     from agent_service.kafka.alerts import ALERT_TOPICS
 

@@ -272,6 +272,22 @@ def test_prompt_with_llm_summary_overrides_fields():
     assert "manual review" not in prompt
 
 
+def test_prompt_uses_only_resource_stamped_summary_site():
+    log_event = make_log_event(edge_site_id="edge-site-01")
+    summary = {"edge_site_id": "edge-site-02"}
+
+    unstamped_prompt = _build_prompt(make_rca(), log_event, llm_summary=summary)
+    stamped_prompt = _build_prompt(
+        make_rca(),
+        log_event,
+        llm_summary=summary,
+        resource_specs="Edge site: edge-site-02\nPod: microservice-b",
+    )
+
+    assert "Edge site cluster: edge-site-01" in unstamped_prompt
+    assert "Edge site cluster: edge-site-02" in stamped_prompt
+
+
 def test_prompt_with_empty_llm_summary_uses_rca():
     prompt = _build_prompt(
         make_rca(summary="OOM kill"),
@@ -342,6 +358,7 @@ class TestLightspeedNodeSuccess:
         assert isinstance(rr, RemediationResult)
         assert rr.success is True
         assert rr.job_id == "42"
+        assert rr.lightspeed_conversation_id == "conv-123"
         assert rr.generated_playbook_name == "remediate-oomkilled-nginx-abc123"
         assert "hosts: all" in rr.generated_playbook_preview
         assert "```" not in rr.generated_playbook_preview
@@ -2207,3 +2224,24 @@ async def test_generated_playbook_uses_scoped_aap_resources(monkeypatch):
     assert calls["upsert_job_template"]["template_name"] == template_name
     assert calls["launch_job"]["job_template_name"] == template_name
     assert outcome["remediation_result"].generated_template_name == template_name
+
+
+async def test_generation_validation_failure_has_no_aap_job():
+    node_result, _, invoke_mock = await _run_node(
+        als_return={"response": "not: [valid: yaml: {{", "conversation_id": "conv-invalid"}
+    )
+    remediation = node_result["remediation_result"]
+    assert not remediation.success
+    assert remediation.job_id == ""
+    assert remediation.lightspeed_conversation_id == "conv-invalid"
+    invoke_mock.assert_not_called()
+
+
+async def test_aap_monitoring_exception_preserves_launched_job_id():
+    with patch("agent_service.nodes.lightspeed.evaluate_job", side_effect=RuntimeError("monitor unavailable")):
+        node_result, _, _ = await _run_node(als_return=_ALS_RESPONSE)
+    remediation = node_result["remediation_result"]
+    assert not remediation.success
+    assert remediation.job_id == "42"
+    assert remediation.lightspeed_conversation_id == "conv-123"
+    assert "monitoring failed" in remediation.output_summary

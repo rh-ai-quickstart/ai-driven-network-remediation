@@ -282,7 +282,7 @@ class TestConditionalRouting:
         assert isinstance(result["remediation_result"], RemediationResult)
         assert result["remediation_result"].generated_template_name is not None
         assert result["remediation_result"].generated_playbook_name is not None
-        assert result["remediation_result"].job_id != ""
+        assert result["remediation_result"].lightspeed_conversation_id == "stub-conv-id"
 
     async def test_low_confidence_routes_through_escalate(self, graph):
         result = await graph.ainvoke(
@@ -384,7 +384,7 @@ class TestConditionalRouting:
 
         assert result["decision"] == "lightspeed"
         assert result["remediation_result"].generated_template_name is not None
-        assert result["remediation_result"].job_id != ""
+        assert result["remediation_result"].lightspeed_conversation_id == "stub-conv-id"
 
 
 @pytest.mark.usefixtures("_patch_graph_nodes")

@@ -197,6 +197,7 @@ async def trigger_demo(req: DemoTriggerRequest) -> dict:
 
     incident_id = str(uuid4())
     event = build_demo_event(req.scenario, req.site, incident_id)
+    target_site = event["labels"]["edge_site_id"]
     try:
         offset = await asyncio.to_thread(publish_demo_event, event)
     except Exception as exc:
@@ -209,7 +210,7 @@ async def trigger_demo(req: DemoTriggerRequest) -> dict:
                 "error": str(exc),
                 "incident_id": incident_id,
                 "scenario": req.scenario,
-                "site": req.site,
+                "site": target_site,
             },
         )
 
@@ -220,7 +221,7 @@ async def trigger_demo(req: DemoTriggerRequest) -> dict:
         "status": "queued",
         "incident_id": incident_id,
         "scenario": scenario,
-        "site": req.site,
+        "site": target_site,
         "topic": DEMO_TOPIC,
         "kafka_offset": offset,
         "event_message": event["message"],

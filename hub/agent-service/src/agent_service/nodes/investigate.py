@@ -3,139 +3,15 @@ import asyncio
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from loguru import logger
 
-from agent_service.config import INVESTIGATE_SYSTEM_PROMPT, get_llm
+from agent_service.config import (
+    INVESTIGATE_OPENSHIFT_TOOLS,
+    INVESTIGATE_TOOL_SCHEMAS,
+    get_investigate_system_prompt,
+    get_investigate_tools,
+    get_llm,
+)
 from agent_service.models import GraphConfig
 from agent_service.utils import EDGE_SITE_STAMP, invoke_tool
-
-_TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "get_events",
-            "description": "Get Kubernetes events for a namespace",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
-                    "limit": {"type": "integer", "description": "Max events to return", "default": 20},
-                    "edge_site_id": {
-                        "type": "string",
-                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
-                    },
-                },
-                "required": ["namespace"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "find_error_patterns",
-            "description": "Find recurring error patterns in logs for an application",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
-                    "app": {"type": "string", "description": "Application name"},
-                    "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
-                    "top_n": {"type": "integer", "description": "Max patterns to return", "default": 10},
-                    "regex": {"type": "string", "description": "Optional regex filter"},
-                },
-                "required": ["namespace", "app"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_pod_logs",
-            "description": "Get logs from a specific pod",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "pod_name": {"type": "string", "description": "Pod name"},
-                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
-                    "container": {"type": "string", "description": "Container name"},
-                    "tail_lines": {"type": "integer", "description": "Number of lines from the end", "default": 100},
-                    "edge_site_id": {
-                        "type": "string",
-                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
-                    },
-                },
-                "required": ["pod_name", "namespace"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_logs",
-            "description": (
-                "Search aggregated logs via Loki. Filters do NOT accept '*' or "
-                "shell-glob wildcards. Prefer namespace + text; add pod only if "
-                "needed."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
-                    "pod": {
-                        "type": "string",
-                        "description": "Pod name substring (partial match, no wildcards; e.g. 'edge-fast-path')",
-                    },
-                    "container": {
-                        "type": "string",
-                        "description": (
-                            "Exact container name (NOT the pod name). Omit unless you know it; "
-                            "it is an exact match, not a substring."
-                        ),
-                    },
-                    "labels": {
-                        "type": "object",
-                        "description": "Label selector",
-                        "additionalProperties": {"type": "string"},
-                    },
-                    "text": {"type": "string", "description": "Text to search for"},
-                    "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
-                    "limit": {"type": "integer", "description": "Max results", "default": 50},
-                },
-                "required": ["namespace"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_pod_spec",
-            "description": (
-                "Get structured spec for a pod as JSON. Includes container "
-                "resource limits, requests, probes, and env vars. Supports "
-                "prefix matching (e.g. 'myapp' finds 'myapp-6b7f8c-x2k9z')."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "Pod name (exact or prefix)"},
-                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
-                    "edge_site_id": {
-                        "type": "string",
-                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
-                    },
-                },
-                "required": ["name", "namespace"],
-            },
-        },
-    },
-]
-
-
-_TOOL_DOCS = "\n".join(
-    f"- {t['function']['name']}"
-    f"({', '.join(t['function']['parameters']['properties'])}): "
-    f"{t['function']['description']}"
-    for t in _TOOLS
-)
-_SYSTEM_PROMPT = f"{INVESTIGATE_SYSTEM_PROMPT}\n\nAvailable tools:\n{_TOOL_DOCS}"
 
 
 def _extract_events(result: dict) -> list[dict]:
@@ -145,22 +21,17 @@ def _extract_events(result: dict) -> list[dict]:
     return [result]
 
 
-_OPENSHIFT_TOOLS = {"get_events", "get_pod_logs", "get_pod_spec"}
-
-_TOOL_SCHEMAS = {t["function"]["name"]: t["function"]["parameters"] for t in _TOOLS}
-
-
 def _default_tool_args(tool_name: str, tool_args: dict, log_event) -> dict:
     # Only the OpenShift tools route by cluster via edge_site_id. The Loki tools
     # select a log stream via a separate tenant argument (application|
     # infrastructure|audit), so we leave it at the server default instead.
-    schema = _TOOL_SCHEMAS.get(tool_name, {})
+    schema = INVESTIGATE_TOOL_SCHEMAS.get(tool_name, {})
     allowed = schema.get("properties", {})
     args = {k: v for k, v in tool_args.items() if k in allowed}
     for key, prop in allowed.items():
         if prop.get("type") == "integer" and isinstance(args.get(key), float):
             args[key] = int(args[key])
-    if tool_name in _OPENSHIFT_TOOLS and "edge_site_id" not in args:
+    if tool_name in INVESTIGATE_OPENSHIFT_TOOLS and "edge_site_id" not in args:
         args["edge_site_id"] = log_event.edge_site_id
     return args
 
@@ -181,7 +52,22 @@ def _format_pod_resources(tool_result: dict) -> str:
     return "\n".join(lines)
 
 
-def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict, edge_site_id: str = "") -> None:
+def _stamp_pod_logs(logs: str, edge_site_id: str, pod_name: str) -> str:
+    source = f"{EDGE_SITE_STAMP} {edge_site_id}" if edge_site_id else ""
+    pod = f"Pod: {pod_name}" if pod_name else ""
+    provenance = " ".join(part for part in (source, pod) if part)
+    if not provenance:
+        return logs
+    return "\n".join(f"{provenance} | {line}" for line in logs.splitlines())
+
+
+def _merge_tool_result(
+    tool_name: str,
+    tool_result: dict,
+    evidence: dict,
+    edge_site_id: str = "",
+    pod_name: str = "",
+) -> None:
     if tool_result.get("error"):
         return
     if tool_name == "get_events":
@@ -191,6 +77,7 @@ def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict, edge_s
     elif tool_name == "get_pod_logs":
         logs = tool_result.get("logs", "")
         if logs:
+            logs = _stamp_pod_logs(logs, edge_site_id, pod_name)
             prev = evidence["pod_logs"]
             evidence["pod_logs"] = logs if not prev else prev + "\n" + logs
     elif tool_name == "search_logs":
@@ -204,7 +91,13 @@ def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict, edge_s
 
 
 def make_investigate_node(config: GraphConfig):
+    tools = get_investigate_tools()
+    tool_names = {tool["function"]["name"] for tool in tools}
+    system_prompt = get_investigate_system_prompt(tools)
+
     async def _call_tool(tool_name: str, tool_args: dict) -> dict:
+        if tool_name not in tool_names:
+            return {"error": f"Tool {tool_name} is not enabled"}
         try:
             async with asyncio.timeout(config.tool_call_timeout):
                 return await invoke_tool(tool_name, tool_args)
@@ -225,10 +118,13 @@ def make_investigate_node(config: GraphConfig):
             "resource_specs": state.resource_specs,
             "log_search_results": list(state.log_search_results),
         }
+        if not tools:
+            logger.info("No investigation tools enabled, returning existing evidence")
+            return evidence
 
         pod_status_summary = f"\nEnriched pod status: {state.pod_status}" if state.pod_status else ""
         messages = [
-            SystemMessage(content=_SYSTEM_PROMPT),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=f"Log event: {state.log_event.raw}{pod_status_summary}"),
         ]
 
@@ -240,7 +136,7 @@ def make_investigate_node(config: GraphConfig):
                         f"Investigate iteration {iteration + 1}/{config.investigate_max_iterations}"
                         f" tool_choice={tool_choice}"
                     )
-                    response = await get_llm().ainvoke(messages, tools=_TOOLS, tool_choice=tool_choice)
+                    response = await get_llm().ainvoke(messages, tools=tools, tool_choice=tool_choice)
                     if not response.tool_calls:
                         logger.info(f"Agent stopped calling tools after {iteration + 1} iteration(s)")
                         break
@@ -258,7 +154,13 @@ def make_investigate_node(config: GraphConfig):
                     )
 
                     for tool_call, args, tool_result in zip(tool_calls, defaulted_args, results):
-                        _merge_tool_result(tool_call["name"], tool_result, evidence, args.get("edge_site_id", ""))
+                        _merge_tool_result(
+                            tool_call["name"],
+                            tool_result,
+                            evidence,
+                            args.get("edge_site_id", ""),
+                            args.get("pod_name", ""),
+                        )
                         messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
 
                 logger.info(

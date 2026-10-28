@@ -1,0 +1,67 @@
+siteId: ""
+
+showcaseImage:
+  registry: ""
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+client:
+  enabled: true
+  name: client
+  replicas: 1
+  image:
+    name: showcase-client
+  env:
+    primeN: 30000
+    requestRate: "2.0"
+    microserviceAUrl: "http://microservice-a:8080"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+microserviceA:
+  enabled: true
+  name: microservice-a
+  replicas: 1
+  image:
+    name: showcase-microservice-a
+  env:
+    port: 8080
+    maxQueueSize: 100
+    microserviceBUrl: "http://microservice-b:8080"
+    microserviceBSiteId: ""
+    microserviceBVerifySsl: "false"
+  service:
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+microserviceB:
+  enabled: true
+  name: microservice-b
+  replicas: 1
+  image:
+    name: showcase-microservice-b
+  env:
+    port: 8080
+  service:
+    port: 8080
+  route:
+    enabled: false
+  # Deliberate demo fault: remediation should raise the 25m CPU limit.
+  resources:
+    requests:
+      cpu: 20m
+      memory: 128Mi
+    limits:
+      cpu: 25m
+      memory: 256Mi

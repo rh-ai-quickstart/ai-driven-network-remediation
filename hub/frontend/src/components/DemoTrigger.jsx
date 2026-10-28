@@ -5,7 +5,11 @@ const SCENARIOS = [
   { id: "oom", label: "Trigger OOM Demo" },
   { id: "lightspeed", label: "Trigger Lightspeed Demo" },
   { id: "escalation", label: "Trigger Escalation Demo" },
+  { id: "cpu-misconfiguration", label: "Trigger CPU Misconfiguration Demo" },
 ];
+const CPU_DEMO_SCENARIO = "cpu-misconfiguration";
+const CPU_DEMO_SUMMARY =
+  "microservice-a request queue is backing up; incident investigation is queued.";
 
 export function DemoTrigger({ baseUrl }) {
   const [loading, setLoading] = useState(false);
@@ -76,7 +80,10 @@ export function DemoTrigger({ baseUrl }) {
           </p>
           {result.event_message && (
             <p>
-              <strong>Event:</strong> {result.event_message}
+              <strong>{result.scenario === CPU_DEMO_SCENARIO ? "Summary:" : "Event:"}</strong>{" "}
+              {result.scenario === CPU_DEMO_SCENARIO
+                ? CPU_DEMO_SUMMARY
+                : result.event_message}
             </p>
           )}
         </div>

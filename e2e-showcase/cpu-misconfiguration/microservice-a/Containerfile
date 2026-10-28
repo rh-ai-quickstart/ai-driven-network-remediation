@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+
+RUN useradd -u 1001 -r -g 0 -m appuser && \
+    chown -R 1001:0 /app && chmod -R g+rw /app
+USER 1001
+
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+ENV MICROSERVICE_B_URL="http://microservice-b:8080"
+ENV MICROSERVICE_B_SITE_ID=""
+ENV MICROSERVICE_B_VERIFY_SSL="false"
+ENV MAX_QUEUE_SIZE=100
+
+EXPOSE 8080
+CMD ["python", "-u", "app.py"]

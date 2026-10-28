@@ -18,7 +18,7 @@
     },
     "failure_type": {
       "type": "string",
-      "enum": ["OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "Unknown"],
+      "enum": ["OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "CPUThrottling", "Unknown"],
       "description": "Classified failure type determined by the agent's analysis"
     },
     "severity": {
@@ -51,6 +51,14 @@
     "aap_job_id": {
       "type": ["string", "null"],
       "description": "AAP job ID if an Ansible playbook was executed"
+    },
+    "lightspeed_conversation_id": {
+      "type": ["string", "null"],
+      "description": "Lightspeed conversation ID for playbook generation, separate from an AAP execution job"
+    },
+    "remediation_summary": {
+      "type": "string",
+      "description": "Generation or execution outcome, including failure details"
     },
     "total_duration_ms": {
       "type": "number",

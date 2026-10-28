@@ -1,0 +1,84 @@
+{{- if .Values.microserviceB.enabled }}
+{{- $registry := required "showcaseImage.registry is required (set REGISTRY)" .Values.showcaseImage.registry }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.microserviceB.name }}
+  labels:
+    {{- include "cpu-misconfiguration.labels" . | nindent 4 }}
+    app: {{ .Values.microserviceB.name }}
+spec:
+  replicas: {{ .Values.microserviceB.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.microserviceB.name }}
+      {{- include "cpu-misconfiguration.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.microserviceB.name }}
+        {{- include "cpu-misconfiguration.selectorLabels" . | nindent 8 }}
+        adnr.io/site-id: {{ required "siteId is required (e.g. edge-01)" .Values.siteId | quote }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ .Values.microserviceB.name }}
+          image: "{{ $registry }}/{{ .Values.microserviceB.image.name }}:{{ .Values.showcaseImage.tag }}"
+          imagePullPolicy: {{ .Values.showcaseImage.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              containerPort: {{ .Values.microserviceB.env.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.microserviceB.env.port | quote }}
+          resources:
+            {{- toYaml .Values.microserviceB.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.microserviceB.name }}
+  labels:
+    {{- include "cpu-misconfiguration.labels" . | nindent 4 }}
+    app: {{ .Values.microserviceB.name }}
+spec:
+  selector:
+    app: {{ .Values.microserviceB.name }}
+    {{- include "cpu-misconfiguration.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.microserviceB.service.port }}
+      targetPort: http
+      protocol: TCP
+{{- if .Values.microserviceB.route.enabled }}
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ .Values.microserviceB.name }}
+  labels:
+    {{- include "cpu-misconfiguration.labels" . | nindent 4 }}
+    app: {{ .Values.microserviceB.name }}
+spec:
+  to:
+    kind: Service
+    name: {{ .Values.microserviceB.name }}
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}
+{{- end }}
