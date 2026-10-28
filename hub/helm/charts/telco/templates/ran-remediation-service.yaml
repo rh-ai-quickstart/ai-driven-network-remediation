@@ -56,7 +56,7 @@ spec:
             - name: AAP_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: noc-aap-secret
+                  name: {{ .Values.ranRemediationService.aapSecretName }}
                   key: AAP_TOKEN
                   optional: true
           ports:

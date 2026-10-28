@@ -70,6 +70,16 @@ touching all three.
 In local development the `aap-mock` service handles these calls, returning synthetic
 `"status": "successful"` responses without running any real playbook.
 
+For a real controller, use `ENABLE_AAP_MOCK=false` and `AAP_TOKEN` (or
+`AAP_SECRET_NAME`), as for Network. Both use `http://aap.aap.svc` by default.
+The shared `noc-aap-secret` is also created in Telco-only deployments.
+
+The seven `playbooks/ran-*.yml` files are empty demo placeholders. Sync them into
+an existing AAP project and create matching job templates named after the files
+(without `.yml`), using a localhost inventory and enabling Prompt on launch for
+Variables. Names must match `nodes/decide.py` exactly. A successful job verifies
+the AAP execution path; these placeholders do not change radio equipment.
+
 ---
 
 ## Kafka topics
@@ -119,7 +129,7 @@ processed **exactly once** even across replicas.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `AAP_URL` | `http://aap-mock:8080` | AAP controller base URL (mock by default) |
+| `AAP_URL` | `http://aap-mock:8080` | Python default; Helm uses `http://aap.aap.svc`, overridden by Make when the mock is enabled |
 | `AAP_TOKEN` | *(empty)* | AAP auth token; unset against the mock |
 | `KAFKA_BOOTSTRAP` | `kafka:9092` | |
 | `KAFKA_ENRICHED_TOPIC` | `ran-anomalies-enriched` | Input topic |

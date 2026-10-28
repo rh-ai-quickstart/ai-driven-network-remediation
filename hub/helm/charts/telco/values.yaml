@@ -125,13 +125,12 @@ ranFrontend:
     periodSeconds: 10
 
 ranRemediationService:
+  aapSecretName: noc-aap-secret
   enabled: true
   replicaCount: 1
   env:
-    # Default points to the mock because the ran-* job templates only exist as
-    # seed rows there; a real AAP controller needs them provisioned first.
-    # Override with --set-string when deploying against a real controller.
-    aapUrl: "http://aap-mock:8080"
+    # Same controller as Network; Make overrides this when ENABLE_AAP_MOCK=true.
+    aapUrl: "http://aap.aap.svc"
     kafkaBootstrap: "kafka:9092"
     kafkaEnrichedTopic: "ran-anomalies-enriched"
     kafkaRemediationTopic: "ran-remediation-results"

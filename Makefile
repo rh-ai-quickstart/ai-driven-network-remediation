@@ -262,6 +262,7 @@ helm_mock_args = \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string telco.ranRemediationService.env.aapUrl=http://aap-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(AAP_SECRET_NAME),--set-string telco.ranRemediationService.aapSecretName='$(AAP_SECRET_NAME)',) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set-string network.mcpSecrets.aap.token=mock,) \
 	$(if $(AAP_SECRET_NAME),--set network.mcpSecrets.aap.create=false,) \
 	$(if $(AAP_SECRET_NAME),--set-string network.mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
