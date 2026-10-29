@@ -8,13 +8,24 @@ instead, since that's where they now live. Kafka consumption itself
 import httpx
 import pytest
 import respx
-from ran_chatbot_service.chat import build_chat_context, call_model, format_chat_reply
+from ran_chatbot_service.chat import build_chat_context, call_model, format_chat_reply, select_anomaly
 from ran_chatbot_service.config import MODEL_API_URL
 from ran_chatbot_service.models import ModelSource
 
 
 def test_enriched_anomaly_includes_root_cause_category(sample_anomaly):
     assert sample_anomaly.root_cause_category == "antenna_misalignment"
+
+
+def test_select_anomaly_matches_whole_incident_id(sample_anomaly):
+    older = sample_anomaly.model_copy(update={"incident_id": "inc-1"})
+    middle = sample_anomaly.model_copy(update={"incident_id": "inc-10"})
+    newest = sample_anomaly.model_copy(update={"incident_id": "inc-2"})
+    anomalies = [older, middle, newest]
+
+    assert select_anomaly("Explain inc-1, please", anomalies) is older
+    assert select_anomaly("Explain inc-10", anomalies) is middle
+    assert select_anomaly("Explain inc-100", anomalies) is newest
 
 
 class TestBuildChatContext:
