@@ -294,9 +294,9 @@ import os
 body = json.loads(os.environ["RESPONSE"])
 assert body.get("class_index") in range(10 if os.environ["TASK"] == "classify" else 2), body
 assert 0 <= body.get("confidence", -1) <= 1, body
-assert isinstance(body.get("class" if os.environ["TASK"] == "classify" else "label"), str), body
+assert isinstance(body.get("root_cause_category" if os.environ["TASK"] == "classify" else "label"), str), body
 if os.environ["TASK"] == "classify":
-    assert body["class"] == os.environ["SMOKE_EXPECTED_CLASS"], body
+    assert body["root_cause_category"] == os.environ["SMOKE_EXPECTED_CLASS"], body
     assert body["class_index"] == int(os.environ["SMOKE_EXPECTED_INDEX"]), body
 print(json.dumps(body, indent=2))
 PY

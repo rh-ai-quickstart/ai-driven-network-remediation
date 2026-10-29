@@ -20,19 +20,23 @@ spec:
     spec:
       containers:
         - name: ran-chatbot-service
-          image: "{{ .Values.image.registry }}/{{ .Values.image.ranChatbotService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ .Values.ranChatbotService.image | default (printf "%s/%s:%s" .Values.image.registry .Values.image.ranChatbotService (.Values.image.tag | default .Chart.AppVersion)) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: KAFKA_BOOTSTRAP
               value: {{ .Values.ranChatbotService.env.kafkaBootstrap | quote }}
             - name: ENRICHED_ANOMALIES_TOPIC
               value: {{ .Values.ranChatbotService.env.enrichedAnomaliesTopic | quote }}
+            - name: INCIDENT_STATUS_TOPIC
+              value: {{ .Values.ranChatbotService.env.incidentStatusTopic | quote }}
             - name: REMEDIATION_RESULTS_TOPIC
               value: {{ .Values.ranChatbotService.env.remediationResultsTopic | quote }}
             - name: DEMO_METRICS_TOPIC
               value: {{ .Values.ranChatbotService.env.demoMetricsTopic | quote }}
             - name: MODEL_API_URL
               value: {{ .Values.ranChatbotService.env.modelApiUrl | quote }}
+            - name: RCA_READY_URL
+              value: {{ .Values.ranChatbotService.env.rcaReadyUrl | default (printf "http://%s-ran-rca-service:8003/ready" (include "telco.fullname" .)) | quote }}
             - name: MODEL_NAME
               value: {{ .Values.ranChatbotService.env.modelName | quote }}
             - name: CORS_ORIGINS

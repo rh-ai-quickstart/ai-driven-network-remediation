@@ -44,6 +44,7 @@ ranAnomalyDetector:
 
 ranRcaService:
   enabled: true
+  image: ""
   replicaCount: 1
   env:
     llamastackHost: "llamastack-service"
@@ -53,9 +54,12 @@ ranRcaService:
     kafkaBootstrap: "kafka:9092"
     kafkaAnomaliesTopic: "ran-anomalies"
     kafkaEnrichedTopic: "ran-anomalies-enriched"
+    kafkaIncidentStatusTopic: "ran-incident-status"
     kafkaGroupId: "ran-rca-service"
     kafkaConsumerEnabled: "true"
     recentAnomaliesLimit: "100"
+    classifyInferenceUrl: ""
+    classifyToken: ""
   service:
     type: ClusterIP
     port: 8003
@@ -76,13 +80,16 @@ ranRcaService:
 
 ranChatbotService:
   enabled: true
+  image: ""
   replicaCount: 1
   env:
     kafkaBootstrap: "kafka:9092"
     enrichedAnomaliesTopic: "ran-anomalies-enriched"
+    incidentStatusTopic: "ran-incident-status"
     remediationResultsTopic: "ran-remediation-results"
     demoMetricsTopic: "ran-combined-metrics"
     modelApiUrl: "http://llamastack-service:8321/v1/chat/completions"
+    rcaReadyUrl: ""
     modelName: ""
     corsOrigins: "http://localhost:3000"
   service:

@@ -9,15 +9,18 @@ root cause and recommended fix using RAG + IBM Granite, and publishes the enrich
 ```
 ran-anomaly-detector (ML-detected anomaly)
   → Kafka: ran-anomalies
-  → ran-rca-service (LangGraph: rag_retrieval → analyze)
+  → ran-rca-service (LangGraph: classify → rag_retrieval → analyze)
   → Kafka: ran-anomalies-enriched
 ```
 
+- **`classify`** — obtains the Mantis RCA prediction as `root_cause_category` and
+  validates its label, class index, and confidence
 - **`rag_retrieval`** — queries the `telco_oran_docs` vector store via LlamaStack for
-  relevant documentation snippets, using zone + application + AD confidence as context
-- **`analyze`** — sends anomaly context to Granite LLM, returns a structured
-  `root_cause_category`, `root_cause`, and `recommended_fix`; LLM or RAG
-  failures propagate — the anomaly is not forwarded for remediation
+  relevant documentation snippets, using the predicted label and anomaly context
+- **`analyze`** — sends anomaly context to Granite LLM for `root_cause` and
+  `recommended_fix`; the LLM cannot change the predicted label. An LLM
+  failure publishes empty explanation fields and an incident status while the
+  classified anomaly continues to remediation. A RAG failure still stops enrichment
 
 ## Contracts
 
@@ -25,22 +28,38 @@ ran-anomaly-detector (ML-detected anomaly)
 |---|---|---|
 | `ran-anomalies` | Consumed | [`contracts/ran-anomalies.schema.json`](../contracts/ran-anomalies.schema.json) |
 | `ran-anomalies-enriched` | Produced | [`contracts/ran-anomaly-enriched.schema.json`](../contracts/ran-anomaly-enriched.schema.json) |
+| `ran-incident-status` | Produced for classification or explanation failure | [`contracts/ran-incident-status.schema.json`](../contracts/ran-incident-status.schema.json) |
 
-The output is the input record plus the three fields this service adds:
-`root_cause_category`, `root_cause`, and `recommended_fix`. The schemas are the
-authoritative field lists and are validated in `tests/test_analyze.py` and
+The output is the input record plus `root_cause_category`, `ml_confidence`,
+`root_cause`, and `recommended_fix`. The two confidence fields distinguish RCA
+from anomaly detection. The schemas are the authoritative field lists and are
+validated in `tests/test_analyze.py` and
 `tests/test_graph.py`, so they are deliberately not duplicated here.
 
-`root_cause_category` is a closed enum — `ran-remediation-service` maps it
-directly to an AAP job template, so adding a value requires a matching template
-on the remediation side.
+The Mantis endpoint returns the exact TelecomTS class label as
+`root_cause_category`, alongside its class index and confidence. RCA carries
+that label through to the enriched record without an intermediate category
+mapping or a separate `ml_class` field. `root_cause_category` is a closed enum
+of the ten predicted labels. `ran-remediation-service` selects a distinct AAP
+playbook for each label, so adding a label requires a matching playbook.
+For example, mild and severe co-channel interference select different
+interference templates; gradual and sudden congestion select different
+congestion templates.
+
+Classification can fail even when the endpoint is reachable, for example if it
+returns a mismatched class index or invalid confidence. A classification failure
+stops enrichment, so there is no enriched record for the chatbot or UI to show.
+The separate status record preserves the incident ID and failure reason for the
+operator. An explanation failure has a different outcome: remediation continues
+with empty `root_cause` and `recommended_fix` fields, and its status record
+explains why they are empty.
 
 ## Endpoints
 
 | Path | Purpose |
 |---|---|
 | `GET /health` | Liveness probe |
-| `GET /ready` | Readiness (Kafka consumer thread alive) |
+| `GET /ready` | Readiness (Kafka consumer and configured classifier model) |
 | `GET /anomalies` | Recent enriched anomalies (in-memory buffer) |
 
 ## Config (env vars)

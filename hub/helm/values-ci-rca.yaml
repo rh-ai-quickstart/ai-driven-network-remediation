@@ -1,0 +1,6 @@
+# RCA classifier endpoint for the ci-hub-telco-oran nightly release.
+# The workflow builds and supplies the RCA consumer images from its checked-out commit.
+telco:
+  ranRcaService:
+    env:
+      classifyInferenceUrl: http://ran-rca-ml-service-predictor.model-serving.svc.cluster.local/v1/classify

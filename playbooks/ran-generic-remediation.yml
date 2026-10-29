@@ -1,0 +1,6 @@
+---
+- name: ran-generic-remediation (demo placeholder; no equipment changes)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks: []

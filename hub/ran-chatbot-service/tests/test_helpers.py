@@ -8,16 +8,41 @@ instead, since that's where they now live. Kafka consumption itself
 import httpx
 import pytest
 import respx
-from ran_chatbot_service.chat import build_chat_context, call_model, format_chat_reply
+from ran_chatbot_service.chat import build_chat_context, call_model, format_chat_reply, select_anomaly
 from ran_chatbot_service.config import MODEL_API_URL
 from ran_chatbot_service.models import ModelSource
 
 
 def test_enriched_anomaly_includes_root_cause_category(sample_anomaly):
-    assert sample_anomaly.root_cause_category == "antenna_misalignment"
+    assert sample_anomaly.root_cause_category == "Antenna Failure"
+
+
+def test_select_anomaly_matches_whole_incident_id(sample_anomaly):
+    older = sample_anomaly.model_copy(update={"incident_id": "inc-1"})
+    middle = sample_anomaly.model_copy(update={"incident_id": "inc-10"})
+    newest = sample_anomaly.model_copy(update={"incident_id": "inc-2"})
+    anomalies = [older, middle, newest]
+
+    assert select_anomaly("Explain inc-1, please", anomalies) is older
+    assert select_anomaly("Explain inc-10", anomalies) is middle
+    assert select_anomaly("Explain inc-100", anomalies) is newest
 
 
 class TestBuildChatContext:
+    def test_ml_advice_is_separate_from_final_diagnosis(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(
+            update={
+                "root_cause_category": "Co-Channel Interference (Severe)",
+                "ml_confidence": 0.93,
+            }
+        )
+        prompt = build_chat_context("Explain", [anomaly], [], [])
+        assert "Co-Channel Interference (Severe) (RCA confidence 0.93)" in prompt
+        assert "ML-derived operational category" not in prompt
+        reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
+        assert "Mantis RCA Prediction:\n- Co-Channel Interference (Severe) (RCA confidence 0.93)" in reply
+        assert "ML-Derived Operational Category" not in reply
+
     def test_includes_anomaly_details(self, sample_anomalies):
         prompt = build_chat_context("What's happening?", sample_anomalies, [], [])
         assert "test-001" in prompt
@@ -38,11 +63,11 @@ class TestBuildChatContext:
         assert "user: hello" in prompt
         assert "assistant: hi" in prompt
 
-    def test_blank_root_cause_and_fix_render_as_na(self, sample_anomaly):
+    def test_blank_root_cause_and_fix_render_as_unavailable(self, sample_anomaly):
         anomaly = sample_anomaly.model_copy(update={"root_cause": "", "recommended_fix": ""})
         prompt = build_chat_context("What's wrong?", [anomaly], [], [])
-        assert "Root cause: n/a" in prompt
-        assert "Recommended fix: n/a" in prompt
+        assert "LLM explanation: unavailable" in prompt
+        assert "Recommended fix: unavailable" in prompt
 
     def test_uses_the_five_most_recent_anomalies(self, sample_anomaly):
         anomalies = [sample_anomaly.model_copy(update={"incident_id": f"inc-{i}"}) for i in range(7)]
@@ -150,9 +175,47 @@ class TestCallModel:
 
 
 class TestFormatChatReply:
+    def test_requested_incident_uses_its_own_ml_prediction(self, sample_anomaly):
+        older = sample_anomaly.model_copy(
+            update={
+                "incident_id": "older-123",
+                "root_cause_category": "Antenna Failure",
+                "ml_confidence": 0.93,
+            }
+        )
+        newer = sample_anomaly.model_copy(
+            update={
+                "incident_id": "newer-456",
+                "root_cause_category": "Resource Allocation Bugs",
+                "ml_confidence": 0.8,
+            }
+        )
+        reply = format_chat_reply("Explain older-123", "analysis", [older, newer])
+        assert "Incident older-123" in reply
+        assert "Mantis RCA Prediction:\n- Antenna Failure (RCA confidence 0.93)" in reply
+        assert "Resource Allocation Bugs" not in reply
+
+    def test_missing_prediction_is_distinct_from_explanation(self, sample_anomaly):
+        anomaly = sample_anomaly
+        prompt = build_chat_context("Explain", [anomaly], [], [])
+        reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
+        assert "Mantis RCA classification: unavailable" in prompt
+        assert "Mantis RCA Prediction:\n- unavailable" in reply
+        assert "ML-derived operational category" not in prompt
+        assert "ML-Derived Operational Category" not in reply
+        assert "zone=A, app=Twitch" in reply
+
+    def test_legacy_record_without_ml_fields_is_unavailable(self, sample_anomaly_dict):
+        from ran_chatbot_service.models import EnrichedAnomaly
+
+        anomaly = EnrichedAnomaly.model_validate(sample_anomaly_dict)
+        reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
+        assert "Mantis RCA Prediction:\n- unavailable" in reply
+        assert "incident" in reply.lower()
+
     def test_with_anomalies_and_live_reply(self, sample_anomalies):
         reply = format_chat_reply("What's wrong?", "Signal degradation in zone A.", sample_anomalies)
-        assert reply.startswith("[Antenna Misalignment] ")
+        assert reply.startswith("[Antenna Failure] ")
         assert "Anomalies detected: 1" in reply
         assert "Incident test-001" in reply
         assert "zone=A" in reply
@@ -166,13 +229,15 @@ class TestFormatChatReply:
 
     def test_empty_model_reply_produces_empty_model_output(self):
         reply = format_chat_reply("Status?", "", [])
-        assert "Model Output:\n- " in reply
+        assert "Additional LLM Explanation:\n- " in reply
 
-    def test_blank_root_cause_and_fix_render_as_na(self, sample_anomaly):
+    def test_blank_root_cause_and_fix_render_as_unavailable(self, sample_anomaly):
         anomaly = sample_anomaly.model_copy(update={"root_cause": "", "recommended_fix": ""})
         reply = format_chat_reply("What's wrong?", "insight", [anomaly])
-        assert "Root Cause:\n- n/a" in reply
-        assert "Recommended Fix:\n- n/a" in reply
+        assert "LLM Explanation:\n- unavailable" in reply
+        assert "Recommended Fix:\n- unavailable" in reply
+        assert "Additional LLM Explanation:\n- unavailable" in reply
+        assert "insight" not in reply
 
     def test_latest_anomaly_is_the_last_element_not_the_first(self, sample_anomaly):
         oldest = sample_anomaly.model_copy(update={"incident_id": "inc-old"})
@@ -180,9 +245,9 @@ class TestFormatChatReply:
         reply = format_chat_reply("What's wrong?", "insight", [oldest, newest])
         assert "Incident inc-new" in reply
 
-    def test_category_tag_replaces_underscores_and_title_cases(self, sample_anomaly):
-        anomaly = sample_anomaly.model_copy(update={"root_cause_category": "scheduler_degradation"})
+    def test_category_tag_uses_predicted_label(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={"root_cause_category": "Resource Allocation Bugs"})
 
         reply = format_chat_reply("What's wrong?", "insight", [anomaly])
 
-        assert reply.startswith("[Scheduler Degradation] ")
+        assert reply.startswith("[Resource Allocation Bugs] ")

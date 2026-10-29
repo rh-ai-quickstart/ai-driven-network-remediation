@@ -1,0 +1,6 @@
+---
+- name: ran-rf-filter-response (demo placeholder; no equipment changes)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks: []
