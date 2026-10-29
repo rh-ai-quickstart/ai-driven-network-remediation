@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
@@ -20,7 +21,14 @@ _MAX_ITEMS_IN_PROMPT = 5
 def select_anomaly(user_message: str, anomalies: list[EnrichedAnomaly]) -> EnrichedAnomaly | None:
     if not anomalies:
         return None
-    return next((anomaly for anomaly in reversed(anomalies) if anomaly.incident_id in user_message), anomalies[-1])
+    return next(
+        (
+            anomaly
+            for anomaly in reversed(anomalies)
+            if re.search(rf"(?<![\w-]){re.escape(anomaly.incident_id)}(?![\w-])", user_message)
+        ),
+        anomalies[-1],
+    )
 
 
 def _ml_explanation(anomaly: EnrichedAnomaly) -> str:
