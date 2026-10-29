@@ -89,7 +89,7 @@ def test_legacy_anomaly_api_reports_missing_prediction(client, sample_anomaly):
     client.app.state.recent_anomalies.append(sample_anomaly)
     anomaly = client.get("/api/anomalies").json()["anomalies"][0]
     assert "ml_status" not in anomaly
-    assert anomaly["ml_class"] == ""
+    assert "ml_class" not in anomaly
     assert anomaly["incident_id"] == "test-001"
     assert anomaly["zone"] == "A"
     assert anomaly["application"] == "Twitch"
@@ -126,8 +126,8 @@ def test_cell_failure_incident_keeps_identity_confidences_and_recovery_outcome(
     client, sample_anomaly, sample_remediation
 ):
     incident = sample_anomaly.model_copy(update={
-        "incident_id": "antenna-001", "root_cause_category": "cell_failure",
-        "ml_class": "Antenna Failure", "ml_confidence": 0.91,
+        "incident_id": "antenna-001", "root_cause_category": "Antenna Failure",
+        "ml_confidence": 0.91,
     })
     recovery = {**sample_remediation, "incident_id": "antenna-001", "template_name": "ran-cell-recovery"}
     client.app.state.recent_anomalies.append(incident)
@@ -135,11 +135,11 @@ def test_cell_failure_incident_keeps_identity_confidences_and_recovery_outcome(
 
     anomaly = client.get("/api/anomalies").json()["anomalies"][0]
     assert anomaly["incident_id"] == "antenna-001"
-    assert anomaly["ml_class"] == "Antenna Failure"
+    assert "ml_class" not in anomaly
     assert anomaly["ml_confidence"] == 0.91
     assert anomaly["ad_confidence"] == 0.94
     assert not {"ml_class_index", "ml_status", "ml_steer_used"} & anomaly.keys()
-    assert anomaly["root_cause_category"] == "cell_failure"
+    assert anomaly["root_cause_category"] == "Antenna Failure"
     assert anomaly["remediation_template_name"] == "ran-cell-recovery"
     assert anomaly["remediation_job_status"] == "successful"
     assert anomaly["remediation_status"] == "completed"
@@ -150,22 +150,21 @@ def test_interference_anomalies_api_keeps_label_low_confidence_and_job(
     client, sample_anomaly, sample_remediation, label
 ):
     incident = sample_anomaly.model_copy(update={
-        "incident_id": "interference-001", "root_cause_category": "interference",
-        "ml_class": label, "ml_confidence": 0.001,
+        "incident_id": "interference-001", "root_cause_category": label,
+        "ml_confidence": 0.001,
     })
     remediation = {
         **sample_remediation,
         "incident_id": "interference-001",
-        "template_name": "ran-interference-mitigation",
+        "template_name": "ran-interference-mitigation" if label.endswith("(Mild)") else "ran-severe-interference-mitigation",
     }
     client.app.state.recent_anomalies.append(incident)
     client.app.state.recent_remediations.append(remediation)
 
     anomaly = client.get("/api/anomalies").json()["anomalies"][0]
-    assert anomaly["root_cause_category"] == "interference"
-    assert anomaly["ml_class"] == label
+    assert anomaly["root_cause_category"] == label
     assert anomaly["ml_confidence"] == 0.001
-    assert anomaly["remediation_template_name"] == "ran-interference-mitigation"
+    assert anomaly["remediation_template_name"] == remediation["template_name"]
     assert anomaly["remediation_status"] == "completed"
 
 
@@ -237,7 +236,7 @@ def test_failed_status_replaces_prior_enrichment_for_same_incident(client, sampl
     incidents = client.get("/api/anomalies").json()["anomalies"]
     assert len(incidents) == 1
     assert incidents[0]["incident_status"]["outcome"] == "failed"
-    assert incidents[0]["ml_class"] == ""
+    assert "ml_class" not in incidents[0]
     assert incidents[0]["remediation_job_id"] is None
 
 
@@ -245,7 +244,7 @@ def test_llm_failure_status_joins_enrichment_and_completed_job(client, sample_an
     from ran_chatbot_service.models import IncidentStatus
 
     unavailable = sample_anomaly.model_copy(update={
-        "root_cause_category": "cell_failure", "root_cause": "", "recommended_fix": "",
+        "root_cause_category": "Antenna Failure", "root_cause": "", "recommended_fix": "",
     })
     client.app.state.recent_anomalies.append(sample_anomaly)
     client.app.state.recent_anomalies.append(unavailable)
@@ -260,7 +259,7 @@ def test_llm_failure_status_joins_enrichment_and_completed_job(client, sample_an
 
     incidents = client.get("/api/anomalies").json()["anomalies"]
     assert len(incidents) == 1
-    assert incidents[0]["root_cause_category"] == "cell_failure"
+    assert incidents[0]["root_cause_category"] == "Antenna Failure"
     assert incidents[0]["root_cause"] == ""
     assert incidents[0]["recommended_fix"] == ""
     assert incidents[0]["incident_status"]["error_reason"] == "LLM unavailable"
@@ -443,13 +442,13 @@ def test_chat_model_unavailable(mock_model, client, sample_anomalies):
 def test_chat_reports_unavailable_explanation_when_model_is_down(mock_model, client, sample_anomaly):
     mock_model.return_value = ("", "unreachable")
     client.app.state.recent_anomalies.append(sample_anomaly.model_copy(update={
-        "root_cause": "", "recommended_fix": "", "root_cause_category": "cell_failure",
+        "root_cause": "", "recommended_fix": "", "root_cause_category": "Antenna Failure",
     }))
 
     response = client.post("/api/chat", json={"message": "Explain test-001"})
     assert response.status_code == 200
     reply = response.json()["reply"]
-    assert "ML-Derived Operational Category:\n- cell_failure" in reply
+    assert "[Antenna Failure] Summary:" in reply
     assert "LLM Explanation:\n- unavailable" in reply
     assert "Recommended Fix:\n- unavailable" in reply
 

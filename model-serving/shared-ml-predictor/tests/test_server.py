@@ -136,7 +136,7 @@ class TestClassifyEndpoint:
         with patch("ran_ml_service.server.TASK", "classify"):
             response = client.post("/v1/classify", json={"kpi_window": sample_kpi_window})
         assert response.status_code == 200
-        assert response.json() == {"class": "Antenna Failure", "confidence": 0.91, "class_index": 0}
+        assert response.json() == {"root_cause_category": "Antenna Failure", "confidence": 0.91, "class_index": 0}
 
     def test_classify_disabled_in_detect_mode(self, client, sample_kpi_window):
         assert client.post("/v1/classify", json={"kpi_window": sample_kpi_window}).status_code == 404

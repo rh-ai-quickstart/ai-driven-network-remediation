@@ -26,19 +26,19 @@ def _mock_app():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("scenario", "category", "template", "summary_term", "card_category"),
+    ("scenario", "template", "summary_term"),
     [
-        ("high_congestion_gradual", "congestion", "ran-load-balance", "load balancing", "Congestion"),
-        ("high_congestion_sudden", "congestion", "ran-load-balance", "load balancing", "Congestion"),
-        ("resource_allocation_bugs", "resource_allocation_fault", "ran-resource-allocation-correction", "allocation correction", "Resource Allocation Fault"),
-        ("buffer_overflow", "buffer_overflow", "ran-buffer-relief", "buffer relief", "Buffer Overflow"),
-        ("handover_fault", "handover_fault", "ran-handover-stabilization", "handover stabilization", "Handover Fault"),
-        ("doppler_shift_severe", "doppler_shift", "ran-doppler-shift-response", "Doppler", "Doppler Shift"),
-        ("rf_filter_fault", "rf_filter_fault", "ran-rf-filter-response", "RF filter", "RF Filter Fault"),
+        ("high_congestion_gradual", "ran-load-balance", "load balancing"),
+        ("high_congestion_sudden", "ran-sudden-congestion-relief", "congestion relief"),
+        ("resource_allocation_bugs", "ran-resource-allocation-correction", "allocation correction"),
+        ("buffer_overflow", "ran-buffer-relief", "buffer relief"),
+        ("handover_fault", "ran-handover-stabilization", "handover stabilization"),
+        ("doppler_shift_severe", "ran-doppler-shift-response", "Doppler"),
+        ("rf_filter_fault", "ran-rf-filter-response", "RF filter"),
     ],
 )
 async def test_classified_incident_reaches_expected_mock_job_api_and_card(
-    monkeypatch, scenario, category, template, summary_term, card_category,
+    monkeypatch, scenario, template, summary_term,
 ):
     fixture = json.loads((ROOT / "hub/telco-oran/src/telco_oran/fixtures" / f"{scenario}.json").read_text())
     assert len(fixture["kpi_window"]) == 128
@@ -51,9 +51,8 @@ async def test_classified_incident_reaches_expected_mock_job_api_and_card(
         "kpi_window": fixture["kpi_window"],
         "ad_label": "anomalous",
         "ad_confidence": 0.94,
-        "ml_class": fixture["anomaly_class"],
         "ml_confidence": 0.9,
-        "root_cause_category": category,
+        "root_cause_category": fixture["anomaly_class"],
         "root_cause": "classified RAN fault",
         "recommended_fix": "Run the selected remediation",
     }
@@ -101,8 +100,7 @@ async def test_classified_incident_reaches_expected_mock_job_api_and_card(
     assert response.json()["count"] == 1
     incident = response.json()["anomalies"][0]
     assert incident["incident_id"] == incident_id
-    assert incident["ml_class"] == fixture["anomaly_class"]
-    assert incident["root_cause_category"] == category
+    assert incident["root_cause_category"] == fixture["anomaly_class"]
     assert incident["remediation_template_name"] == template
     assert incident["remediation_job_id"] == result["job_id"]
     assert incident["remediation_job_status"] == "successful"
@@ -116,7 +114,6 @@ async def test_classified_incident_reaches_expected_mock_job_api_and_card(
         ).stdout
         assert f"Incident {incident_id}" in card
         assert f"Mantis RCA: {fixture['anomaly_class']}" in card
-        assert f"ML category: {card_category}" in card
         assert f"Job: {template}" in card
         assert "Job outcome: successful" in card
         assert "no RAN device changed" in card
@@ -142,8 +139,8 @@ async def test_classified_kpi_incident_reaches_expected_mock_outcome(outcome, st
     classified = {
         "incident_id": "aap-failure-001", "zone": "A", "application": "Twitch",
         "kpi_window": fixture["kpi_window"], "ad_label": "anomalous", "ad_confidence": 0.94,
-        "ml_class": "Antenna Failure", "ml_confidence": 0.91,
-        "root_cause_category": "cell_failure", "root_cause": "cell outage", "recommended_fix": "recover cell",
+        "ml_confidence": 0.91,
+        "root_cause_category": "Antenna Failure", "root_cause": "cell outage", "recommended_fix": "recover cell",
     }
     assert len(classified["kpi_window"]) == 128
     audited = []
@@ -196,8 +193,7 @@ async def test_classified_kpi_incident_reaches_expected_mock_outcome(outcome, st
     assert response.status_code == 200
     assert response.json()["count"] == 1
     incident = response.json()["anomalies"][0]
-    assert incident["root_cause_category"] == "cell_failure"
-    assert incident["ml_class"] == "Antenna Failure"
+    assert incident["root_cause_category"] == "Antenna Failure"
     assert incident["remediation_template_name"] == "ran-cell-recovery"
     assert incident["remediation_job_id"] == result["job_id"]
     assert incident["remediation_job_status"] == job_status
@@ -212,7 +208,7 @@ async def test_classified_kpi_incident_reaches_expected_mock_outcome(outcome, st
             ["node", str(frontend / "tests/render-incident-card.mjs")],
             cwd=frontend, input=json.dumps(incident), text=True, capture_output=True, check=True,
         ).stdout
-        assert "ML category: Cell Failure" in card
+        assert "Mantis RCA: Antenna Failure" in card
         assert "Job: ran-cell-recovery" in card
         assert f"Job outcome: {job_status}" in card
         if has_job:
@@ -229,10 +225,10 @@ async def test_classified_kpi_incident_reaches_expected_mock_outcome(outcome, st
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("category", "template_name"),
-    [("cell_failure", "ran-cell-recovery"), ("rf_filter_fault", "ran-rf-filter-response"),
-     ("doppler_shift", "ran-doppler-shift-response"),
-     ("handover_fault", "ran-handover-stabilization"),
-     ("buffer_overflow", "ran-buffer-relief")],
+    [("Antenna Failure", "ran-cell-recovery"), ("Faulty RF Filters (Temporal)", "ran-rf-filter-response"),
+     ("Doppler Shift (Severe)", "ran-doppler-shift-response"),
+     ("Faulty Handover Algorithm (Too Frequent)", "ran-handover-stabilization"),
+     ("Buffer Overflow (Gradual Buildup)", "ran-buffer-relief")],
 )
 async def test_missing_selected_mock_template_does_not_launch_fallback(category, template_name):
     mock = _mock_app()

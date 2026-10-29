@@ -25,8 +25,7 @@ def _mock_llm():
 
 def _mock_classifier():
     return patch("ran_rca_service.graph.classify_node", new=AsyncMock(return_value={
-        "ml_class": "Antenna Failure",
-        "ml_class_index": 0,
+        "root_cause_category": "Antenna Failure",
         "ml_confidence": 0.9,
         "ml_status": "used",
         "ml_steer_used": True,
@@ -43,8 +42,7 @@ class TestFullGraph:
             _mock_llm(),
         ):
             classifier.return_value = {
-                "ml_class": "Co-Channel Interference (Severe)",
-                "ml_class_index": 2,
+                "root_cause_category": "Co-Channel Interference (Severe)",
                 "ml_confidence": 0.95,
                 "ml_status": "used",
                 "ml_steer_used": True,
@@ -65,11 +63,10 @@ class TestFullGraph:
             graph.add_edge("analyze", END)
             result = await graph.compile().ainvoke(SAMPLE_ANOMALY)
 
-        assert result["ml_class_index"] == 2
         assert result["ml_status"] == "used"
         assert result["ml_steer_used"] is True
         assert "Co-Channel Interference" in result["rag_query_used"]
-        assert result["root_cause_category"] == "interference"
+        assert result["root_cause_category"] == "Co-Channel Interference (Severe)"
 
     @pytest.mark.asyncio
     async def test_invoke_returns_enriched_state(self):
@@ -83,7 +80,7 @@ class TestFullGraph:
         assert result["ad_label"] == "anomalous"
         assert result["ad_confidence"] == 0.94
         assert result["context_snippets"] == []
-        assert result["root_cause_category"] == "cell_failure"
+        assert result["root_cause_category"] == "Antenna Failure"
         assert result["root_cause"] != ""
         assert result["recommended_fix"] != ""
 
@@ -106,7 +103,6 @@ class TestFullGraph:
             "root_cause_category": result["root_cause_category"],
             "root_cause": result["root_cause"],
             "recommended_fix": result["recommended_fix"],
-            "ml_class": result.get("ml_class", ""),
             "ml_confidence": result.get("ml_confidence"),
         }
         validator.validate(enriched)
@@ -124,7 +120,7 @@ class TestFullGraph:
             graph = build_graph()
             result = await graph.ainvoke(SAMPLE_ANOMALY)
 
-        assert result["root_cause_category"] == "cell_failure"
+        assert result["root_cause_category"] == "Antenna Failure"
         assert result["root_cause"] == ""
         assert result["recommended_fix"] == ""
         assert result["llm_error_reason"] == "LLM unavailable"

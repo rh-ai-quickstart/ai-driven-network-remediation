@@ -111,11 +111,9 @@ class TestAnomaliesEndpoint:
 
         result = {
             **SAMPLE_ANOMALY,
-            "root_cause_category": "cell_failure",
+            "root_cause_category": "Antenna Failure",
             "root_cause": "cause",
             "recommended_fix": "fix",
-            "ml_class": "Antenna Failure",
-            "ml_class_index": 0,
             "ml_confidence": 0.001,
             "ml_status": "used",
             "ml_steer_used": True,
@@ -134,7 +132,6 @@ class TestAnomaliesEndpoint:
         jsonschema.Draft202012Validator(json.loads(schema_path.read_text())).validate(published)
         api_record = client.get("/anomalies").json()["anomalies"][0]
         assert api_record == published
-        assert api_record["ml_class"] == "Antenna Failure"
         assert api_record["ml_confidence"] == 0.001
         assert not {"ml_class_index", "ml_status", "ml_steer_used"} & api_record.keys()
 
@@ -185,7 +182,7 @@ class TestHandleAnomalyMessage:
 
         classifier_response = MagicMock()
         classifier_response.json.return_value = {
-            "class": "Antenna Failure", "class_index": 0, "confidence": rca_confidence,
+            "root_cause_category": "Antenna Failure", "class_index": 0, "confidence": rca_confidence,
         }
         classifier = AsyncMock()
         classifier.post.return_value = classifier_response
@@ -206,10 +203,9 @@ class TestHandleAnomalyMessage:
 
         published = json.loads(producer.send.call_args.args[1])
         assert published["incident_id"] == "test-001"
-        assert published["root_cause_category"] == "cell_failure"
+        assert published["root_cause_category"] == "Antenna Failure"
         assert "Severe signal degradation" in published["root_cause"]
         assert "Section 4.3.2" in published["recommended_fix"]
-        assert published["ml_class"] == "Antenna Failure"
         assert published["ml_confidence"] == rca_confidence
         assert published["ad_confidence"] == 0.94
         assert not {"ml_class_index", "ml_status", "ml_steer_used"} & published.keys()
@@ -227,7 +223,7 @@ class TestHandleAnomalyMessage:
         from ran_rca_service.graph import build_graph
 
         classifier_response = MagicMock()
-        classifier_response.json.return_value = {"class": label, "class_index": index, "confidence": 0.001}
+        classifier_response.json.return_value = {"root_cause_category": label, "class_index": index, "confidence": 0.001}
         classifier = AsyncMock()
         classifier.post.return_value = classifier_response
         classifier.__aenter__.return_value = classifier
@@ -246,8 +242,7 @@ class TestHandleAnomalyMessage:
             _handle_anomaly_message(json.dumps(SAMPLE_ANOMALY).encode(), build_graph(), producer, "topic", buffer)
 
         published = json.loads(producer.send.call_args.args[1])
-        assert published["root_cause_category"] == "interference"
-        assert published["ml_class"] == label
+        assert published["root_cause_category"] == label
         assert published["ml_confidence"] == 0.001
         assert buffer[0] == published
 
@@ -274,10 +269,10 @@ class TestHandleAnomalyMessage:
         from ran_rca_service.nodes.classify import RCA_CLASSES
 
         response = MagicMock()
-        response.json.return_value = {"class": RCA_CLASSES[0], "class_index": 0, "confidence": 0.91}
+        response.json.return_value = {"root_cause_category": RCA_CLASSES[0], "class_index": 0, "confidence": 0.91}
         classifier_client = AsyncMock()
         malformed = MagicMock()
-        malformed.json.return_value = {"class": RCA_CLASSES[0], "class_index": True, "confidence": 0.9}
+        malformed.json.return_value = {"root_cause_category": RCA_CLASSES[0], "class_index": True, "confidence": 0.9}
         first_result = httpx.ConnectError("outage") if first_failure == "connection" else malformed
         classifier_client.post.side_effect = [first_result, response]
         classifier_client.__aenter__.return_value = classifier_client
@@ -299,8 +294,7 @@ class TestHandleAnomalyMessage:
                 _handle_anomaly_message(json.dumps(anomaly).encode(), graph, producer, "topic", buffer)
 
         assert len(buffer) == 1
-        assert [record["root_cause_category"] for record in buffer] == ["cell_failure"]
-        assert [record["ml_class"] for record in buffer] == [RCA_CLASSES[0]]
+        assert [record["root_cause_category"] for record in buffer] == ["Antenna Failure"]
         assert all(record["root_cause"] and record["recommended_fix"] for record in buffer)
         assert producer.send.call_count == 2
         failed_call = producer.send.call_args_list[0]
@@ -323,8 +317,6 @@ class TestHandleAnomalyMessage:
 
         async def classify(_state):
             return {
-                "ml_class": "Antenna Failure",
-                "ml_class_index": 0,
                 "ml_confidence": 0.9,
                 "ml_status": "used",
                 "ml_steer_used": True,
@@ -360,7 +352,7 @@ class TestHandleAnomalyMessage:
     def test_invalid_anomaly_is_skipped_before_graph_and_next_real_fixture_reaches_api(self, change):
         invalid = deepcopy(SAMPLE_ANOMALY)
         change(invalid)
-        graph = stream_graph({"analyze": {"root_cause_category": "interference"}})
+        graph = stream_graph({"analyze": {"root_cause_category": "Co-Channel Interference (Severe)"}})
         producer = MagicMock()
         buffer = deque(maxlen=100)
 
@@ -382,7 +374,7 @@ class TestHandleAnomalyMessage:
                     **SAMPLE_ANOMALY,
                     "context_snippets": [],
                     "rag_query_used": "5G anomaly detection",
-                    "root_cause_category": "antenna_misalignment",
+                    "root_cause_category": "Antenna Failure",
                     "root_cause": "stub root cause",
                     "recommended_fix": "stub fix",
                 }
@@ -396,7 +388,7 @@ class TestHandleAnomalyMessage:
 
         assert graph.inputs == [(SAMPLE_ANOMALY, "updates")]
         assert len(buffer) == 1
-        assert buffer[0]["root_cause_category"] == "antenna_misalignment"
+        assert buffer[0]["root_cause_category"] == "Antenna Failure"
         assert buffer[0]["root_cause"] == "stub root cause"
 
     def test_publishes_enriched_to_kafka(self):
@@ -408,11 +400,9 @@ class TestHandleAnomalyMessage:
                     **SAMPLE_ANOMALY,
                     "context_snippets": [],
                     "rag_query_used": "",
-                    "root_cause_category": "antenna_misalignment",
+                    "root_cause_category": "Antenna Failure",
                     "root_cause": "cause",
                     "recommended_fix": "fix",
-                    "ml_class": "Antenna Failure",
-                    "ml_class_index": 0,
                     "ml_confidence": 0.91,
                     "ml_status": "used",
                     "ml_steer_used": True,
@@ -429,11 +419,10 @@ class TestHandleAnomalyMessage:
         topic, payload = producer.send.call_args[0]
         assert topic == "ran-anomalies-enriched"
         enriched = json.loads(payload)
-        assert enriched["root_cause_category"] == "antenna_misalignment"
+        assert enriched["root_cause_category"] == "Antenna Failure"
         assert enriched["root_cause"] == "cause"
         assert enriched["recommended_fix"] == "fix"
         assert enriched["kpi_window"] == SAMPLE_ANOMALY["kpi_window"]
-        assert enriched["ml_class"] == "Antenna Failure"
         assert enriched["ml_confidence"] == 0.91
         assert not {"ml_class_index", "ml_status", "ml_steer_used"} & enriched.keys()
         from pathlib import Path
@@ -542,7 +531,7 @@ class TestKafkaLifespan:
 
         with (
             patch("ran_rca_service.server.build_graph", return_value=stream_graph({"analyze": {
-                "root_cause_category": "cell_failure", "root_cause": "cause", "recommended_fix": "fix"
+                "root_cause_category": "Antenna Failure", "root_cause": "cause", "recommended_fix": "fix"
             }})),
             patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag),
             patch("ran_rca_service.nodes.analyze.get_llm", return_value=mock_llm),

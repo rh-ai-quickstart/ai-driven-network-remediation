@@ -21,8 +21,7 @@ class TestQueryConstruction:
         with _patch_rag_client(mock):
             result = await rag_retrieval_node(
                 make_state(
-                    ml_class="Antenna Failure",
-                    ml_class_index=0,
+                    root_cause_category="Antenna Failure",
                     ml_confidence=0.4,
                     ml_status="used",
                     ml_steer_used=True,
@@ -39,8 +38,7 @@ class TestQueryConstruction:
         with _patch_rag_client(mock):
             result = await rag_retrieval_node(
                 make_state(
-                    ml_class="Antenna Failure",
-                    ml_class_index=0,
+                    root_cause_category="Antenna Failure",
                     ml_confidence=0.9,
                     ml_status="used",
                     ml_steer_used=True,

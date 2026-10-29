@@ -24,7 +24,7 @@ class TestSuccessfulLlmCall:
         from ran_rca_service.nodes.analyze import analyze_node
 
         result = await analyze_node(make_state(
-            ml_class="Antenna Failure", ml_class_index=0,
+            root_cause_category="Antenna Failure",
             ml_confidence=0.001, ml_status="used", ml_steer_used=True,
             context_snippets=["vendor RF guide section 4"],
         ))
@@ -33,15 +33,14 @@ class TestSuccessfulLlmCall:
         assert "Top 8 most variable KPIs" in prompt
         assert "Critical absolute indicators" in prompt
         assert "vendor RF guide section 4" in prompt
-        assert result["root_cause_category"] == "cell_failure"
+        assert result["root_cause_category"] == "Antenna Failure"
 
     @pytest.mark.asyncio
     async def test_confident_ml_hint_preserves_kpis_and_vendor_evidence(self, mock_llm):
         from ran_rca_service.nodes.analyze import analyze_node
 
         await analyze_node(make_state(
-            ml_class="Co-Channel Interference (Severe)",
-            ml_class_index=2,
+            root_cause_category="Co-Channel Interference (Severe)",
             ml_confidence=0.95,
             ml_status="used",
             ml_steer_used=True,
@@ -59,7 +58,7 @@ class TestSuccessfulLlmCall:
 
         result = await analyze_node(make_state(context_snippets=["vendor doc snippet"]))
 
-        assert result["root_cause_category"] == "unknown"
+        assert result["root_cause_category"] == "Antenna Failure"
 
     @pytest.mark.asyncio
     async def test_returns_root_cause_from_llm(self, mock_llm):

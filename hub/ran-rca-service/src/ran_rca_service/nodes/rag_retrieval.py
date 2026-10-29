@@ -26,6 +26,6 @@ async def rag_retrieval_node(state: RCAState) -> dict:
     if kpi_hint:
         query += f" top KPIs: {kpi_hint}"
     if state.ml_steer_used:
-        query += f" possible root cause: {state.ml_class} (Mantis RCA confidence {state.ml_confidence:.2f})"
+        query += f" possible root cause: {state.root_cause_category} (Mantis RCA confidence {state.ml_confidence:.2f})"
     snippets = await _get_rag_client().search(query)
     return {"context_snippets": snippets, "rag_query_used": query}

@@ -182,24 +182,19 @@ Demo Mode offers **High Network Congestion (Gradual Buildup)** and **High
 Network Congestion (Sudden Spike)**. Both send controlled 128 × 18 TelecomTS
 KPI windows through `ran-combined-metrics`; the gradual sample is generated
 from the pinned TelecomTS revision by `make generate-fixtures`. When Mantis AD
-marks either window anomalous and Mantis RCA returns its source label, RCA
-retains the full original label in `ml_class` and assigns the shared
-`congestion` category. Remediation selects the existing `ran-load-balance`
-template for either label, without selecting `ran-generic-remediation`.
+marks either window anomalous, Mantis RCA returns the label directly as
+`root_cause_category`. Remediation selects `ran-load-balance` for gradual
+congestion and `ran-sudden-congestion-relief` for a sudden spike.
 
 The AAP mock reports a simulated UE redistribution plan across adjacent cells,
 `successful` job status, and `changed=0`. The result says that no RAN device
-changed. `GET /api/anomalies` joins each label, category, template, job ID,
-status, and output under its incident ID. The incident card displays the
-original label and synthetic job result, so gradual and sudden incidents remain
-distinct even though they share one action.
+changed. `GET /api/anomalies` joins each label, template, job ID, status, and
+output under its incident ID. The incident card displays the predicted label
+and synthetic job result.
 
-Local public-flow checks cover both labels in
-`test_demo_trigger_congestion_labels_publish_controlled_windows`,
-`test_congestion_window_publishes_original_mantis_label_and_shared_category`,
-and `test_congestion_labels_share_load_balance_mock_job_api_and_card`. They use
-controlled windows and stubbed classifier responses, so they verify routing
-and presentation rather than live model accuracy. For deployed predictor checks,
+Local public-flow checks cover both labels with controlled windows and stubbed
+classifier responses, so they verify routing and presentation rather than live
+model accuracy. For deployed predictor checks,
 run the opt-in `hub/integration-tests/tests/telco/test_rca_real_e2e.py` flow
 separately with `RCA_FIXTURE_SCENARIO=high_congestion_gradual` and
 `RCA_FIXTURE_SCENARIO=high_congestion_sudden`, plus `RCA_REAL_E2E=1`.

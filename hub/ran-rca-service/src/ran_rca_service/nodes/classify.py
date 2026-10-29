@@ -9,20 +9,18 @@ from loguru import logger
 from ran_rca_service import config
 from ran_rca_service.models import RCAState
 
-# Label order mirrors telco_oran.rca; categories determine remediation routing.
-RCA_CLASS_CATEGORIES = {
-    "Antenna Failure": "cell_failure",
-    "Co-Channel Interference (Mild)": "interference",
-    "Co-Channel Interference (Severe)": "interference",
-    "Faulty RF Filters (Temporal)": "rf_filter_fault",
-    "Doppler Shift (Severe)": "doppler_shift",
-    "Faulty Handover Algorithm (Too Frequent)": "handover_fault",
-    "Buffer Overflow (Gradual Buildup)": "buffer_overflow",
-    "Resource Allocation Bugs": "resource_allocation_fault",
-    "High Network Congestion (Gradual Buildup)": "congestion",
-    "High Network Congestion (Sudden Spike)": "congestion",
-}
-RCA_CLASSES = tuple(RCA_CLASS_CATEGORIES)
+RCA_CLASSES = (
+    "Antenna Failure",
+    "Co-Channel Interference (Mild)",
+    "Co-Channel Interference (Severe)",
+    "Faulty RF Filters (Temporal)",
+    "Doppler Shift (Severe)",
+    "Faulty Handover Algorithm (Too Frequent)",
+    "Buffer Overflow (Gradual Buildup)",
+    "Resource Allocation Bugs",
+    "High Network Congestion (Gradual Buildup)",
+    "High Network Congestion (Sudden Spike)",
+)
 
 
 class ClassifierResponseError(ValueError):
@@ -31,8 +29,7 @@ class ClassifierResponseError(ValueError):
 
 def _no_prediction(reason: str) -> dict:
     return {
-        "ml_class": "",
-        "ml_class_index": None,
+        "root_cause_category": "unknown",
         "ml_confidence": 0.0,
         "ml_status": "failed",
         "ml_error_reason": reason,
@@ -56,21 +53,18 @@ async def classify_node(state: RCAState) -> dict:
         if not isinstance(prediction, dict):
             raise ClassifierResponseError("RCA model response is not an object")
         index = prediction.get("class_index")
-        label = prediction.get("class")
+        label = prediction.get("root_cause_category")
         confidence = prediction.get("confidence")
         if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(RCA_CLASSES):
             raise ClassifierResponseError("invalid RCA class index")
         if label != RCA_CLASSES[index]:
             raise ClassifierResponseError("RCA class label does not match index")
-        if label not in RCA_CLASS_CATEGORIES or not RCA_CLASS_CATEGORIES[label]:
-            raise ClassifierResponseError("RCA category mapping missing")
         if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
             raise ClassifierResponseError("invalid RCA confidence")
         if not math.isfinite(confidence) or not 0 <= confidence <= 1:
             raise ClassifierResponseError("invalid RCA model response")
         return {
-            "ml_class": label,
-            "ml_class_index": index,
+            "root_cause_category": label,
             "ml_confidence": confidence,
             "ml_status": "used",
             "ml_error_reason": "",

@@ -61,11 +61,21 @@ def _seed() -> None:
             "playbooks/ran-interference-mitigation.yml",
             "Reduce interference via power/beam adjustment",
         ),
+        (
+            "ran-severe-interference-mitigation",
+            "playbooks/ran-severe-interference-mitigation.yml",
+            "Mitigate severe co-channel interference",
+        ),
         ("ran-scheduler-optimize", "playbooks/ran-scheduler-optimize.yml", "Tune RAN scheduler parameters"),
         (
             "ran-load-balance",
             "playbooks/ran-load-balance.yml",
             "Simulate UE load balancing across adjacent cells without changing a RAN device",
+        ),
+        (
+            "ran-sudden-congestion-relief",
+            "playbooks/ran-sudden-congestion-relief.yml",
+            "Simulate immediate traffic offload for a congestion spike",
         ),
         (
             "ran-buffer-relief",
@@ -195,6 +205,16 @@ def launch_template(template_id: int, body: dict[str, Any] | None = None):
             "TASK [Simulate load balancing across adjacent cells] ***",
             "Load balancing: simulated UE redistribution plan for congested cells; no RAN device changed",
             f"Result: load balancing simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-sudden-congestion-relief": [
+            "TASK [Simulate immediate traffic offload] ***",
+            "Congestion relief: simulated immediate UE redistribution plan for a sudden spike; no RAN device changed",
+            f"Result: congestion relief simulation {mock_outcome}; no RAN device changed",
+        ],
+        "ran-severe-interference-mitigation": [
+            "TASK [Simulate severe interference mitigation] ***",
+            "Interference mitigation: simulated severe co-channel interference response; no RAN device changed",
+            f"Result: interference mitigation simulation {mock_outcome}; no RAN device changed",
         ],
         "ran-resource-allocation-correction": [
             "TASK [Simulate PRB allocation correction] ***",

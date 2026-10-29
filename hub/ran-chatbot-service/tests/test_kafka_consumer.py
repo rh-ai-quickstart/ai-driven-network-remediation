@@ -18,7 +18,7 @@ _SAMPLE_ANOMALY_1 = {
     "kpi_window": [{"RSRP": -85.0}] * 128,
     "ad_label": "anomalous",
     "ad_confidence": 0.94,
-    "root_cause_category": "antenna_misalignment",
+    "root_cause_category": "Antenna Failure",
     "root_cause": "Signal degradation in zone A.",
     "recommended_fix": "Section 4.2 — Verify antenna alignment.",
 }
@@ -141,7 +141,7 @@ def test_legacy_kafka_record_preserves_identity_and_unrecorded_status():
     assert len(buffer) == 1
     anomaly = buffer[0]
     assert (anomaly.incident_id, anomaly.zone, anomaly.application) == ("inc-001", "A", "Twitch")
-    assert anomaly.ml_class == ""
+    assert anomaly.root_cause_category == "Antenna Failure"
     reply = format_chat_reply("Explain inc-001", "Diagnosis", list(buffer))
     assert "Mantis RCA Prediction:\n- unavailable" in reply
     assert "zone=A, app=Twitch" in reply
