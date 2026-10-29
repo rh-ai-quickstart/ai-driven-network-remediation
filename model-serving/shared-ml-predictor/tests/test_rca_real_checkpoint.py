@@ -49,7 +49,7 @@ def test_recovered_checkpoint_classifies_representative_real_fixtures():
             response = client.post("/v1/classify", json={"kpi_window": fixture["kpi_window"]})
             assert response.status_code == 200
             assert response.json() == {
-                "class": case["class"],
+                "root_cause_category": case["class"],
                 "class_index": case["class_index"],
                 "confidence": pytest.approx(case["confidence"], abs=REFERENCE["tolerances"]["confidence_absolute"]),
             }

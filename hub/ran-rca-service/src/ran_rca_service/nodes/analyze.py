@@ -8,7 +8,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 from ran_rca_service.config import get_llm
 from ran_rca_service.models import RCAState
-from ran_rca_service.nodes.classify import RCA_CLASS_CATEGORIES
 
 _SYSTEM_PROMPT = """\
 You are a senior telco radio engineer specialising in RAN (Radio Access Network) root cause analysis.
@@ -19,7 +18,7 @@ Analyze the anomaly context and any vendor documentation, then produce a structu
 
 When recommending fixes, reference specific vendor documentation sections from the provided context where available.
 
-Mantis RCA supplies the operational category used for remediation. Explain the
+Mantis RCA supplies the predicted label used for remediation. Explain the
 predicted fault and recommend a fix using the KPI and vendor evidence. Do not
 select a different category or remediation job.
 
@@ -29,33 +28,8 @@ RSRP INTERPRETATION (5G signal strength):
   -100 to -110 dBm = POOR signal (coverage/antenna issue)
   < -110 dBm = Very poor signal
 
-CATEGORY SIGNATURES (match the KPI pattern):
-
-antenna_misalignment:
-  Critical: RSRP mean=-102, SNR mean=15, BLER mean=0.11
-  Variable: TX_Bytes (200K-450K range), DL_NumberOfPackets swings
-  Key: Poor signal BUT low error rate means antenna/coverage issue, NOT interference
-
-interference:
-  Critical: RSRP mean=-106, SNR mean=14, BLER mean=0.14-0.49
-  Variable: UL_SNR highly variable (5-21 dB), elevated BLER throughout
-  Key: Poor signal PLUS high error rate = RF interference/noise
-
-congestion:
-  Critical: RSRP mean=-88, SNR mean=21, BLER mean=0.11
-  Variable: Estimated_UL_Buffer (40 → 47,000!), TX_Bytes spikes, PRB bursts
-  Key: GOOD signal but buffer exhaustion = too much traffic
-
-resource_allocation_fault:
-  Variable: Poor MCS despite adequate SNR, inefficient PRB allocation
-  Key: Resource Allocation Bugs indicates an allocation fault; explain the KPI evidence and propose a correction plan
-
-capacity_exhaustion:
-  Critical: RSRP mean=-85, SNR mean=20
-  Variable: PRB_Utilization sustained 95-100%, consistently maxed out
-  Key: Good signal but resources constantly exhausted
-
-MATCHING RULE: Compare the "Critical absolute indicators" and "Top 8 most variable KPIs" to these signatures.
+Compare the critical indicators and most variable KPIs with the predicted fault.
+Use vendor documentation to explain the evidence and propose a fix.
 
 Respond ONLY with valid JSON matching the provided schema:
 {
@@ -115,11 +89,10 @@ async def analyze_node(state: RCAState) -> dict:
         user_content += f"\n\nTop 8 most variable KPIs:\n{kpi_summary}"
     if critical_kpis:
         user_content += f"\n\n{critical_kpis}"
-    if state.ml_class:
+    if state.root_cause_category != "unknown":
         user_content += (
-            f"\n\nMantis RCA prediction: {state.ml_class} "
-            f"(confidence {state.ml_confidence:.3f}); operational category: "
-            f"{RCA_CLASS_CATEGORIES.get(state.ml_class, 'unknown')}. "
+            f"\n\nMantis RCA prediction: {state.root_cause_category} "
+            f"(confidence {state.ml_confidence:.3f}). "
             "Explain this diagnosis and recommend a fix; do not choose a category or job."
         )
     if context:
@@ -133,7 +106,7 @@ async def analyze_node(state: RCAState) -> dict:
     logger.debug(f"RCA LLM prompt for {state.incident_id}:\n{user_content[:800]}")
     if critical_kpis:
         logger.info(f"Critical indicators for {state.incident_id}: {critical_kpis.replace(chr(10), ' ')}")
-    category = RCA_CLASS_CATEGORIES.get(state.ml_class, "unknown")
+    category = state.root_cause_category
     try:
         response = await get_llm().ainvoke(
             messages,

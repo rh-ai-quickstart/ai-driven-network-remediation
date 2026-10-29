@@ -14,7 +14,7 @@ from ran_chatbot_service.models import ModelSource
 
 
 def test_enriched_anomaly_includes_root_cause_category(sample_anomaly):
-    assert sample_anomaly.root_cause_category == "antenna_misalignment"
+    assert sample_anomaly.root_cause_category == "Antenna Failure"
 
 
 def test_select_anomaly_matches_whole_incident_id(sample_anomaly):
@@ -32,16 +32,16 @@ class TestBuildChatContext:
     def test_ml_advice_is_separate_from_final_diagnosis(self, sample_anomaly):
         anomaly = sample_anomaly.model_copy(
             update={
-                "ml_class": "Co-Channel Interference (Severe)",
+                "root_cause_category": "Co-Channel Interference (Severe)",
                 "ml_confidence": 0.93,
             }
         )
         prompt = build_chat_context("Explain", [anomaly], [], [])
         assert "Co-Channel Interference (Severe) (RCA confidence 0.93)" in prompt
-        assert "ML-derived operational category: antenna_misalignment" in prompt
+        assert "ML-derived operational category" not in prompt
         reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
         assert "Mantis RCA Prediction:\n- Co-Channel Interference (Severe) (RCA confidence 0.93)" in reply
-        assert "ML-Derived Operational Category:\n- antenna_misalignment" in reply
+        assert "ML-Derived Operational Category" not in reply
 
     def test_includes_anomaly_details(self, sample_anomalies):
         prompt = build_chat_context("What's happening?", sample_anomalies, [], [])
@@ -179,14 +179,14 @@ class TestFormatChatReply:
         older = sample_anomaly.model_copy(
             update={
                 "incident_id": "older-123",
-                "ml_class": "Antenna Failure",
+                "root_cause_category": "Antenna Failure",
                 "ml_confidence": 0.93,
             }
         )
         newer = sample_anomaly.model_copy(
             update={
                 "incident_id": "newer-456",
-                "ml_class": "Resource Allocation Bugs",
+                "root_cause_category": "Resource Allocation Bugs",
                 "ml_confidence": 0.8,
             }
         )
@@ -201,8 +201,8 @@ class TestFormatChatReply:
         reply = format_chat_reply("Explain", "Diagnosis", [anomaly])
         assert "Mantis RCA classification: unavailable" in prompt
         assert "Mantis RCA Prediction:\n- unavailable" in reply
-        assert "ML-derived operational category: antenna_misalignment" in prompt
-        assert "ML-Derived Operational Category:\n- antenna_misalignment" in reply
+        assert "ML-derived operational category" not in prompt
+        assert "ML-Derived Operational Category" not in reply
         assert "zone=A, app=Twitch" in reply
 
     def test_legacy_record_without_ml_fields_is_unavailable(self, sample_anomaly_dict):
@@ -215,7 +215,7 @@ class TestFormatChatReply:
 
     def test_with_anomalies_and_live_reply(self, sample_anomalies):
         reply = format_chat_reply("What's wrong?", "Signal degradation in zone A.", sample_anomalies)
-        assert reply.startswith("[Antenna Misalignment] ")
+        assert reply.startswith("[Antenna Failure] ")
         assert "Anomalies detected: 1" in reply
         assert "Incident test-001" in reply
         assert "zone=A" in reply
@@ -245,9 +245,9 @@ class TestFormatChatReply:
         reply = format_chat_reply("What's wrong?", "insight", [oldest, newest])
         assert "Incident inc-new" in reply
 
-    def test_category_tag_replaces_underscores_and_title_cases(self, sample_anomaly):
-        anomaly = sample_anomaly.model_copy(update={"root_cause_category": "scheduler_degradation"})
+    def test_category_tag_uses_predicted_label(self, sample_anomaly):
+        anomaly = sample_anomaly.model_copy(update={"root_cause_category": "Resource Allocation Bugs"})
 
         reply = format_chat_reply("What's wrong?", "insight", [anomaly])
 
-        assert reply.startswith("[Scheduler Degradation] ")
+        assert reply.startswith("[Resource Allocation Bugs] ")

@@ -19,18 +19,18 @@ FRONTEND = ROOT / "hub/ran-frontend"
 
 
 @pytest.mark.parametrize(
-    ("scenario", "class_index", "category"),
+    ("scenario", "class_index"),
     [
-        ("high_congestion_gradual", 8, "congestion"),
-        ("high_congestion_sudden", 9, "congestion"),
-        ("resource_allocation_bugs", 7, "resource_allocation_fault"),
-        ("buffer_overflow", 6, "buffer_overflow"),
-        ("handover_fault", 5, "handover_fault"),
-        ("doppler_shift_severe", 4, "doppler_shift"),
-        ("rf_filter_fault", 3, "rf_filter_fault"),
+        ("high_congestion_gradual", 8),
+        ("high_congestion_sudden", 9),
+        ("resource_allocation_bugs", 7),
+        ("buffer_overflow", 6),
+        ("handover_fault", 5),
+        ("doppler_shift_severe", 4),
+        ("rf_filter_fault", 3),
     ],
 )
-def test_classified_window_keeps_mantis_category_when_explanation_fails(scenario, class_index, category):
+def test_classified_window_keeps_mantis_category_when_explanation_fails(scenario, class_index):
     fixture = json.loads((ROOT / "hub/telco-oran/src/telco_oran/fixtures" / f"{scenario}.json").read_text())
     assert len(fixture["kpi_window"]) == 128
     assert len(fixture["kpi_window"][0]) == 18
@@ -43,7 +43,7 @@ def test_classified_window_keeps_mantis_category_when_explanation_fails(scenario
     }
     classifier_response = MagicMock()
     classifier_response.json.return_value = {
-        "class": fixture["anomaly_class"], "class_index": class_index, "confidence": 0.9,
+        "root_cause_category": fixture["anomaly_class"], "class_index": class_index, "confidence": 0.9,
     }
     classifier_client = AsyncMock()
     classifier_client.post.return_value = classifier_response
@@ -63,8 +63,7 @@ def test_classified_window_keeps_mantis_category_when_explanation_fails(scenario
     published = {call.args[0]: json.loads(call.args[1]) for call in producer.send.call_args_list}
     enriched = published["ran-anomalies-enriched"]
     assert enriched["incident_id"] == anomaly["incident_id"]
-    assert enriched["ml_class"] == fixture["anomaly_class"]
-    assert enriched["root_cause_category"] == category
+    assert enriched["root_cause_category"] == fixture["anomaly_class"]
     assert enriched["root_cause"] == enriched["recommended_fix"] == ""
     assert enriched["kpi_window"] == fixture["kpi_window"]
     schema = json.loads((ROOT / "contracts/ran-anomaly-enriched.schema.json").read_text())
@@ -78,7 +77,7 @@ def test_classified_window_keeps_mantis_category_when_explanation_fails(scenario
 def test_kpi_window_classification_failure_reaches_incident_card(monkeypatch):
     classifier_response = MagicMock()
     classifier_response.json.return_value = {
-        "class": "Antenna Failure",
+        "root_cause_category": "Antenna Failure",
         "class_index": 99,
         "confidence": 0.9,
     }
@@ -143,7 +142,7 @@ def test_kpi_window_llm_failure_still_launches_cell_recovery_and_reaches_card_an
 
     classifier_response = MagicMock()
     classifier_response.json.return_value = {
-        "class": "Antenna Failure", "class_index": 0, "confidence": 0.9,
+        "root_cause_category": "Antenna Failure", "class_index": 0, "confidence": 0.9,
     }
     classifier_client = AsyncMock()
     classifier_client.post.return_value = classifier_response
@@ -173,8 +172,7 @@ def test_kpi_window_llm_failure_still_launches_cell_recovery_and_reaches_card_an
     assert status["error_reason"] == "LLM unavailable"
     assert "private endpoint detail" not in json.dumps(status)
     assert status["timestamp"]
-    assert enriched["root_cause_category"] == "cell_failure"
-    assert enriched["ml_class"] == "Antenna Failure"
+    assert enriched["root_cause_category"] == "Antenna Failure"
     assert enriched["root_cause"] == enriched["recommended_fix"] == ""
     for topic, schema_name in (
         ("ran-incident-status", "ran-incident-status.schema.json"),

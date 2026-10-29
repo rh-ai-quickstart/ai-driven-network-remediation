@@ -21,7 +21,7 @@ _ANTENNA_SAMPLE = {
     "application": "File",
     "ad_label": "anomalous",
     "ad_confidence": 0.9995,
-    "root_cause_category": "antenna_misalignment",
+    "root_cause_category": "Antenna Failure",
     "root_cause": "Signal degradation consistent with antenna misalignment.",
     "recommended_fix": "Adjust antenna tilt per vendor guide Section 4.3.2.",
 }
@@ -32,7 +32,7 @@ _OUTAGE_SAMPLE = {
     "application": "Twitch",
     "ad_label": "anomalous",
     "ad_confidence": 0.9999,
-    "root_cause_category": "cell_failure",
+    "root_cause_category": "Antenna Failure",
     "root_cause": "Cell failure detected — outage and restart required.",
     "recommended_fix": "Run cell recovery procedure.",
 }
@@ -81,7 +81,7 @@ async def test_graph_successful_remediation():
     ):
         result = await graph.ainvoke(_ANTENNA_SAMPLE)
 
-    assert result["template_name"] == "ran-antenna-tilt-adjust"
+    assert result["template_name"] == "ran-cell-recovery"
     assert result["success"] is True
     assert result["job_id"] == "10"
 
@@ -131,8 +131,7 @@ async def test_graph_launches_interference_mock_job_for_either_low_confidence_la
     graph = build_graph()
     enriched = {
         **_ANTENNA_SAMPLE,
-        "root_cause_category": "interference",
-        "ml_class": label,
+        "root_cause_category": label,
         "ml_confidence": 0.001,
     }
     with (
@@ -146,10 +145,10 @@ async def test_graph_launches_interference_mock_job_for_either_low_confidence_la
     ):
         result = await graph.ainvoke(enriched)
 
-    assert result["template_name"] == "ran-interference-mitigation"
+    assert result["template_name"] == ("ran-interference-mitigation" if label.endswith("(Mild)") else "ran-severe-interference-mitigation")
     assert result["success"] is True
     launch.assert_awaited_once()
-    assert launch.await_args.args[0] == "ran-interference-mitigation"
+    assert launch.await_args.args[0] == result["template_name"]
 
 
 @pytest.mark.asyncio
@@ -203,7 +202,7 @@ def _audit_state():
         ad_label="anomalous",
         ad_confidence=0.9995,
         root_cause="antenna misalignment",
-        template_name="ran-antenna-tilt-adjust",
+        template_name="ran-cell-recovery",
         job_id="7",
         job_status="successful",
         success=True,
@@ -218,7 +217,7 @@ def test_build_audit_payload_fields():
     assert payload["zone"] == "A"
     assert payload["application"] == "File"
     assert payload["success"] is True
-    assert payload["template_name"] == "ran-antenna-tilt-adjust"
+    assert payload["template_name"] == "ran-cell-recovery"
 
 
 def test_publish_remediation_record_calls_kafka():

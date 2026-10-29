@@ -9,18 +9,16 @@ _FALLBACK_TEMPLATE = "ran-generic-remediation"
 
 # Template names must match entries seeded in hub/infra/aap-mock/main.py.
 _CATEGORY_TO_TEMPLATE = {
-    "antenna_misalignment": "ran-antenna-tilt-adjust",
-    "interference": "ran-interference-mitigation",
-    "scheduler_degradation": "ran-scheduler-optimize",
-    "resource_allocation_fault": "ran-resource-allocation-correction",
-    "congestion": "ran-load-balance",
-    "buffer_overflow": "ran-buffer-relief",
-    "capacity_exhaustion": "ran-capacity-expand",
-    "cell_failure": "ran-cell-recovery",
-    "rf_filter_fault": "ran-rf-filter-response",
-    "doppler_shift": "ran-doppler-shift-response",
-    "handover_fault": "ran-handover-stabilization",
-    "unknown": _FALLBACK_TEMPLATE,
+    "Antenna Failure": "ran-cell-recovery",
+    "Co-Channel Interference (Mild)": "ran-interference-mitigation",
+    "Co-Channel Interference (Severe)": "ran-severe-interference-mitigation",
+    "Faulty RF Filters (Temporal)": "ran-rf-filter-response",
+    "Doppler Shift (Severe)": "ran-doppler-shift-response",
+    "Faulty Handover Algorithm (Too Frequent)": "ran-handover-stabilization",
+    "Buffer Overflow (Gradual Buildup)": "ran-buffer-relief",
+    "Resource Allocation Bugs": "ran-resource-allocation-correction",
+    "High Network Congestion (Gradual Buildup)": "ran-load-balance",
+    "High Network Congestion (Sudden Spike)": "ran-sudden-congestion-relief",
 }
 
 

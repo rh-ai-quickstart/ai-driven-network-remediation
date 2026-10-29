@@ -8,8 +8,7 @@ function confidenceBadge(confidence) {
 
 function formatCategory(category) {
   if (!category) return "";
-  if (category === "rf_filter_fault") return "RF Filter Fault";
-  return category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return category;
 }
 
 function hasEnrichment(anomaly) {
@@ -88,14 +87,11 @@ export function AnomalyTable({ anomalies, baseUrl, onCleared }) {
               <p className="anomaly-detail">
                 Application: {a.application}{hasEnrichment(a) && " · 128×18 KPI window"}
                 {a.root_cause_category && (
-                  <span className="category-badge"> · ML category: {formatCategory(a.root_cause_category)}</span>
+                  <span className="category-badge"> · Mantis RCA: {formatCategory(a.root_cause_category)}</span>
                 )}
               </p>
               <p className="anomaly-detail">
-                Mantis RCA: {a.ml_class || "unavailable"}
-                {a.ml_class && a.ml_confidence != null && (
-                  <> · RCA confidence: {a.ml_confidence}</>
-                )}
+                {a.ml_confidence != null && <>RCA confidence: {a.ml_confidence}</>}
                 {a.remediation_template_name && (
                   <> · Job: {a.remediation_template_name}</>
                 )}

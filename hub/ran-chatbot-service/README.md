@@ -39,7 +39,7 @@ see below) and formats the LLM's reply, so operators can ask things like "was th
 incident X successful?" without checking `/api/anomalies` separately.
 
 When the most recent anomaly carries a `root_cause_category`, `/api/chat` replies are
-prefixed with a title-cased tag — `[Antenna Misalignment] …`. `ran-frontend` strips that
+prefixed with the predicted label — `[Antenna Failure] …`. `ran-frontend` strips that
 prefix with a regex and renders it as a badge, so the two sides are coupled: changing the
 prefix format here means changing `ChatPanel.jsx` too.
 
@@ -106,9 +106,8 @@ AD) with `root_cause` and `recommended_fix`, matching this output contract
   "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
   "ad_label": "anomalous",
   "ad_confidence": 0.9995,
-  "ml_class": "Antenna Failure",
   "ml_confidence": 0.91,
-  "root_cause_category": "cell_failure",
+  "root_cause_category": "Antenna Failure",
   "root_cause": "Antenna failure detected from the KPI pattern...",
   "recommended_fix": "Run cell recovery per vendor guide Section 4.3.2..."
 }
@@ -116,19 +115,14 @@ AD) with `root_cause` and `recommended_fix`, matching this output contract
 
 ## Co-channel interference remediation
 
-Both `Co-Channel Interference (Mild)` and `Co-Channel Interference (Severe)`
-map to the `interference` operational category. Any valid classifier confidence,
-including a value near zero, uses that route. The enriched event and
-`/api/anomalies` retain the distinct Mantis RCA label and its original
-confidence. The incident card displays both values, so an operator can see the
-model's uncertainty while the remediation proceeds.
+`Co-Channel Interference (Mild)` and `Co-Channel Interference (Severe)` remain
+distinct `root_cause_category` values. Any valid classifier confidence,
+including a value near zero, selects that label's playbook. The incident card
+displays the prediction and its confidence while remediation proceeds.
 
-`ran-remediation-service` selects the seeded AAP mock job
-`ran-interference-mitigation` for `interference`; neither label uses
-`ran-generic-remediation`. The mock lists
-`playbooks/ran-interference-mitigation.yml` with the action "Reduce interference
-via power/beam adjustment" and records a successful simulated launch. It does
-not change radio settings.
+`ran-remediation-service` selects `ran-interference-mitigation` for the mild
+label and `ran-severe-interference-mitigation` for the severe label. Both are
+simulated AAP jobs and do not change radio settings.
 
 ## Demo trigger
 
@@ -156,11 +150,11 @@ Available scenarios (from `hub/telco-oran/src/telco_oran/fixtures/`):
 **Prerequisite:** `ran-anomaly-detector` AND `ran-ml-service` must be running for the trigger to
 have any downstream effect — see `docs/RAN-DEMO-SCRIPT.md`.
 
-For `resource_allocation_bugs`, Mantis RCA maps the original label to
-`resource_allocation_fault`. The remediation service selects
+For `resource_allocation_bugs`, Mantis RCA returns `Resource Allocation Bugs`
+directly as `root_cause_category`. The remediation service selects
 `ran-resource-allocation-correction`, whose AAP mock job reports a simulated PRB
 assignment review and corrected allocation plan with `changed=0`; no RAN device
-is changed. `/api/anomalies` and the incident card show the label, category,
+is changed. `/api/anomalies` and the incident card show the prediction,
 job, and result under the trigger's incident ID. With a configured classifier,
 run the live incident check using `RCA_FIXTURE_SCENARIO=resource_allocation_bugs`
 and `hub/integration-tests/tests/telco/test_rca_real_e2e.py`.

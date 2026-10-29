@@ -1,0 +1,6 @@
+---
+- name: ran-doppler-shift-response (demo placeholder; no equipment changes)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks: []

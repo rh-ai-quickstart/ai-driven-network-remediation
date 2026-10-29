@@ -23,7 +23,6 @@ class EnrichedAnomaly(BaseModel):
     root_cause_category: str
     root_cause: str
     recommended_fix: str
-    ml_class: str = ""
     ml_confidence: float | None = None
     timestamp: str | None = None
 

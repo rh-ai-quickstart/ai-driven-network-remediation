@@ -121,7 +121,6 @@ def _handle_anomaly_message(
         "root_cause_category": result.get("root_cause_category", "unknown"),
         "root_cause": result.get("root_cause", ""),
         "recommended_fix": result.get("recommended_fix", ""),
-        "ml_class": result.get("ml_class", ""),
         "ml_confidence": result.get("ml_confidence", 0.0),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }

@@ -239,7 +239,6 @@ async def anomalies(request: Request) -> dict:
             "root_cause_category": "",
             "root_cause": "",
             "recommended_fix": "",
-            "ml_class": "",
             "ml_confidence": None,
             "incident_status": status.model_dump(),
             "remediation_status": None,

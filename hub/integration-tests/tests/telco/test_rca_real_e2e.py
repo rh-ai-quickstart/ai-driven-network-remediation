@@ -63,18 +63,16 @@ if SCENARIO == "high_congestion_gradual":
         "class_index": 8,
     }
 TEMPLATES = {
-    "antenna_misalignment": "ran-antenna-tilt-adjust",
-    "interference": "ran-interference-mitigation",
-    "scheduler_degradation": "ran-scheduler-optimize",
-    "resource_allocation_fault": "ran-resource-allocation-correction",
-    "congestion": "ran-load-balance",
-    "buffer_overflow": "ran-buffer-relief",
-    "capacity_exhaustion": "ran-capacity-expand",
-    "cell_failure": "ran-cell-recovery",
-    "rf_filter_fault": "ran-rf-filter-response",
-    "doppler_shift": "ran-doppler-shift-response",
-    "handover_fault": "ran-handover-stabilization",
-    "unknown": "ran-generic-remediation",
+    "Antenna Failure": "ran-cell-recovery",
+    "Co-Channel Interference (Mild)": "ran-interference-mitigation",
+    "Co-Channel Interference (Severe)": "ran-severe-interference-mitigation",
+    "Faulty RF Filters (Temporal)": "ran-rf-filter-response",
+    "Doppler Shift (Severe)": "ran-doppler-shift-response",
+    "Faulty Handover Algorithm (Too Frequent)": "ran-handover-stabilization",
+    "Buffer Overflow (Gradual Buildup)": "ran-buffer-relief",
+    "Resource Allocation Bugs": "ran-resource-allocation-correction",
+    "High Network Congestion (Gradual Buildup)": "ran-load-balance",
+    "High Network Congestion (Sudden Spike)": "ran-sudden-congestion-relief",
 }
 
 
@@ -220,7 +218,7 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         assert status["timestamp"]
         schema = json.loads((ROOT / "contracts/ran-incident-status.schema.json").read_text())
         jsonschema.Draft202012Validator(schema).validate(status)
-        assert anomaly["ml_class"] == ""
+        assert "ml_class" not in anomaly
         assert anomaly["remediation_job_id"] is None
         with httpx.Client(base_url=rca_url, timeout=20.0) as client:
             assert all(item["incident_id"] != incident_id for item in client.get("/anomalies").json()["anomalies"])
@@ -243,47 +241,13 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
     assert not {"ml_class_index", "ml_status", "ml_steer_used"} & anomaly.keys()
     confidence = anomaly["ml_confidence"]
     assert 0 < confidence < 1
-    assert anomaly["ml_class"] == PINNED_RCA_PREDICTION["class"]
+    assert anomaly["root_cause_category"] == PINNED_RCA_PREDICTION["class"]
     if "confidence" in PINNED_RCA_PREDICTION:
         assert confidence == pytest.approx(PINNED_RCA_PREDICTION["confidence"], abs=1e-4)
-    assert anomaly["root_cause_category"] in {
-        "antenna_misalignment",
-        "interference",
-        "scheduler_degradation",
-        "resource_allocation_fault",
-        "congestion",
-        "buffer_overflow",
-        "capacity_exhaustion",
-        "cell_failure",
-        "rf_filter_fault",
-        "doppler_shift",
-        "handover_fault",
-        "unknown",
-    }
+    assert anomaly["root_cause_category"] in TEMPLATES
+    assert anomaly["root_cause_category"] == fixture["anomaly_class"]
     assert anomaly["root_cause"]
     assert anomaly["recommended_fix"]
-    if anomaly["ml_class"] == "Antenna Failure":
-        assert anomaly["root_cause_category"] == "cell_failure"
-    if anomaly["ml_class"] in {"Co-Channel Interference (Mild)", "Co-Channel Interference (Severe)"}:
-        assert anomaly["root_cause_category"] == "interference"
-    if SCENARIO == "rf_filter_fault":
-        assert fixture["anomaly_class"] == anomaly["ml_class"] == "Faulty RF Filters (Temporal)"
-        assert anomaly["root_cause_category"] == "rf_filter_fault"
-    if SCENARIO == "doppler_shift_severe":
-        assert fixture["anomaly_class"] == anomaly["ml_class"] == "Doppler Shift (Severe)"
-        assert anomaly["root_cause_category"] == "doppler_shift"
-    if SCENARIO == "handover_fault":
-        assert fixture["anomaly_class"] == anomaly["ml_class"] == "Faulty Handover Algorithm (Too Frequent)"
-        assert anomaly["root_cause_category"] == "handover_fault"
-    if SCENARIO == "buffer_overflow":
-        assert fixture["anomaly_class"] == anomaly["ml_class"] == "Buffer Overflow (Gradual Buildup)"
-        assert anomaly["root_cause_category"] == "buffer_overflow"
-    if SCENARIO == "resource_allocation_bugs":
-        assert fixture["anomaly_class"] == anomaly["ml_class"] == "Resource Allocation Bugs"
-        assert anomaly["root_cause_category"] == "resource_allocation_fault"
-    if SCENARIO in {"high_congestion_gradual", "high_congestion_sudden"}:
-        assert fixture["anomaly_class"] == anomaly["ml_class"] == PINNED_RCA_PREDICTION["class"]
-        assert anomaly["root_cause_category"] == "congestion"
     schema = json.loads((ROOT / "contracts/ran-anomaly-enriched.schema.json").read_text())
     # The chatbot API receives this record only through enriched Kafka.
     jsonschema.Draft202012Validator(schema).validate(anomaly)
@@ -293,8 +257,8 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
     kafka_projection = next(item for item in published if item["incident_id"] == incident_id)
     assert all(item["incident_id"] != invalid_id for item in published)
     jsonschema.Draft202012Validator(schema).validate(kafka_projection)
-    assert {key: kafka_projection[key] for key in ("kpi_window", "ml_class", "ml_confidence", "root_cause_category")} == {
-        key: anomaly[key] for key in ("kpi_window", "ml_class", "ml_confidence", "root_cause_category")
+    assert {key: kafka_projection[key] for key in ("kpi_window", "ml_confidence", "root_cause_category")} == {
+        key: anomaly[key] for key in ("kpi_window", "ml_confidence", "root_cause_category")
     }
 
     remediation = None
@@ -308,10 +272,12 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
             time.sleep(5)
     assert remediation is not None, f"incident {incident_id} did not reach remediation"
     assert remediation["template_name"] == TEMPLATES[anomaly["root_cause_category"]]
-    if anomaly["ml_class"] == "Antenna Failure":
+    if anomaly["root_cause_category"] == "Antenna Failure":
         assert remediation["template_name"] == "ran-cell-recovery"
-    if anomaly["ml_class"] in {"Co-Channel Interference (Mild)", "Co-Channel Interference (Severe)"}:
+    if anomaly["root_cause_category"] == "Co-Channel Interference (Mild)":
         assert remediation["template_name"] == "ran-interference-mitigation"
+    if anomaly["root_cause_category"] == "Co-Channel Interference (Severe)":
+        assert remediation["template_name"] == "ran-severe-interference-mitigation"
     if SCENARIO == "rf_filter_fault":
         assert remediation["template_name"] == "ran-rf-filter-response"
         assert remediation["job_status"] == "successful"
@@ -344,12 +310,15 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         assert "simulation successful" in remediation["output_summary"]
         assert "no RAN device changed" in remediation["output_summary"]
         assert "changed=0" in remediation["output_summary"]
-    if SCENARIO in {"high_congestion_gradual", "high_congestion_sudden"}:
+    if SCENARIO == "high_congestion_gradual":
         assert remediation["template_name"] == "ran-load-balance"
         assert remediation["job_status"] == "successful"
         assert "load balancing simulation successful" in remediation["output_summary"]
         assert "no RAN device changed" in remediation["output_summary"]
         assert "changed=0" in remediation["output_summary"]
+    if SCENARIO == "high_congestion_sudden":
+        assert remediation["template_name"] == "ran-sudden-congestion-relief"
+        assert "congestion relief simulation successful" in remediation["output_summary"]
     joined = None
     join_deadline = time.monotonic() + 60
     while time.monotonic() < join_deadline:
@@ -365,39 +334,28 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
     assert joined["remediation_template_name"] == remediation["template_name"]
     assert joined["remediation_job_status"] == remediation["job_status"]
     assert joined["remediation_status"] == ("completed" if remediation["success"] else "failed")
+    assert joined["root_cause_category"] == anomaly["root_cause_category"]
     if SCENARIO == "rf_filter_fault":
-        assert joined["ml_class"] == "Faulty RF Filters (Temporal)"
-        assert joined["root_cause_category"] == "rf_filter_fault"
         assert joined["remediation_output_summary"] == remediation["output_summary"]
     if SCENARIO == "doppler_shift_severe":
-        assert joined["ml_class"] == "Doppler Shift (Severe)"
-        assert joined["root_cause_category"] == "doppler_shift"
         assert joined["remediation_template_name"] == "ran-doppler-shift-response"
         assert joined["remediation_output_summary"] == remediation["output_summary"]
     if SCENARIO == "handover_fault":
-        assert joined["ml_class"] == "Faulty Handover Algorithm (Too Frequent)"
-        assert joined["root_cause_category"] == "handover_fault"
         assert joined["remediation_template_name"] == "ran-handover-stabilization"
         assert joined["remediation_output_summary"] == remediation["output_summary"]
     if SCENARIO == "buffer_overflow":
         assert joined["incident_id"] == incident_id
-        assert joined["ml_class"] == "Buffer Overflow (Gradual Buildup)"
-        assert joined["root_cause_category"] == "buffer_overflow"
         assert joined["remediation_template_name"] == "ran-buffer-relief"
         assert joined["remediation_job_id"] == remediation["job_id"]
         assert joined["remediation_output_summary"] == remediation["output_summary"]
     if SCENARIO == "resource_allocation_bugs":
         assert joined["incident_id"] == incident_id
-        assert joined["ml_class"] == "Resource Allocation Bugs"
-        assert joined["root_cause_category"] == "resource_allocation_fault"
         assert joined["remediation_template_name"] == "ran-resource-allocation-correction"
         assert joined["remediation_job_id"] == remediation["job_id"]
         assert joined["remediation_output_summary"] == remediation["output_summary"]
     if SCENARIO in {"high_congestion_gradual", "high_congestion_sudden"}:
         assert joined["incident_id"] == incident_id
-        assert joined["ml_class"] == PINNED_RCA_PREDICTION["class"]
-        assert joined["root_cause_category"] == "congestion"
-        assert joined["remediation_template_name"] == "ran-load-balance"
+        assert joined["remediation_template_name"] == TEMPLATES[anomaly["root_cause_category"]]
         assert joined["remediation_job_id"] == remediation["job_id"]
         assert joined["remediation_output_summary"] == remediation["output_summary"]
 
@@ -406,12 +364,11 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
     reply = chat.json()["reply"]
     assert incident_id in reply
     assert "Mantis RCA Prediction" in reply
-    assert "ML-Derived Operational Category" in reply
     assert anomaly["root_cause_category"] in reply
-    assert ("RCA confidence" if anomaly["ml_class"] else "unavailable") in reply
+    assert "RCA confidence" in reply
     if mode == "used":
         evidence["prediction"] = {
-            "class": anomaly["ml_class"],
+            "root_cause_category": anomaly["root_cause_category"],
             "class_index": PINNED_RCA_PREDICTION["class_index"],
             "confidence": anomaly["ml_confidence"],
         }
@@ -422,7 +379,6 @@ def test_pinned_fixture_reaches_chat_in_expected_guidance_mode(ran_chatbot_clien
         "classify_url": os.environ.get("RCA_EXPECTED_CLASSIFY_URL", ""),
         "ml_status": mode,
         "ml_steer_used": mode == "used",
-        "ml_class": anomaly["ml_class"],
         "ml_confidence": anomaly["ml_confidence"],
         "root_cause_category": anomaly["root_cause_category"],
         "root_cause": anomaly["root_cause"],
