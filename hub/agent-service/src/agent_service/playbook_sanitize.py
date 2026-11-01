@@ -31,6 +31,13 @@ _POD_EXEC_URL_RE = re.compile(r"/pods/.+/exec(?:\?|$)")
 
 _ANSIBLE_DATETIME_ISO_RE = re.compile(r"\{\{\s*ansible_date_time\.iso8601\s*\}\}")
 _NOW_UTC_EXPR = "{{ now(utc=True, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+_LOCAL_BEARER = "Bearer {{ lookup('env', 'K8S_AUTH_API_KEY') }}"
+_PROXY_BEARER = "Bearer {{ token_acm }}"
+_KUBERNETES_PATH_RE = re.compile(r"/apis?/")
+_VARIABLE_RE = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+_HUB_BASE_RE = re.compile(r"^\{\{\s*hub_url\s*\}\}(?:/|$)")
+_ROLLOUT_STATUS_FIELDS = "observedGeneration|updatedReplicas|readyReplicas|availableReplicas"
+_INVALID_GENERATION_RE = re.compile(r"\.json\.(?:(?:status|spec)\.)?generation\b")
 
 
 def fix_ansible_facts(yaml_text: str) -> str:
@@ -137,7 +144,7 @@ def _fix_uri_auth(task: dict, uri: dict) -> None:
 
     uri.setdefault("validate_certs", False)
 
-    is_hub_url = "{{ hub_url }}" in str(url)
+    is_hub_url = bool(_HUB_BASE_RE.match(str(url)))
 
     headers = uri.get("headers", {})
     if not isinstance(headers, dict):
@@ -159,6 +166,112 @@ def _fix_cluster_proxy_auth(parsed: list | dict | None) -> list | dict | None:
         for task, uri in _iter_uri_tasks(play):
             _fix_uri_auth(task, uri)
     return parsed
+
+
+def _resolved_uri_url(play: dict, uri: dict) -> str:
+    """Expand simple play variable aliases without evaluating generated Jinja."""
+    url = str(uri.get("url", ""))
+    play_vars = play.get("vars") or {}
+    if not isinstance(play_vars, dict):
+        return url
+    for _ in range(len(play_vars)):
+        expanded = _VARIABLE_RE.sub(lambda match: str(play_vars.get(match[1], match[0])), url)
+        if expanded == url:
+            break
+        url = expanded
+    return url
+
+
+def _expected_bearer(play: dict, uri: dict) -> str:
+    url = _resolved_uri_url(play, uri)
+    if DEPLOYMENT_MODE == "hub-spoke" and _HUB_BASE_RE.match(url):
+        return _PROXY_BEARER
+    local_host = _K8S_HOST_LOOKUP_RE.match(url)
+    if DEPLOYMENT_MODE == "single-cluster" and local_host and url[local_host.end() :].startswith("/"):
+        return _LOCAL_BEARER
+    return ""
+
+
+def _fix_kubernetes_auth(parsed):
+    for play in _iter_plays(parsed):
+        for _task, uri in _iter_uri_tasks(play):
+            bearer = _expected_bearer(play, uri)
+            headers = uri.get("headers")
+            if not bearer or (headers is not None and not isinstance(headers, dict)):
+                continue
+            headers = {name: value for name, value in (headers or {}).items() if str(name).lower() != "authorization"}
+            headers["Authorization"] = bearer
+            uri["headers"] = headers
+            for auth_key in _BASIC_AUTH_KEYS:
+                uri.pop(auth_key, None)
+    return parsed
+
+
+def _authentication_validation_errors(play: dict):
+    for _task, uri in _iter_uri_tasks(play):
+        if not (_expected_bearer(play, uri) or _KUBERNETES_PATH_RE.search(str(uri.get("url", "")))):
+            continue
+        headers = uri.get("headers")
+        authorization = (
+            [value for name, value in headers.items() if str(name).lower() == "authorization"]
+            if isinstance(headers, dict)
+            else []
+        )
+        if (
+            len(authorization) != 1
+            or not isinstance(authorization[0], str)
+            or not re.fullmatch(r"Bearer\s+\S.*", authorization[0])
+        ):
+            yield (
+                "Missing or invalid Kubernetes Authorization header. Use a headers mapping with "
+                "Authorization: Bearer and the injected credential: K8S_AUTH_API_KEY in "
+                "single-cluster mode, token_acm in hub-spoke mode."
+            )
+
+
+def _iter_deployment_polls(play: dict):
+    for task, uri in _iter_uri_tasks(play):
+        if str(uri.get("method", "GET")).upper() != "GET":
+            continue
+        if _DEPLOYMENT_URL_RE.search(_resolved_uri_url(play, uri)) and "until" in task:
+            yield task
+
+
+def _fix_rollout_condition(condition: str, register: str) -> str:
+    """Repair the observed job's typo and tolerate status fields absent during rollout."""
+    prefix = rf"(?<![\w.]){re.escape(register)}\.json\."
+    condition = re.sub(prefix + r"generation\b", f"{register}.json.status.observedGeneration", condition)
+    status_field = re.compile(
+        prefix + rf"status\.(?:{_ROLLOUT_STATUS_FIELDS})"
+        r"(?![\w.]|\s*\|\s*default\s*\(|\s+is\s+(?:not\s+)?defined\b)"
+    )
+    return status_field.sub(lambda match: f"({match[0]} | default(0))", condition)
+
+
+def _fix_deployment_polls(parsed):
+    for play in _iter_plays(parsed):
+        for task in _iter_deployment_polls(play):
+            register = task.get("register")
+            if not isinstance(register, str) or not re.fullmatch(r"[A-Za-z_]\w*", register):
+                continue
+            conditions = task["until"]
+            if isinstance(conditions, str):
+                task["until"] = _fix_rollout_condition(conditions, register)
+            elif isinstance(conditions, list) and all(isinstance(condition, str) for condition in conditions):
+                task["until"] = [_fix_rollout_condition(condition, register) for condition in conditions]
+    return parsed
+
+
+def _rollout_validation_errors(play: dict):
+    for task in _iter_deployment_polls(play):
+        conditions = task["until"] if isinstance(task["until"], list) else [task["until"]]
+        if any(isinstance(condition, str) and _INVALID_GENERATION_RE.search(condition) for condition in conditions):
+            yield (
+                "Invalid Deployment rollout generation check. Use the GET task's registered result: "
+                "json.status.observedGeneration >= json.metadata.generation, and compare "
+                "status.updatedReplicas, readyReplicas, and availableReplicas with spec.replicas. "
+                "Default missing status counts to 0; do not use json.generation or status.generation."
+            )
 
 
 def _wrap_deployment_body(uri: dict) -> None:
@@ -306,6 +419,8 @@ def sanitize_playbook(parsed: list | dict | None) -> list | dict | None:
     parsed = _fix_template_strings(parsed)
     if DEPLOYMENT_MODE == "hub-spoke":
         parsed = _fix_cluster_proxy_auth(parsed)
+    parsed = _fix_kubernetes_auth(parsed)
+    parsed = _fix_deployment_polls(parsed)
     parsed = _strip_dangerous_headers(parsed)
     parsed = _prune_unexecutable_tasks(parsed)
     return parsed
@@ -366,7 +481,12 @@ def playbook_validation_error(parsed: list | dict | None) -> str:
     errors = (
         error
         for play in _iter_plays(parsed)
-        for validate in (_uri_validation_errors, _target_validation_errors)
+        for validate in (
+            _uri_validation_errors,
+            _target_validation_errors,
+            _authentication_validation_errors,
+            _rollout_validation_errors,
+        )
         for error in validate(play)
     )
     return "\n".join(dict.fromkeys(errors))

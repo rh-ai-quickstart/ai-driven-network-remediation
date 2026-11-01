@@ -1,0 +1,62 @@
+- name: Increase microservice-b CPU limit
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+  - name: Patch Deployment to increase CPU limit
+    uri:
+      url: "{{ lookup('env', 'K8S_AUTH_HOST') }}/apis/apps/v1/namespaces/{{ namespace }}/deployments/{{ deployment_name }}"
+      method: PATCH
+      body_format: json
+      body: |
+        {
+          "spec": {
+            "template": {
+              "spec": {
+                "containers": [
+                  {
+                    "name": "microservice-b",
+                    "resources": {
+                      "limits": {
+                        "cpu": "250m"
+                      },
+                      "requests": {
+                        "cpu": "20m"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      headers:
+        Content-Type: application/strategic-merge-patch+json
+        Authorization: "Bearer {{ lookup('env', 'K8S_AUTH_API_KEY') }}"
+      validate_certs: false
+      status_code: 200
+    vars:
+      namespace: edge-test
+      deployment_name: "{{ deployment_name }}"
+      # Assuming deployment_name is provided by AAP, no need to derive from pod name
+
+  - name: Wait for Deployment to restart
+    uri:
+      url: "{{ lookup('env', 'K8S_AUTH_HOST') }}/apis/apps/v1/namespaces/{{ namespace }}/deployments/{{ deployment_name }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ lookup('env', 'K8S_AUTH_API_KEY') }}"
+      validate_certs: false
+      status_code: 200
+    register: deployment_status
+    until:
+      - deployment_status.json.generation == deployment_status.json.metadata.generation
+      - deployment_status.json.status.updatedReplicas == deployment_status.json.spec.replicas
+      - deployment_status.json.status.readyReplicas == deployment_status.json.spec.replicas
+      - deployment_status.json.status.availableReplicas == deployment_status.json.spec.replicas
+    retries: 10
+    delay: 10
+    vars:
+      namespace: edge-test
+      deployment_name: "{{ deployment_name }}"
