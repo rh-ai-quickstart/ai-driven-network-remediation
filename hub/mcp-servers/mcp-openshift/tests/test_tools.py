@@ -651,3 +651,59 @@ class TestGetPodLogs:
         assert result["pod"] == "app"
         assert "not valid" in result["error"]
         assert mock_oc.call_count == 1
+
+
+@patch("mcp_openshift.tools._kubeconfig_for", return_value="/spoke/config")
+@patch("mcp_openshift.tools._run_oc")
+def test_reset_cpu_demo_waits_for_rollout(mock_oc, mock_config):
+    from mcp_openshift.tools import reset_cpu_demo
+
+    mock_oc.return_value = {"success": True, "stdout": "ready", "stderr": ""}
+    assert reset_cpu_demo("demo-edge", "edge-site-02")["success"] is True
+    mock_config.assert_called_once_with("edge-site-02")
+    patch_args = mock_oc.call_args_list[0].args[0]
+    assert "deployment/microservice-b" in patch_args
+    assert "--containers=microservice-b" in patch_args
+    assert "--requests=cpu=20m" in patch_args
+    assert "--limits=cpu=25m" in patch_args
+    assert "demo-edge" in patch_args
+    assert mock_oc.call_args_list[1].args[0][:2] == ["rollout", "status"]
+    assert all(call.kwargs["kubeconfig"] == "/spoke/config" for call in mock_oc.call_args_list)
+
+
+@patch("mcp_openshift.tools._run_oc")
+def test_reset_cpu_demo_patch_failure_stops_rollout(mock_oc):
+    from mcp_openshift.tools import reset_cpu_demo
+
+    mock_oc.return_value = {"success": False, "stderr": "Forbidden"}
+    assert reset_cpu_demo()["success"] is False
+    mock_oc.assert_called_once()
+
+
+@patch("mcp_openshift.tools._run_oc")
+def test_reset_cpu_demo_rollout_failure_is_not_success(mock_oc):
+    from mcp_openshift.tools import reset_cpu_demo
+
+    mock_oc.side_effect = [
+        {"success": True, "stdout": "patched", "stderr": ""},
+        {"success": False, "stdout": "", "stderr": "timed out"},
+    ]
+    assert reset_cpu_demo() == {"success": False, "message": "timed out"}
+
+
+@patch("mcp_openshift.server.asyncio.to_thread")
+def test_reset_http_route(mock_thread):
+    import asyncio
+    import httpx
+    from mcp_openshift.server import app
+
+    mock_thread.return_value = {"success": True, "message": "ready"}
+
+    async def request_reset():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            return await client.post("/demo/reset", json={"namespace": "demo-edge", "edge_site_id": "edge-site-02"})
+
+    response = asyncio.run(request_reset())
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert mock_thread.call_args.args[1:] == ("demo-edge", "edge-site-02")

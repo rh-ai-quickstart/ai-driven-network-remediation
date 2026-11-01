@@ -11,6 +11,8 @@ from .config import (
     AUDIT_LOOKBACK_HOURS,
     AUDIT_MAX_MESSAGES,
     AUDIT_TOPIC,
+    CPU_DEMO_SITE_A,
+    CPU_DEMO_SITE_B,
     DEMO_TOPIC,
     DEMO_WORKLOAD,
     EDGE_NAMESPACE,
@@ -20,6 +22,37 @@ from .slo import normalize_incident_record
 from .utils import parse_iso
 
 logger = logging.getLogger(__name__)
+
+CPU_DEMO_SCENARIO = "cpu-misconfiguration"
+CPU_DEMO_SOURCE_WORKLOAD = "microservice-a"
+CPU_DEMO_TARGET_WORKLOAD = "microservice-b"
+CPU_DEMO_TARGET_CPU_LIMIT = "250m"
+
+
+def _cpu_misconfiguration_message(site_a: str, site_b: str) -> str:
+    if site_a == site_b:
+        topology_hint = f"Both services run on the same cluster ({site_a})."
+        loki_hint = "Workload logs are unavailable from LokiStack for this demo."
+        pods_hint = f"Call get_pods for namespace {EDGE_NAMESPACE} on {site_a} to compare both workloads' placement and health."
+        logs_hint = f"Use get_pod_logs with edge_site_id={site_a} for logs from each service."
+    else:
+        topology_hint = f"microservice-b is on a different cluster ({site_b}), not on {site_a} where microservice-a runs."
+        loki_hint = "Spoke workload logs are not forwarded to the hub LokiStack, so the query is denied and returns nothing."
+        pods_hint = f"Call get_pods for namespace {EDGE_NAMESPACE} on both {site_a} and {site_b} to compare placement and health."
+        logs_hint = f"Use get_pod_logs with edge_site_id={site_a} for microservice-a and edge_site_id={site_b} for microservice-b."
+
+    return (
+        f"{CPU_DEMO_SOURCE_WORKLOAD} request queue is full (depth rising, tasks not draining). "
+        "Its deployment looks healthy: CPU and memory within limits, no restarts, replicas ready. "
+        f"Downstream {CPU_DEMO_TARGET_WORKLOAD} latency is degraded, so the backpressure originates there. "
+        f"{topology_hint} Do NOT use LokiStack search_logs for namespace {EDGE_NAMESPACE}: {loki_hint} "
+        f"Gather evidence with the OpenShift tools. {pods_hint} {logs_hint} "
+        f"On {site_b}, call get_pod_spec for the {CPU_DEMO_TARGET_WORKLOAD} pod and use its resource limits as evidence; "
+        f"you MUST pass edge_site_id={site_b} and namespace={EDGE_NAMESPACE} on that call. "
+        f"The {CPU_DEMO_TARGET_WORKLOAD} is CPU-throttled due to an insufficient CPU limit. "
+        f"Generate a minimal remediation playbook whose only mutation is increasing the {CPU_DEMO_TARGET_WORKLOAD} "
+        f"deployment CPU limit to {CPU_DEMO_TARGET_CPU_LIMIT}. Do not change CPU requests, memory, replicas, autoscaling, or any other resource."
+    )
 
 
 def fetch_recent_audits() -> tuple[list[dict[str, Any]], bool]:
@@ -85,6 +118,10 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
     """Build a structured log event for a demo failure scenario."""
     now = datetime.now(timezone.utc).isoformat()
     normalized = scenario.strip().lower()
+    target_site = site
+    workload = DEMO_WORKLOAD
+    container_name = "nginx"
+    level = "error"
 
     scenarios: dict[str, dict[str, Any]] = {
         "oom": {
@@ -103,29 +140,38 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
             "failure_type_override": "Unknown",
         },
     }
-    spec = scenarios.get(
-        normalized,
-        {
-            "message": "CrashLoopBackOff: nginx worker stalled after a transient failure; restart required",
-            "confidence_override": 0.95,
-            "failure_type_override": "CrashLoopBackOff",
-        },
-    )
-    if normalized not in scenarios:
-        normalized = "crashloop"
+    if normalized == CPU_DEMO_SCENARIO:
+        target_site = CPU_DEMO_SITE_A
+        workload = CPU_DEMO_SOURCE_WORKLOAD
+        container_name = CPU_DEMO_SOURCE_WORKLOAD
+        level = "warn"
+        spec = {
+            "message": _cpu_misconfiguration_message(CPU_DEMO_SITE_A, CPU_DEMO_SITE_B),
+        }
+    else:
+        spec = scenarios.get(
+            normalized,
+            {
+                "message": "CrashLoopBackOff: nginx worker stalled after a transient failure; restart required",
+                "confidence_override": 0.95,
+                "failure_type_override": "CrashLoopBackOff",
+            },
+        )
+        if normalized not in scenarios:
+            normalized = "crashloop"
 
     event: dict[str, Any] = {
         "@timestamp": now,
         "incident_id": incident_id,
         "message": spec["message"],
-        "level": "error",
+        "level": level,
         "kubernetes": {
             "namespace_name": EDGE_NAMESPACE,
-            "pod_name": DEMO_WORKLOAD,
-            "container_name": "nginx",
+            "pod_name": workload,
+            "container_name": container_name,
         },
         "labels": {
-            "edge_site_id": site,
+            "edge_site_id": target_site,
             "dark_noc_demo": "true",
             "dark_noc_scenario": normalized,
         },

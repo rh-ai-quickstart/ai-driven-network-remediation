@@ -167,3 +167,51 @@ class TestBuildDemoEvent:
     def test_unknown_scenario_defaults_to_crashloop(self):
         event = build_demo_event("unknown-thing", "edge-site-01", "test-id-5")
         assert event["labels"]["dark_noc_scenario"] == "crashloop"
+
+    def test_cpu_misconfiguration_same_site(self, monkeypatch):
+        import chatbot_service.kafka as demo_kafka
+
+        monkeypatch.setattr(demo_kafka, "EDGE_NAMESPACE", "edge-workloads")
+        monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_A", "edge-site-01")
+        monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_B", "edge-site-01")
+
+        event = build_demo_event("cpu-misconfiguration", "ignored-site", "cpu-demo-1")
+
+        assert event["level"] == "warn"
+        assert event["labels"] == {
+            "edge_site_id": "edge-site-01",
+            "dark_noc_demo": "true",
+            "dark_noc_scenario": "cpu-misconfiguration",
+        }
+        assert event["kubernetes"] == {
+            "namespace_name": "edge-workloads",
+            "pod_name": "microservice-a",
+            "container_name": "microservice-a",
+        }
+        assert "same cluster (edge-site-01)" in event["message"]
+        assert "different cluster" not in event["message"]
+        assert "get_pods for namespace edge-workloads on edge-site-01" in event["message"]
+        assert "get_pod_logs with edge_site_id=edge-site-01" in event["message"]
+        assert "get_pod_spec" in event["message"]
+        assert "only mutation" in event["message"]
+        assert "CPU limit to 250m" in event["message"]
+        assert "Do not change CPU requests, memory, replicas, autoscaling" in event["message"]
+        assert "_overrides" not in event
+
+    def test_cpu_misconfiguration_distinct_sites(self, monkeypatch):
+        import chatbot_service.kafka as demo_kafka
+
+        monkeypatch.setattr(demo_kafka, "EDGE_NAMESPACE", "edge-workloads")
+        monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_A", "edge-site-01")
+        monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_B", "edge-site-02")
+
+        event = build_demo_event("cpu-misconfiguration", "ignored-site", "cpu-demo-2")
+
+        assert event["labels"]["edge_site_id"] == "edge-site-01"
+        assert "different cluster (edge-site-02), not on edge-site-01" in event["message"]
+        assert "get_pods for namespace edge-workloads on both edge-site-01 and edge-site-02" in event["message"]
+        assert "edge_site_id=edge-site-01 for microservice-a" in event["message"]
+        assert "edge_site_id=edge-site-02 for microservice-b" in event["message"]
+        assert "MUST pass edge_site_id=edge-site-02 and namespace=edge-workloads" in event["message"]
+        assert "Do NOT use LokiStack search_logs" in event["message"]
+        assert "Do not change CPU requests, memory, replicas, autoscaling" in event["message"]

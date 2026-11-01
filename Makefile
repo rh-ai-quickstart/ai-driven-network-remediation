@@ -386,6 +386,7 @@ helm_all_args = \
 	--set-string network.edgeRbac.edgeNamespace='$(EDGE_NAMESPACE)' \
 	--set-string network.chatbotService.env.demoWorkload='$(DEMO_WORKLOAD)' \
 	--set-string network.chatbotService.env.edgeSiteId='$(EDGE_SITE_ID)' \
+	$(if $(filter true,$(ENABLE_CPU_DEMO)),--set-string network.chatbotService.env.cpuDemoSiteA='$(CPU_DEMO_SITE_A)' --set-string network.chatbotService.env.cpuDemoSiteB='$(CPU_DEMO_SITE_B)',) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(helm_network_remediation_mcp_args),) \
 	--set-string network.mcp-servers.mcp-servers.noc-openshift.env.DEFAULT_NAMESPACE='$(EDGE_NAMESPACE)' \
 	--set ingestionPipeline.autoIngestOnStartup=$(AUTO_INGEST_ON_STARTUP) \

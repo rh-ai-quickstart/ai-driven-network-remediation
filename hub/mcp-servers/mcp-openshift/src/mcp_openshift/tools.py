@@ -6,6 +6,10 @@ import subprocess
 from .config import DEFAULT_NAMESPACE, EDGE_KUBECONFIG, mcp, resolve_kubeconfig
 
 OC_TIMEOUT = 30
+CPU_DEMO_WORKLOAD = "microservice-b"
+CPU_DEMO_REQUEST = "20m"
+CPU_DEMO_LIMIT = "25m"
+CPU_DEMO_ROLLOUT_TIMEOUT = 90
 
 
 def _run_oc(
@@ -435,3 +439,32 @@ def get_pod_logs(
         "success": result["success"],
         "error": result["stderr"] if not result["success"] else None,
     }
+
+
+def reset_cpu_demo(namespace: str = DEFAULT_NAMESPACE, edge_site_id: str = "") -> dict:
+    """Restore the demo fault using the same credentials as remediation."""
+    kubeconfig = _kubeconfig_for(edge_site_id)
+    resource_args = ["set", "resources", f"deployment/{CPU_DEMO_WORKLOAD}", "-n", namespace]
+    resource_args.extend(
+        [
+            f"--containers={CPU_DEMO_WORKLOAD}",
+            f"--requests=cpu={CPU_DEMO_REQUEST}",
+            f"--limits=cpu={CPU_DEMO_LIMIT}",
+        ]
+    )
+    patch_status = _run_oc(resource_args, kubeconfig=kubeconfig)
+    if not patch_status["success"]:
+        return {"success": False, "message": patch_status["stderr"]}
+    rollout_status = _run_oc(
+        [
+            "rollout",
+            "status",
+            f"deployment/{CPU_DEMO_WORKLOAD}",
+            "-n",
+            namespace,
+            f"--timeout={CPU_DEMO_ROLLOUT_TIMEOUT}s",
+        ],
+        kubeconfig=kubeconfig,
+        timeout=CPU_DEMO_ROLLOUT_TIMEOUT + OC_TIMEOUT,
+    )
+    return {"success": rollout_status["success"], "message": rollout_status["stdout"] or rollout_status["stderr"]}

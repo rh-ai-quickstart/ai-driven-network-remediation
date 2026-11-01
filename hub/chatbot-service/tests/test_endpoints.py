@@ -229,3 +229,62 @@ def test_demo_uses_configured_target(mock_publish, client, monkeypatch):
         assert response.json()["namespace"] == "edge-test"
         assert response.json()["workload"] == "edge-nginx"
         assert response.json()["site"] == "edge-site-01"
+
+
+@patch("chatbot_service.publish_demo_event")
+def test_cpu_misconfiguration_trigger_targets_configured_source(mock_publish, client, monkeypatch):
+    import chatbot_service.kafka as demo_kafka
+
+    monkeypatch.setattr(demo_kafka, "EDGE_NAMESPACE", "edge-workloads")
+    monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_A", "edge-site-01")
+    monkeypatch.setattr(demo_kafka, "CPU_DEMO_SITE_B", "edge-site-02")
+    mock_publish.return_value = 44
+
+    response = client.post(
+        "/api/demo/trigger",
+        json={"scenario": "cpu-misconfiguration", "site": "ignored-site"},
+    )
+
+    assert response.status_code == 200
+    assert mock_publish.call_count == 1
+    event = mock_publish.call_args.args[0]
+    assert event["labels"]["dark_noc_scenario"] == "cpu-misconfiguration"
+    assert event["labels"]["edge_site_id"] == "edge-site-01"
+    assert event["kubernetes"]["namespace_name"] == "edge-workloads"
+    assert event["kubernetes"]["pod_name"] == "microservice-a"
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["scenario"] == "cpu-misconfiguration"
+    assert body["site"] == "edge-site-01"
+    assert body["namespace"] == "edge-workloads"
+    assert body["workload"] == "microservice-a"
+    assert "edge-site-02" in body["event_message"]
+    assert body["kafka_offset"] == 44
+
+
+@patch("chatbot_service.httpx.AsyncClient")
+def test_reset_targets_configured_cpu_demo_site(mock_client, client, monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+    import chatbot_service
+
+    monkeypatch.setattr(chatbot_service, "CPU_DEMO_SITE_B", "edge-site-02")
+    monkeypatch.setattr(chatbot_service, "EDGE_NAMESPACE", "demo-edge")
+    response = MagicMock()
+    response.json.return_value = {"success": True}
+    post = AsyncMock(return_value=response)
+    mock_client.return_value.__aenter__.return_value.post = post
+    reset_response = client.post("/api/demo/reset")
+    assert reset_response.status_code == 200
+    assert reset_response.json()["status"] == "reset"
+    assert post.call_args.kwargs["json"] == {"namespace": "demo-edge", "edge_site_id": "edge-site-02"}
+
+
+@patch("chatbot_service.httpx.AsyncClient")
+def test_reset_failure_is_reported(mock_client, client):
+    from unittest.mock import AsyncMock
+    import httpx
+
+    mock_client.return_value.__aenter__.return_value.post = AsyncMock(side_effect=httpx.ConnectError("unavailable"))
+    response = client.post("/api/demo/reset")
+    assert response.status_code == 502
+    assert "failed" in response.json()["message"]
