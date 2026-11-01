@@ -48,6 +48,31 @@ _STUB_LOG_SEARCH = [{"timestamp": "2024-01-01", "message": "error found", "pod":
 
 
 class TestInvestigateNode:
+    def test_pod_logs_keep_cluster_and_pod_provenance_per_line(self):
+        evidence = {"pod_logs": ""}
+
+        _merge_tool_result(
+            "get_pod_logs",
+            {"logs": "throttled\nrequest latency elevated"},
+            evidence,
+            edge_site_id="edge-1",
+            pod_name="microservice-a-abc",
+        )
+        _merge_tool_result(
+            "get_pod_logs",
+            {"logs": "throttled\nrequest latency elevated"},
+            evidence,
+            edge_site_id="edge-2",
+            pod_name="microservice-b-def",
+        )
+
+        assert evidence["pod_logs"].splitlines() == [
+            "Edge site: edge-1 Pod: microservice-a-abc | throttled",
+            "Edge site: edge-1 Pod: microservice-a-abc | request latency elevated",
+            "Edge site: edge-2 Pod: microservice-b-def | throttled",
+            "Edge site: edge-2 Pod: microservice-b-def | request latency elevated",
+        ]
+
     async def test_no_tool_call_returns_empty_cluster_events(self):
         config = GraphConfig()
         node = make_investigate_node(config)
@@ -179,7 +204,10 @@ class TestInvestigateNode:
         assert len(result["cluster_events"]) == 2
         assert result["cluster_events"][0]["reason"] == "OOMKilled"
         assert result["recent_errors"] == _STUB_ERROR_PATTERNS
-        assert result["pod_logs"] == _STUB_POD_LOGS
+        assert result["pod_logs"].splitlines() == [
+            f"Edge site: edge-1 Pod: nginx-abc | {line}"
+            for line in _STUB_POD_LOGS.splitlines()
+        ]
         assert result["log_search_results"] == _STUB_LOG_SEARCH
 
     async def test_multi_tool_calls_execute_concurrently(self):

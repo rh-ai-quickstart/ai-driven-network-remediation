@@ -124,6 +124,38 @@ class TestEvidenceInPrompt:
         assert "OOMKilled" in user_msg
 
     @pytest.mark.asyncio
+    async def test_cpu_throttling_analysis_uses_resource_specs_and_bounded_logs(self):
+        cpu_rca = (
+            '{"failure_type": "CPUThrottling", "confidence": 0.96, '
+            '"summary": "Request queue is backing up because microservice-b is CPU throttled", '
+            '"evidence": ["microservice-b has a 25m CPU limit", "runtime logs show CPU throttling"], '
+            '"recommended_actions": ["increase microservice-b CPU limit"], '
+            '"estimated_severity": "high", "runbook_reference": "n/a"}'
+        )
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response(content=cpu_rca))
+        logs = "\n".join(f"sample-{index:03}" for index in range(40))
+
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            result = await analyze_node(
+                make_state(resource_specs="Pod: microservice-b\nlimits: cpu: 25m", pod_logs=logs)
+            )
+
+        prompt = mock_llm.ainvoke.call_args.args[0][1].content
+        rca = result["root_cause_analysis"]
+        assert rca.failure_type == "CPUThrottling"
+        assert rca.confidence == 0.96
+        assert "cpu: 25m" in prompt
+        assert "sample-009" not in prompt
+        assert "sample-010" in prompt
+        assert "sample-039" in prompt
+        assert "microservice-b is CPU throttled" in rca.summary
+        assert "runtime logs show CPU throttling" in rca.evidence
+        assert "increase microservice-b CPU limit" in rca.recommended_actions
+
+    @pytest.mark.asyncio
     async def test_empty_evidence_no_regression(self):
         mock_llm = AsyncMock()
         mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())

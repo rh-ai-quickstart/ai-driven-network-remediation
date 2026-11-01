@@ -151,6 +151,7 @@ def _build_prompt(
     log_event,
     llm_summary: dict | None = None,
     extra_evidence: str = "",
+    resource_specs: str = "",
 ) -> str:
     """Build the ALS prompt, omitting fields that have no useful value."""
     summary = rca.summary if rca else ""
@@ -170,10 +171,15 @@ def _build_prompt(
     if extra_evidence:
         evidence_str = (evidence_str + "\n\n" + extra_evidence) if evidence_str else extra_evidence
 
+    edge_site_id = build_launch_extra_vars(
+        log_event,
+        llm_summary=llm_summary,
+        resource_specs=resource_specs,
+    ).get("edge_site_id", "")
     fields = [
         ("Failure type", rca.failure_type if rca else "Unknown"),
         ("Severity", rca.estimated_severity if rca else "unknown"),
-        ("Edge site cluster", log_event.edge_site_id if log_event else ""),
+        ("Edge site cluster", edge_site_id),
         ("Namespace", log_event.namespace if log_event else "unknown"),
         ("Target component", target_component),
         ("Summary", summary),
@@ -336,7 +342,13 @@ async def lightspeed_node(state) -> dict:
             except Exception:
                 logger.opt(exception=True).warning("LLM summarization failed, falling back to template-only prompt")
 
-        prompt = _build_prompt(rca, log_event, llm_summary, investigation_evidence)
+        prompt = _build_prompt(
+            rca,
+            log_event,
+            llm_summary,
+            investigation_evidence,
+            resource_specs=state.resource_specs,
+        )
         pod_logs = get_pod_logs_for_attachment(state)
         structured = get_structured_attachments(state)
         attachments = _build_attachments(rca, log_event, pod_logs=pod_logs, extra_attachments=structured)

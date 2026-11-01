@@ -11,6 +11,24 @@ _TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_pods",
+            "description": "List pods in a namespace with status, optionally on a specified edge site",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
+                },
+                "required": ["namespace"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_events",
             "description": "Get Kubernetes events for a namespace",
             "parameters": {
@@ -145,7 +163,7 @@ def _extract_events(result: dict) -> list[dict]:
     return [result]
 
 
-_OPENSHIFT_TOOLS = {"get_events", "get_pod_logs", "get_pod_spec"}
+_OPENSHIFT_TOOLS = {"get_pods", "get_events", "get_pod_logs", "get_pod_spec"}
 
 _TOOL_SCHEMAS = {t["function"]["name"]: t["function"]["parameters"] for t in _TOOLS}
 
@@ -181,7 +199,22 @@ def _format_pod_resources(tool_result: dict) -> str:
     return "\n".join(lines)
 
 
-def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict, edge_site_id: str = "") -> None:
+def _stamp_pod_logs(logs: str, edge_site_id: str, pod_name: str) -> str:
+    source = f"{EDGE_SITE_STAMP} {edge_site_id}" if edge_site_id else ""
+    pod = f"Pod: {pod_name}" if pod_name else ""
+    provenance = " ".join(part for part in (source, pod) if part)
+    if not provenance:
+        return logs
+    return "\n".join(f"{provenance} | {line}" for line in logs.splitlines())
+
+
+def _merge_tool_result(
+    tool_name: str,
+    tool_result: dict,
+    evidence: dict,
+    edge_site_id: str = "",
+    pod_name: str = "",
+) -> None:
     if tool_result.get("error"):
         return
     if tool_name == "get_events":
@@ -191,6 +224,7 @@ def _merge_tool_result(tool_name: str, tool_result: dict, evidence: dict, edge_s
     elif tool_name == "get_pod_logs":
         logs = tool_result.get("logs", "")
         if logs:
+            logs = _stamp_pod_logs(logs, edge_site_id, pod_name)
             prev = evidence["pod_logs"]
             evidence["pod_logs"] = logs if not prev else prev + "\n" + logs
     elif tool_name == "search_logs":
@@ -258,7 +292,13 @@ def make_investigate_node(config: GraphConfig):
                     )
 
                     for tool_call, args, tool_result in zip(tool_calls, defaulted_args, results):
-                        _merge_tool_result(tool_call["name"], tool_result, evidence, args.get("edge_site_id", ""))
+                        _merge_tool_result(
+                            tool_call["name"],
+                            tool_result,
+                            evidence,
+                            args.get("edge_site_id", ""),
+                            args.get("pod_name", ""),
+                        )
                         messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
 
                 logger.info(

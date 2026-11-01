@@ -272,6 +272,22 @@ def test_prompt_with_llm_summary_overrides_fields():
     assert "manual review" not in prompt
 
 
+def test_prompt_uses_only_resource_stamped_summary_site():
+    log_event = make_log_event(edge_site_id="edge-site-01")
+    summary = {"edge_site_id": "edge-site-02"}
+
+    unstamped_prompt = _build_prompt(make_rca(), log_event, llm_summary=summary)
+    stamped_prompt = _build_prompt(
+        make_rca(),
+        log_event,
+        llm_summary=summary,
+        resource_specs="Edge site: edge-site-02\nPod: microservice-b",
+    )
+
+    assert "Edge site cluster: edge-site-01" in unstamped_prompt
+    assert "Edge site cluster: edge-site-02" in stamped_prompt
+
+
 def test_prompt_with_empty_llm_summary_uses_rca():
     prompt = _build_prompt(
         make_rca(summary="OOM kill"),

@@ -16,6 +16,7 @@ FailureType = Literal[
     "KafkaLag",
     "PostgresConnPool",
     "AAPJobFailure",
+    "CPUThrottling",  # CPU misconfiguration demo.
     "Unknown",
 ]
 

@@ -53,8 +53,32 @@ class TestBuildEvidencePrompt:
 
     def test_pod_logs_included_when_populated(self):
         state = make_state(pod_logs="ERROR: container OOMKilled\nRestarting pod")
-        result = get_pod_logs_for_attachment(state)
+        result = build_evidence_prompt(state)
+        assert "Pod Logs" in result
         assert "OOMKilled" in result
+
+    def test_analysis_and_grounding_use_bounded_pod_logs(self):
+        lines = [f"log-line-{index:03}" for index in range(40)]
+        state = make_state(pod_logs="\n".join(lines))
+
+        prompt = build_evidence_prompt(state)
+        grounding = build_grounding_text(state)
+
+        assert "log-line-009" not in prompt
+        assert "log-line-010" in prompt
+        assert "log-line-039" in prompt
+        assert "log-line-009" not in grounding
+        assert "log-line-010" in grounding
+        assert "log-line-039" in grounding
+
+    def test_character_limit_preserves_log_source_prefix(self):
+        provenance = "Edge site: edge-2 Pod: microservice-b-abc | "
+        state = make_state(pod_logs=provenance + "x" * 5000)
+
+        result = get_pod_logs_for_attachment(state)
+
+        assert len(result) == 4000
+        assert result.startswith(provenance)
 
     def test_pod_logs_truncated_to_last_n_lines(self):
         lines = [f"log line {i}" for i in range(200)]
