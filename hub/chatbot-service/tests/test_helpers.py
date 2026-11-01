@@ -215,3 +215,21 @@ class TestBuildDemoEvent:
         assert "MUST pass edge_site_id=edge-site-02 and namespace=edge-workloads" in event["message"]
         assert "Do NOT use LokiStack search_logs" in event["message"]
         assert "Do not change CPU requests, memory, replicas, autoscaling" in event["message"]
+
+
+@pytest.mark.parametrize("envelope", [None, "event", "payload"])
+def test_cpu_generation_failure_timeline_keeps_lightspeed_artifact_separate(envelope):
+    audit_record = {
+        "failure_type": "CPUThrottling",
+        "remediation_action": "generate-playbook",
+        "remediation_success": False,
+        "lightspeed_conversation_id": "conv-123",
+        "remediation_summary": "Generated playbook failed validation: Invalid YAML",
+    }
+    record = normalize_incident_record({envelope: audit_record} if envelope else audit_record)
+    movie, _ = build_incident_movie([record], {})
+    assert movie[0]["title"].startswith("CPUThrottling")
+    assert movie[0]["summary"] == audit_record["remediation_summary"]
+    assert movie[0]["artifacts"]["lightspeed_conversation_id"] == "conv-123"
+    assert movie[0]["artifacts"]["aap_job_id"] is None
+    assert compute_slo_metrics([record], 1, 1)["aap_success_pct"] is None

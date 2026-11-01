@@ -49,6 +49,9 @@ export function IncidentTimeline({ movie }) {
                 </p>
                 {event.summary && <p>{event.summary}</p>}
                 <p className="meta">
+                  {event.artifacts?.lightspeed_conversation_id && (
+                    <>Lightspeed Conversation: {event.artifacts.lightspeed_conversation_id} · </>
+                  )}
                   AAP Job: {event.artifacts?.aap_job_id || "n/a"} · SNOW:{" "}
                   {event.artifacts?.servicenow_ticket || "n/a"} · Trace:{" "}
                   {event.artifacts?.langfuse_trace_id || "n/a"}

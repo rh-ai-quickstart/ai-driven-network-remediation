@@ -311,7 +311,7 @@ def _stub_result() -> dict:
         action_taken="generate-playbook",
         tool_used="lightspeed",
         success=True,
-        job_id="lightspeed-disabled",
+        job_id="",
         duration_seconds=0.0,
         output_summary="Lightspeed not configured (LIGHTSPEED_URL is empty)",
         timestamp=now_iso(),
@@ -365,7 +365,8 @@ async def lightspeed_node(state) -> dict:
                 action_taken="generate-playbook",
                 tool_used="lightspeed",
                 success=False,
-                job_id=data.get("conversation_id", ""),
+                job_id="",
+                lightspeed_conversation_id=data.get("conversation_id") or None,
                 duration_seconds=round(duration, 2),
                 output_summary=f"Generated playbook failed validation: {validation_error}",
                 timestamp=now_iso(),
@@ -381,12 +382,12 @@ async def lightspeed_node(state) -> dict:
             action_taken="generate-playbook",
             tool_used="lightspeed",
             success=True,
-            job_id=data.get("conversation_id", ""),
+            job_id="",
+            lightspeed_conversation_id=data.get("conversation_id") or None,
             duration_seconds=round(duration, 2),
             output_summary=f"Generated playbook: {playbook_name}",
             timestamp=now_iso(),
             generated_template_name=playbook_name,
-            generated_template_id=data.get("conversation_id", ""),
             generated_playbook_name=playbook_name,
             generated_playbook_preview=playbook_yaml,
         )
@@ -575,7 +576,17 @@ async def _execute_in_aap(
     job_id = str(launch.get("job_id", ""))
     logger.info(f"AAP job launched: job_id={job_id} template='{name}'")
 
-    outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+    try:
+        outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+    except Exception as exc:
+        return result.model_copy(
+            update={
+                "job_id": job_id,
+                "success": False,
+                "output_summary": f"AAP job {job_id} monitoring failed: {exc}"[:1000],
+                "timestamp": now_iso(),
+            }
+        )
     logger.info(f"AAP job {job_id} for '{name}' finished: success={outcome.success} timed_out={outcome.timed_out}")
     return result.model_copy(
         update={

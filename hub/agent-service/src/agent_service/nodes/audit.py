@@ -9,7 +9,9 @@ from loguru import logger
 from agent_service.config import KAFKA_AUDIT_TOPIC, KAFKA_BOOTSTRAP
 
 # Must match failure_type enum in contracts/incident-audit.schema.json (narrower than FailureType).
-_AUDIT_FAILURE_TYPES = frozenset({"OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "Unknown"})
+_AUDIT_FAILURE_TYPES = frozenset(
+    {"OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "CPUThrottling", "Unknown"}
+)
 
 
 def _audit_failure_type(raw: str | None) -> str:
@@ -66,6 +68,10 @@ def build_audit_payload(state) -> dict[str, Any]:
         payload["servicenow_ticket"] = state.servicenow_ticket
     if aap_job_id:
         payload["aap_job_id"] = aap_job_id
+    if result is not None:
+        payload["remediation_summary"] = result.output_summary
+        if result.lightspeed_conversation_id:
+            payload["lightspeed_conversation_id"] = result.lightspeed_conversation_id
     if state.fast_path_actuation:
         payload["fast_path_actuation"] = state.fast_path_actuation
     return payload
