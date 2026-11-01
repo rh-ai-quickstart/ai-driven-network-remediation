@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from helpers import make_state
 
 from agent_service.models import GraphConfig
@@ -47,7 +48,77 @@ _STUB_POD_LOGS = "2024-01-01 ERROR: container killed\n2024-01-01 INFO: restartin
 _STUB_LOG_SEARCH = [{"timestamp": "2024-01-01", "message": "error found", "pod": "nginx-abc"}]
 
 
+@pytest.mark.parametrize(
+    "enabled_servers,expected_tools,disabled_tools",
+    [
+        ({"noc-openshift"}, {"get_pods", "get_events", "get_pod_logs", "get_pod_spec"}, {"search_logs", "find_error_patterns"}),
+        (
+            {"noc-lokistack"},
+            {"search_logs", "find_error_patterns"},
+            {"get_pods", "get_events", "get_pod_logs", "get_pod_spec"},
+        ),
+    ],
+)
+async def test_only_enabled_tools_reach_model(monkeypatch, enabled_servers, expected_tools, disabled_tools):
+    monkeypatch.setattr("agent_service.config.ENABLED_MCP_SERVERS", enabled_servers)
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke.return_value = _llm_no_tool_call()
+    with patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm):
+        await make_investigate_node(GraphConfig())(make_state())
+
+    model_call = mock_llm.ainvoke.call_args
+    assert {tool["function"]["name"] for tool in model_call.kwargs["tools"]} == expected_tools
+    system_prompt = model_call.args[0][0].content
+    assert all(tool_name in system_prompt for tool_name in expected_tools)
+    assert all(tool_name not in system_prompt for tool_name in disabled_tools)
+
+
+async def test_disabled_tool_call_is_rejected(monkeypatch):
+    monkeypatch.setattr("agent_service.config.ENABLED_MCP_SERVERS", {"noc-openshift"})
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke.side_effect = [_llm_with_tool_call("search_logs"), _llm_no_tool_call()]
+    with (
+        patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+        patch("agent_service.nodes.investigate.invoke_tool", new_callable=AsyncMock) as mock_invoke,
+    ):
+        await make_investigate_node(GraphConfig())(make_state())
+
+    mock_invoke.assert_not_awaited()
+    tool_messages = [message for message in mock_llm.ainvoke.call_args.args[0] if hasattr(message, "tool_call_id")]
+    assert "not enabled" in tool_messages[-1].content
+
+
+async def test_no_enabled_tools_preserves_evidence_without_calling_model(monkeypatch):
+    monkeypatch.setattr("agent_service.config.ENABLED_MCP_SERVERS", set())
+    state = make_state(cluster_events=[{"reason": "existing"}], pod_logs="existing logs")
+    with patch("agent_service.nodes.investigate.get_llm") as mock_get_llm:
+        evidence = await make_investigate_node(GraphConfig())(state)
+
+    mock_get_llm.assert_not_called()
+    assert evidence["cluster_events"] == state.cluster_events
+    assert evidence["pod_logs"] == state.pod_logs
+
+
 class TestInvestigateNode:
+    async def test_get_pods_can_target_another_cluster(self, monkeypatch):
+        monkeypatch.setattr("agent_service.config.ENABLED_MCP_SERVERS", {"noc-openshift"})
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.side_effect = [
+            _llm_with_tool_call("get_pods", {"namespace": "prod", "edge_site_id": "edge-2"}),
+            _llm_no_tool_call(),
+        ]
+        mock_invoke = AsyncMock(return_value={"pods": []})
+
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            await make_investigate_node(GraphConfig())(make_state())
+
+        mock_invoke.assert_awaited_once_with(
+            "get_pods", {"namespace": "prod", "edge_site_id": "edge-2"}
+        )
+
     def test_pod_logs_keep_cluster_and_pod_provenance_per_line(self):
         evidence = {"pod_logs": ""}
 

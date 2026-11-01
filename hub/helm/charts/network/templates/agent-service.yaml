@@ -1,4 +1,12 @@
 {{- if .Values.agentService.enabled }}
+{{- $enabledMcpServers := list }}
+{{- if index .Values "mcp-servers" "enabled" }}
+{{- range $name, $server := index .Values "mcp-servers" "mcp-servers" }}
+{{- if $server.enabled }}
+{{- $enabledMcpServers = append $enabledMcpServers $name }}
+{{- end }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,6 +50,8 @@ spec:
           image: "{{ .Values.image.registry }}/{{ .Values.image.agentService }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: ENABLED_MCP_SERVERS
+              value: {{ join "," $enabledMcpServers | quote }}
             - name: DEPLOYMENT_MODE
               value: {{ .Values.topology.deploymentMode | quote }}
             - name: EDGE_NAMESPACE

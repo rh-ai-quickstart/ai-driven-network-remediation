@@ -34,6 +34,11 @@ KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "dark-noc-agent")
 KAFKA_AUDIT_TOPIC = os.getenv("KAFKA_AUDIT_TOPIC", "incident-audit")
 KAFKA_CONSUMER_ENABLED = _env_bool("KAFKA_CONSUMER_ENABLED", True)
 
+# Helm supplies the enabled MCP deployments; standalone runs retain all tools.
+ENABLED_MCP_SERVERS = frozenset(
+    _env_csv("ENABLED_MCP_SERVERS", "noc-openshift,noc-lokistack,noc-kafka,noc-aap,noc-servicenow")
+)
+
 # LlamaStack
 LLAMASTACK_HOST = os.environ.get("LLAMASTACK_HOST", "localhost")
 LLAMASTACK_PORT = os.environ.get("LLAMASTACK_PORT", "8321")
@@ -173,7 +178,7 @@ DECIDE_MATCH_PROMPT = os.getenv(
 )
 
 # Behavior/tone only. The available-tools list is appended at runtime from the
-# _TOOLS definition in nodes/investigate.py so it never drifts from the real inventory.
+# enabled investigation tools below so it never drifts from the real inventory.
 INVESTIGATE_SYSTEM_PROMPT = os.getenv(
     "INVESTIGATE_SYSTEM_PROMPT",
     "You are a Kubernetes incident investigator. Your job is to gather evidence about "
@@ -181,29 +186,200 @@ INVESTIGATE_SYSTEM_PROMPT = os.getenv(
     "just collecting facts.\n"
     "\n"
     "You may call multiple tools in a single response when it would be efficient. "
-    "If one tool fails, consider using an alternative (e.g., search_logs via Loki "
-    "when get_pod_logs times out).\n"
+    "If one tool fails, consider using an alternative from the available tools below.\n"
     "\n"
     "Given the log event and any enriched pod status, decide which tools to call to "
     "gather evidence. Stop when you have enough context or cannot gather more useful "
     "information.\n"
     "\n"
     "If the evidence suggests cascading failures across services, consider "
-    "investigating dependent services using get_pod_spec, search_logs, or "
-    "find_error_patterns to check their health and resource configuration. "
+    "investigating dependent services using the available tools to check their "
+    "health and resource configuration. "
     "Prioritize investigating services you have NOT yet examined.\n"
     "\n"
     "Skip any tool call whose output has already appeared in evidence "
     "from a previous iteration to avoid redundant work.\n"
     "\n"
     "If logs or errors reference a service on a different cluster or namespace, "
-    "investigate it by passing that edge_site_id and namespace to get_pod_spec, "
-    "get_pod_logs, or get_events. The Loki search tools (search_logs, "
-    "find_error_patterns) only cover hub logs, so use the pod tools for spoke "
-    "workloads.\n"
+    "use available tools that accept edge_site_id and namespace to investigate it. "
+    "Aggregated log search only covers hub logs; use available pod tools for spoke workloads.\n"
     "\n"
     "Do NOT analyze root causes or recommend fixes — just gather raw evidence.",
 )
+
+_INVESTIGATE_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pods",
+            "description": "List pods in a namespace with status, optionally on a specified edge site",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
+                },
+                "required": ["namespace"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_events",
+            "description": "Get Kubernetes events for a namespace",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "limit": {"type": "integer", "description": "Max events to return", "default": 20},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
+                },
+                "required": ["namespace"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_error_patterns",
+            "description": "Find recurring error patterns in logs for an application",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "app": {"type": "string", "description": "Application name"},
+                    "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
+                    "top_n": {"type": "integer", "description": "Max patterns to return", "default": 10},
+                    "regex": {"type": "string", "description": "Optional regex filter"},
+                },
+                "required": ["namespace", "app"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pod_logs",
+            "description": "Get logs from a specific pod",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pod_name": {"type": "string", "description": "Pod name"},
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "container": {"type": "string", "description": "Container name"},
+                    "tail_lines": {"type": "integer", "description": "Number of lines from the end", "default": 100},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
+                },
+                "required": ["pod_name", "namespace"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_logs",
+            "description": (
+                "Search aggregated logs via Loki. Filters do NOT accept '*' or "
+                "shell-glob wildcards. Prefer namespace + text; add pod only if "
+                "needed."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "pod": {
+                        "type": "string",
+                        "description": "Pod name substring (partial match, no wildcards; e.g. 'edge-fast-path')",
+                    },
+                    "container": {
+                        "type": "string",
+                        "description": (
+                            "Exact container name (NOT the pod name). Omit unless you know it; "
+                            "it is an exact match, not a substring."
+                        ),
+                    },
+                    "labels": {
+                        "type": "object",
+                        "description": "Label selector",
+                        "additionalProperties": {"type": "string"},
+                    },
+                    "text": {"type": "string", "description": "Text to search for"},
+                    "duration": {"type": "string", "description": "Time window, e.g. '1h'", "default": "1h"},
+                    "limit": {"type": "integer", "description": "Max results", "default": 50},
+                },
+                "required": ["namespace"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pod_spec",
+            "description": (
+                "Get structured spec for a pod as JSON. Includes container "
+                "resource limits, requests, probes, and env vars. Supports "
+                "prefix matching (e.g. 'myapp' finds 'myapp-6b7f8c-x2k9z')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Pod name (exact or prefix)"},
+                    "namespace": {"type": "string", "description": "Kubernetes namespace"},
+                    "edge_site_id": {
+                        "type": "string",
+                        "description": "Edge site / cluster ID (e.g. edge-site-01). Defaults to the incident cluster.",
+                    },
+                },
+                "required": ["name", "namespace"],
+            },
+        },
+    },
+]
+
+
+_INVESTIGATE_TOOL_SERVERS = {
+    "get_pods": "noc-openshift",
+    "get_events": "noc-openshift",
+    "get_pod_logs": "noc-openshift",
+    "get_pod_spec": "noc-openshift",
+    "find_error_patterns": "noc-lokistack",
+    "search_logs": "noc-lokistack",
+}
+
+
+INVESTIGATE_TOOL_SCHEMAS = {tool["function"]["name"]: tool["function"]["parameters"] for tool in _INVESTIGATE_TOOLS}
+INVESTIGATE_OPENSHIFT_TOOLS = frozenset(
+    tool_name for tool_name, server in _INVESTIGATE_TOOL_SERVERS.items() if server == "noc-openshift"
+)
+
+
+def get_investigate_tools() -> list[dict]:
+    return [
+        tool
+        for tool in _INVESTIGATE_TOOLS
+        if _INVESTIGATE_TOOL_SERVERS[tool["function"]["name"]] in ENABLED_MCP_SERVERS
+    ]
+
+
+def get_investigate_system_prompt(tools: list[dict]) -> str:
+    tool_docs = "\n".join(
+        f"- {tool['function']['name']}"
+        f"({', '.join(tool['function']['parameters']['properties'])}): "
+        f"{tool['function']['description']}"
+        for tool in tools
+    )
+    return f"{INVESTIGATE_SYSTEM_PROMPT}\n\nAvailable tools:\n{tool_docs}"
+
 
 LIGHTSPEED_SYSTEM_PROMPT = os.getenv(
     "LIGHTSPEED_SYSTEM_PROMPT",

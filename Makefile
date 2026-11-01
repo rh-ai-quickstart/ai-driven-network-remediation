@@ -312,7 +312,7 @@ helm_lokistack_args = \
 	--set network.mcp-servers.mcp-servers.noc-lokistack.enabled=$(ENABLE_LOKISTACK) \
 	--set-string network.lokistack.name='$(LOKISTACK_NAME)' \
 	--set-string network.lokistack.namespace='$(LOKISTACK_NAMESPACE)' \
-	$(if $(filter true,$(ENABLE_LOKISTACK)),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
+	$(if $(and $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(filter true,$(ENABLE_LOKISTACK))),--set-string llama-stack.mcp-servers.noc-lokistack.uri=http://mcp-noc-lokistack:8000/mcp,)
 
 ifeq ($(ENABLE_LIGHTSPEED),true)
 ifndef LIGHTSPEED_URL
@@ -347,6 +347,7 @@ helm_multicluster_args = \
 # Gitea stores Network playbooks and depends on secrets from the Network chart.
 helm_infra_args = \
 	--set kafka.enabled=$(ENABLE_KAFKA) \
+	--set network.mcp-servers.mcp-servers.noc-kafka.enabled=$(ENABLE_KAFKA) \
 	--set kafka.kafkaUI.enabled=$(ENABLE_KAFKA_UI) \
 	--set kafka.kafka.externalRoute.enabled=$(ROUTES_ENABLED) \
 	--set s4.enabled=$(ENABLE_S4) \
@@ -359,7 +360,7 @@ helm_infra_args = \
 helm_network_remediation_mcp_args = \
 	--set-string llama-stack.mcp-servers.noc-openshift.uri=http://mcp-noc-openshift:8000/mcp \
 	--set-string llama-stack.mcp-servers.noc-aap.uri=http://mcp-noc-aap:8000/mcp \
-	--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp \
+	$(if $(filter true,$(ENABLE_KAFKA)),--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp,) \
 	--set-string llama-stack.mcp-servers.noc-servicenow.uri=http://mcp-noc-servicenow:8000/mcp
 
 helm_all_args = \
