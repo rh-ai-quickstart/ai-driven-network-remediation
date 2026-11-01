@@ -204,12 +204,12 @@ CPU_DEMO_IMAGES := $(addprefix $(REGISTRY)/,showcase-client:$(VERSION) showcase-
 
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),$(AAP_MOCK_IMG)) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(MCP_IMAGES) $(NETWORK_IMAGES) $(EDGE_IMAGES)) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES)) \
 	$(if $(filter true,$(ENABLE_CPU_DEMO)),$(CPU_DEMO_IMAGES))
 
 EXTRA_BUILD_PUSH_IMAGES := \
-	$(AAP_MOCK_IMG) \
 	$(SERVICENOW_MOCK_IMG)
 
 ALL_BUILD_PUSH_IMAGES := \
@@ -848,6 +848,7 @@ edge-rbac-teardown:
 
 .PHONY: build-all-images
 build-all-images: build-ingestion-image \
+	$(if $(filter true,$(ENABLE_AAP_MOCK)),build-aap-mock-image) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image) \
 	$(if $(filter true,$(ENABLE_CPU_DEMO)),cpu-demo-build-images)
@@ -935,9 +936,12 @@ push-all-images:
 print-all-images:
 	@printf '%s\n' $(CORE_BUILD_PUSH_IMAGES)
 
-.PHONY: build-push-aap-mock
-build-push-aap-mock:
+.PHONY: build-aap-mock-image
+build-aap-mock-image:
 	$(CONTAINER_TOOL) build -t $(AAP_MOCK_IMG) --platform=$(ARCH) -f hub/infra/aap-mock/Containerfile hub/infra/aap-mock
+
+.PHONY: build-push-aap-mock
+build-push-aap-mock: build-aap-mock-image
 	$(CONTAINER_TOOL) push $(AAP_MOCK_IMG) $(PUSH_EXTRA_ARGS)
 
 .PHONY: build-push-servicenow-mock
