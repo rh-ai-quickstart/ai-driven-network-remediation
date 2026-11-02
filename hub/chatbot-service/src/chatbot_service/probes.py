@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 async def fetch_servicenow_incident_count() -> tuple[int, dict[str, Any]]:
     """Get open incident count from ServiceNow.
 
-    Returns (count, servicenow_info_dict).
+    Returns (count, servicenow_info_dict) with reachable only.
     """
     try:
         async with httpx.AsyncClient(timeout=8.0, verify=SSL_VERIFY) as client:

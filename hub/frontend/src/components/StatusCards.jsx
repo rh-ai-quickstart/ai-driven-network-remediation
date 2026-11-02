@@ -10,9 +10,7 @@ function StatusCard({ title, value, degraded }) {
 function formatServiceNow(sn) {
   if (!sn) return "unknown";
   if (typeof sn === "string") return sn;
-  const mode = sn.mode || "unknown";
-  const reachable = sn.reachable ? "reachable" : "unreachable";
-  return `${mode} / ${reachable}`;
+  return sn.reachable ? "reachable" : "unreachable";
 }
 
 export function StatusCards({ summary, integrations, deps }) {

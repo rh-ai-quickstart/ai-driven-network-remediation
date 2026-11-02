@@ -90,7 +90,7 @@ data.context.open_incidents    // not data.open_incidents
 data.context.integrations_up   // not data.integrations_up
 
 // Summary
-data.servicenow = { mode: "mock", reachable: true }  // not a string
+data.servicenow = { reachable: true }  // UI shows reachable / unreachable
 
 // Demo trigger success
 data.incident_id  // UUID for traceability

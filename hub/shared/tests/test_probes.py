@@ -18,8 +18,8 @@ class TestProbeHttp:
 
     @pytest.mark.asyncio
     @respx.mock
-    @pytest.mark.parametrize("status_code", [401, 403, 404, 405])
-    async def test_reachable_on_auth_and_not_found_codes(self, status_code):
+    @pytest.mark.parametrize("status_code", [301, 302, 303, 307, 308, 401, 403, 404, 405])
+    async def test_reachable_on_redirect_auth_and_not_found_codes(self, status_code):
         respx.get(URL).mock(return_value=httpx.Response(status_code))
         result = await probe_http(URL)
         assert result["reachable"] is True
