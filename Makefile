@@ -270,6 +270,7 @@ helm_mock_args = \
 	$(if $(AAP_SECRET_NAME),--set-string network.mcp-servers.mcp-servers.noc-aap.envSecrets.AAP_TOKEN.name='$(AAP_SECRET_NAME)',) \
 	$(if $(_aap_set_token),--set-string network.mcpSecrets.aap.token='$(AAP_TOKEN)',) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.chatbotService.env.servicenowUrl=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.mcpSecrets.servicenow.username=admin,) \
 	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.mcpSecrets.servicenow.password=admin,) \
@@ -282,6 +283,7 @@ helm_mock_args = \
 # MCP server prefers the API key and falls back to Basic Auth automatically.
 helm_servicenow_real_args = \
 	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_INSTANCE_URL),--set-string network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL='$(SERVICENOW_INSTANCE_URL)',),) \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_INSTANCE_URL),--set-string network.chatbotService.env.servicenowUrl='$(SERVICENOW_INSTANCE_URL)',),) \
 	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_API_KEY),--set-string network.mcpSecrets.servicenow.apiKey='$(SERVICENOW_API_KEY)',),) \
 	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_USERNAME),--set-string network.mcpSecrets.servicenow.username='$(SERVICENOW_USERNAME)',),) \
 	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_PASSWORD),--set-string network.mcpSecrets.servicenow.password='$(SERVICENOW_PASSWORD)',),)

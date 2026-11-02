@@ -39,6 +39,16 @@ spec:
               value: {{ .Values.chatbotService.env.mcpServicenowUrl | quote }}
             - name: SERVICENOW_URL
               value: {{ .Values.chatbotService.env.servicenowUrl | quote }}
+            - name: SERVICENOW_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mcpSecrets.servicenow.existingSecretName | default "noc-servicenow-secret" }}
+                  key: SERVICENOW_USERNAME
+            - name: SERVICENOW_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mcpSecrets.servicenow.existingSecretName | default "noc-servicenow-secret" }}
+                  key: SERVICENOW_PASSWORD
             - name: KAFKA_BOOTSTRAP
               value: {{ .Values.chatbotService.env.kafkaBootstrap | quote }}
             - name: MODEL_API_URL

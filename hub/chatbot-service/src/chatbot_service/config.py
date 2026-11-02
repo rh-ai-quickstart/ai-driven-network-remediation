@@ -71,5 +71,6 @@ INTEGRATION_TARGETS = [
     {"id": "mcp-kafka", "name": "MCP Kafka", "group": "mcp", "probe_url": f"{MCP_KAFKA_URL}/health"},
     {"id": "mcp-aap", "name": "MCP AAP", "group": "mcp", "probe_url": f"{MCP_AAP_URL}/health"},
     {"id": "mcp-servicenow", "name": "MCP ServiceNow", "group": "mcp", "probe_url": f"{MCP_SERVICENOW_URL}/health"},
-    {"id": "servicenow", "name": "ServiceNow", "group": "platform", "probe_url": f"{SERVICENOW_URL}/health"},
+    # Table API: mock returns 401 without auth; real instances may 401 or 302 to login.
+    {"id": "servicenow", "name": "ServiceNow", "group": "platform", "probe_url": f"{SERVICENOW_URL}/api/now/table/incident?sysparm_limit=1"},
 ]
