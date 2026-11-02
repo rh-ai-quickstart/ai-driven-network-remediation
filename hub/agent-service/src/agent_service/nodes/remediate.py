@@ -7,7 +7,7 @@ from agent_service.config import (
     FAST_PATH_LAST_HEAL_ANNOTATION,
     now_iso,
 )
-from agent_service.edge_site import remediation_should_retry, resolve_edge_site_id
+from agent_service.edge_site import resolve_edge_site_id
 from agent_service.fast_path import (
     recent_deployment_remediation_actuation,
     target_deployment_name,
@@ -37,6 +37,7 @@ _FAILURE_TYPE_DEFAULTS: dict[str, str] = {
     "OOMKilled": "scale-up-workers",
     "StorageFull": "clear-disk-space",
 }
+_MAX_ERROR_SUMMARY_CHARS = 1000
 
 
 def _keyword_template(action: str) -> str | None:
@@ -76,25 +77,21 @@ async def _launch_job(template: str, log_event, edge_site_id: str) -> dict:
     )
 
 
-async def _handle_completion(template: str, job_id: int, state, config, *, edge_site_id: str = ""):
+async def _handle_completion(template: str, job_id: int, config):
     """Poll a launched job and return the appropriate state update."""
     outcome = await evaluate_job(job_id, config.job_timeout)
 
     if not outcome.success:
         return _failure(
-            state,
-            config,
             template,
             outcome.output_summary,
             job_id,
             elapsed=outcome.elapsed,
             timestamp=outcome.timestamp,
             timed_out=outcome.timed_out,
-            edge_site_id=edge_site_id,
         )
 
     return {
-        "should_retry": False,
         "remediation_result": RemediationResult(
             action_taken=template,
             tool_used="aap",
@@ -119,7 +116,6 @@ def make_remediate_node(config: GraphConfig):
         if not template:
             logger.warning("No matching remediation template for RCA")
             return {
-                "should_retry": False,
                 "remediation_result": RemediationResult(
                     action_taken="none",
                     tool_used="aap",
@@ -162,7 +158,6 @@ def make_remediate_node(config: GraphConfig):
                     )
                 logger.info(summary)
                 return {
-                    "should_retry": False,
                     "fast_path_actuation": actuation,
                     "remediation_result": RemediationResult(
                         action_taken="fast_path_skip",
@@ -179,27 +174,19 @@ def make_remediate_node(config: GraphConfig):
             launch = await _launch_job(template, state.log_event, edge_site_id)
         except Exception as exc:
             logger.exception("Failed to launch AAP job")
-            return _failure(state, config, template, str(exc), edge_site_id=edge_site_id)
+            return _failure(template, str(exc))
 
         if not launch.get("success"):
             error = launch.get("error", "Unknown launch error")
             logger.warning(f"AAP launch failed: {error}")
-            return _failure(state, config, template, error, edge_site_id=edge_site_id)
+            return _failure(template, error)
 
-        return await _handle_completion(
-            template,
-            launch["job_id"],
-            state,
-            config,
-            edge_site_id=edge_site_id,
-        )
+        return await _handle_completion(template, launch["job_id"], config)
 
     return remediate_node
 
 
 def _failure(
-    state,
-    config: GraphConfig,
     template: str,
     error: str,
     job_id=None,
@@ -207,21 +194,8 @@ def _failure(
     elapsed=0,
     timestamp=None,
     timed_out=False,
-    edge_site_id: str = "",
 ) -> dict:
-    entry = {"action": "remediate", "template": template, "error": error[:500]}
-    if job_id is not None:
-        entry["job_id"] = job_id
-    attempts = state.failed_attempts + [entry]
-    can_retry = job_id is None and remediation_should_retry(
-        error,
-        edge_site_id,
-        len(attempts),
-        config.max_retries,
-    )
     return {
-        "failed_attempts": attempts,
-        "should_retry": can_retry,
         "remediation_result": RemediationResult(
             action_taken=template,
             tool_used="aap",
@@ -229,7 +203,7 @@ def _failure(
             timed_out=timed_out,
             job_id=str(job_id or ""),
             duration_seconds=float(elapsed),
-            output_summary=error[:1000],
+            output_summary=error[:_MAX_ERROR_SUMMARY_CHARS],
             timestamp=timestamp or now_iso(),
         ),
     }

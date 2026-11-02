@@ -97,7 +97,7 @@ async def test_no_matching_template_returns_none_result():
 
     assert result["remediation_result"].action_taken == "none"
     assert result["remediation_result"].success is False
-    assert result["should_retry"] is False
+    assert set(result) == {"remediation_result"}
 
 
 @pytest.mark.asyncio

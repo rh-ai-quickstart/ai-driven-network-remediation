@@ -1,12 +1,30 @@
 from loguru import logger
 
+from agent_service.models import RemediationResult
 from agent_service.utils import invoke_tool as _invoke_tool
 
 _PRIORITY_MAP = {"critical": 1, "high": 2, "medium": 3, "low": 4}
 _DEFAULT_PRIORITY = 4
+_AAP_TOOL = "aap"
 
 
-def _build_description(log_event, rca, failed_attempts) -> str:
+def _failed_remediation_result_lines(remediation_result: RemediationResult | None) -> list[str]:
+    if remediation_result is None or remediation_result.success:
+        return []
+
+    failure_lines = [
+        "",
+        "--- Failed Remediation Result ---",
+        f"Tool: {remediation_result.tool_used}",
+        f"Action: {remediation_result.action_taken}",
+    ]
+    if remediation_result.tool_used == _AAP_TOOL and remediation_result.job_id:
+        failure_lines.append(f"Job ID: {remediation_result.job_id}")
+    failure_lines.append(f"Output: {remediation_result.output_summary}")
+    return failure_lines
+
+
+def _build_description(log_event, rca, remediation_result=None) -> str:
     lines = [
         f"Failure Type: {rca.failure_type}",
         f"Confidence: {rca.confidence}",
@@ -27,15 +45,7 @@ def _build_description(log_event, rca, failed_attempts) -> str:
         log_event.message,
     ]
 
-    if failed_attempts:
-        lines.append("")
-        lines.append("--- Failed Remediation Attempts ---")
-        for i, attempt in enumerate(failed_attempts, 1):
-            parts = [f"Template: {attempt['template']}"]
-            if "job_id" in attempt:
-                parts.append(f"Job: {attempt['job_id']}")
-            parts.append(f"Error: {attempt['error']}")
-            lines.append(f"{i}. {' | '.join(parts)}")
+    lines.extend(_failed_remediation_result_lines(remediation_result))
 
     return "\n".join(lines) + "\n"
 
@@ -48,7 +58,7 @@ async def escalate_node(state) -> dict:
         f"[AI-NOC] {rca.failure_type} – {log_event.pod_name}" f" in {log_event.namespace} ({log_event.edge_site_id})"
     )
 
-    description = _build_description(log_event, rca, state.failed_attempts)
+    description = _build_description(log_event, rca, state.remediation_result)
     priority = _PRIORITY_MAP.get(rca.estimated_severity, _DEFAULT_PRIORITY)
 
     logger.info(f"Creating ServiceNow incident: {short_description}")

@@ -75,10 +75,21 @@ class TestIncidentState:
         assert state.remediation_result is None
 
     def test_old_fields_removed(self):
-        fields = set(IncidentState.model_fields.keys())
-        assert "awaiting_human_approval" not in fields
-        assert "notifications_sent" not in fields
-        assert "execution_result" not in fields
+        removed_fields = {
+            "awaiting_human_approval",
+            "notifications_sent",
+            "execution_result",
+            "failed_attempts",
+            "should_retry",
+            "langfuse_trace_id",
+        }
+        state = IncidentState(raw_event="pod crashloop")
+        schema_fields = IncidentState.model_json_schema()["properties"]
+        serialized_fields = state.model_dump()
+
+        assert removed_fields.isdisjoint(IncidentState.model_fields)
+        assert removed_fields.isdisjoint(schema_fields)
+        assert removed_fields.isdisjoint(serialized_fields)
 
     def test_new_fields_have_defaults(self):
         state = IncidentState(raw_event="pod crashloop")
@@ -99,7 +110,6 @@ class TestIncidentState:
         assert state.recent_errors == []
         assert state.slack_thread_ts == ""
         assert state.servicenow_ticket == ""
-        assert state.langfuse_trace_id == ""
         assert state.total_duration_ms == 0.0
         assert state.error_message == ""
 

@@ -102,16 +102,3 @@ def resolve_edge_site_id(
         return _DEFAULT_EDGE_SITE
 
     return site or "unknown"
-
-
-def remediation_should_retry(error: str, edge_site_id: str, attempt_count: int, max_retries: int) -> bool:
-    """Avoid relaunching AAP when routing is invalid or proxy cannot reach a spoke."""
-    if attempt_count > max_retries:
-        return False
-    site = (edge_site_id or "").strip()
-    if site in ("", "unknown"):
-        return False
-    lowered = (error or "").lower()
-    if "/unknown/" in lowered or "no agent available" in lowered:
-        return False
-    return True

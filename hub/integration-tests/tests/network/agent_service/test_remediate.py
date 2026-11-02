@@ -27,12 +27,9 @@ INCIDENT_STATE_FIELDS = {
     "recent_errors",
     "slack_thread_ts",
     "servicenow_ticket",
-    "langfuse_trace_id",
     "fast_path_actuation",
     "total_duration_ms",
     "error_message",
-    "failed_attempts",
-    "should_retry",
 }
 
 
