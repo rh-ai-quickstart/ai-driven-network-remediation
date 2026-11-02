@@ -407,6 +407,7 @@ class TestLightspeedNodeSuccess:
         rr = result["remediation_result"]
         assert rr.success is False
         assert "validation" in rr.output_summary
+        assert "balanced quotes" in rr.output_summary
         assert als_mock.await_count == 2
         invoke_mock.assert_not_called()
 
@@ -503,10 +504,22 @@ class TestAAPExecution:
 
         rr = result["remediation_result"]
         assert rr.success is False
+        assert "commit_playbook" in rr.output_summary
+        assert "gitea unreachable" in rr.output_summary
         tool_names = [c[0][0] for c in invoke_mock.call_args_list]
         assert "sync_project" not in tool_names
         assert "upsert_job_template" not in tool_names
         assert "launch_job" not in tool_names
+
+    async def test_commit_failure_without_error_reports_failed_step(self):
+        async def commit_fails(tool_name, kwargs):
+            if tool_name == "commit_playbook":
+                return {"success": False}
+            return await _default_invoke(tool_name, kwargs)
+
+        result, _, _ = await _run_node(als_return=_ALS_RESPONSE, invoke_fn=commit_fails)
+
+        assert result["remediation_result"].output_summary == "commit_playbook failed"
 
     async def test_sync_failure_skips_remaining_steps(self):
         async def sync_fails(tool_name, kwargs):
@@ -858,6 +871,7 @@ class TestLightspeedNodeFailure:
         assert rr.job_id == ""
         assert rr.generated_playbook_name is None
         assert result["decision"] == "lightspeed"
+        assert str(exc) in rr.output_summary
         invoke_mock.assert_not_called()
 
 
@@ -913,6 +927,8 @@ class TestPlaybookStorage:
         rr = result["remediation_result"]
         assert rr.success is True
         assert rr.timed_out is False
+        assert rr.tool_used == "aap"
+        assert rr.action_taken == rr.generated_playbook_name
         assert "get_job_status" in [c[0][0] for c in invoke_mock.call_args_list]
         store_mock.assert_called_once()
 
@@ -937,6 +953,9 @@ class TestPlaybookStorage:
 
         rr = result["remediation_result"]
         assert rr.success is False
+        assert rr.tool_used == "aap"
+        assert rr.action_taken == rr.generated_playbook_name
+        assert rr.job_id == "42"
         assert "fatal: task failed" in rr.output_summary
         store_mock.assert_not_called()
         state = IncidentState(raw_event="x", remediation_result=rr)
