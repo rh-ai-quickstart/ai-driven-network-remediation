@@ -880,6 +880,8 @@ RAN_ML_TEST_URL  = $(if $(ADNR_DETECT_INFERENCE_URL),$(shell printf '%s' '$(ADNR
 # remain optional for local runs without a predictor. Override this explicitly
 # with RAN_ML_SERVICE_REQUIRED=true/false when using a local port-forward.
 RAN_ML_SERVICE_REQUIRED ?= $(if $(strip $(ADNR_DETECT_INFERENCE_URL)),true,false)
+RCA_REAL_E2E ?= $(if $(strip $(ADNR_CLASSIFY_INFERENCE_URL)),1,0)
+RCA_EVIDENCE_FILE ?= /tmp/rca-integration-evidence.json
 
 .PHONY: build-ran-anomaly-image
 build-ran-anomaly-image:
@@ -1135,14 +1137,21 @@ telco-integration-tests:
 	PF_RAN_CHATBOT_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-anomaly-detector 8002:8002 & \
 	PF_RAN_ANOMALY_PID=$$!; \
+	PF_RAN_RCA_PID=""; PF_RAN_REMEDIATION_PID=""; \
+	if [ "$(RCA_REAL_E2E)" = "1" ]; then \
+	  oc port-forward -n $(NAMESPACE) svc/hub-ran-rca-service 8013:8003 & \
+	  PF_RAN_RCA_PID=$$!; \
+	  oc port-forward -n $(NAMESPACE) svc/hub-ran-remediation-service 8014:8004 & \
+	  PF_RAN_REMEDIATION_PID=$$!; \
+	fi; \
 	PF_RAN_ML_PID=""; \
 	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ] && [ "$(RAN_ML_SERVICE_REQUIRED)" = "true" ]; then \
 	  oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
 	  PF_RAN_ML_PID=$$!; \
 	fi; \
-	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ANOMALY_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
+	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ANOMALY_PID $$PF_RAN_RCA_PID $$PF_RAN_REMEDIATION_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' RCA_E2E_EXPECT_CLASSIFIER=$(if $(ADNR_CLASSIFY_INFERENCE_URL),true,false) ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
+	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' RCA_E2E_EXPECT_CLASSIFIER=$(if $(ADNR_CLASSIFY_INFERENCE_URL),true,false) RCA_REAL_E2E='$(RCA_REAL_E2E)' RCA_EXPECTED_CLASSIFY_URL='$(ADNR_CLASSIFY_INFERENCE_URL)' RCA_EXPECTED_CLASSIFY_TOKEN='$(ADNR_CLASSIFY_TOKEN)' RCA_DEPLOYMENT_NAMESPACE='$(NAMESPACE)' RCA_EVIDENCE_FILE='$(RCA_EVIDENCE_FILE)' RAN_RCA_SERVICE_URL=http://localhost:8013 RAN_REMEDIATION_SERVICE_URL=http://localhost:8014 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
 
 .PHONY: integration-tests
 integration-tests:

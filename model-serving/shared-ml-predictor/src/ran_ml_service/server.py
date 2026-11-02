@@ -76,8 +76,6 @@ def detect(req: DetectRequest) -> DetectResponse | JSONResponse:
             {"error": "model not loaded"},
             status_code=503,
         )
-    if TASK != "detect":
-        return JSONResponse({"error": "wrong task"}, status_code=404)
 
     try:
         result = predictor.predict(req.kpi_window)

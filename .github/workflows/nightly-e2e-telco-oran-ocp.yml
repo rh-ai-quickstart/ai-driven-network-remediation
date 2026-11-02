@@ -170,26 +170,3 @@ jobs:
         shell: bash
         run: |
           make telco-integration-tests
-
-      - name: Probe RCA classification through remediation and chat
-        shell: bash
-        env:
-          RCA_REAL_E2E: '1'
-          RCA_EXPECTED_MODE: used
-          RCA_GUIDANCE_THRESHOLD: '0.6'
-          RCA_DEPLOYMENT_NAMESPACE: ci-hub-telco-oran
-          RCA_EXPECTED_CLASSIFY_URL: http://ran-rca-ml-service-predictor.model-serving.svc.cluster.local/v1/classify
-          RAN_RCA_SERVICE_URL: http://localhost:8013
-          RAN_REMEDIATION_SERVICE_URL: http://localhost:8014
-          RAN_CHATBOT_SERVICE_URL: http://localhost:8008
-        run: |
-          oc port-forward -n "${NAMESPACE}" svc/hub-ran-rca-service 8013:8003 &
-          rca_pid=$!
-          oc port-forward -n "${NAMESPACE}" svc/hub-ran-remediation-service 8014:8004 &
-          remediation_pid=$!
-          oc port-forward -n "${NAMESPACE}" svc/hub-ran-chatbot-service 8008:8003 &
-          chatbot_pid=$!
-          trap 'kill "$rca_pid" "$remediation_pid" "$chatbot_pid" 2>/dev/null || true' EXIT
-          export RCA_EVIDENCE_FILE="${RUNNER_TEMP}/rca-nightly-evidence.json"
-          cd hub/integration-tests
-          uv run pytest tests/telco/test_rca_real_e2e.py -v

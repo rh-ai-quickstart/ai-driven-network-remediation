@@ -7,8 +7,12 @@ integration and live incident probe after the classifier refresh.
 ## Full incident probe after refresh
 
 Keep `ADNR_DETECT_INFERENCE_URL` and `ADNR_CLASSIFY_INFERENCE_URL` configured
-in the hub release. Port-forward the chatbot, RCA, and remediation Services,
-then run the dedicated integration test with:
+in the hub release. `make telco-integration-tests` runs this probe when
+`ADNR_CLASSIFY_INFERENCE_URL` is configured. It opens the RCA and remediation
+port-forwards and passes the deployed classifier URL, token, namespace, and
+evidence path to the test. For the manual failure and recovery sequence or a
+specific fixture, port-forward the chatbot, RCA, and remediation Services and
+run the dedicated test with:
 
 ```sh
 RCA_REAL_E2E=1 RCA_FIXTURE_SCENARIO=co_channel_interference_severe \
