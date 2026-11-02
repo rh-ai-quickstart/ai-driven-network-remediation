@@ -82,14 +82,6 @@ runs:
         sed -i "s|https://127.0.0.1:[0-9]*|https://${CP_IP}:6443|g" /tmp/edge-kubeconfig
       shell: bash
 
-    - name: Build and push AAP mock image
-      run: make build-push-aap-mock REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
-      shell: bash
-
-    - name: Build and push ServiceNow mock image
-      run: make build-push-servicenow-mock REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
-      shell: bash
-
     - name: Pre-load LlamaStack image into Kind
       run: |
         docker pull ogxai/distribution-starter:0.6.1

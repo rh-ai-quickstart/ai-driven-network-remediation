@@ -205,7 +205,7 @@ CPU_DEMO_IMAGES := $(addprefix $(REGISTRY)/,showcase-client:$(VERSION) showcase-
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),$(AAP_MOCK_IMG)) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),$(SERVICENOW_MOCK_IMG)) \
+	$(if $(and $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(filter true,$(ENABLE_SERVICENOW_MOCK))),$(SERVICENOW_MOCK_IMG)) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(MCP_IMAGES) $(NETWORK_IMAGES) $(EDGE_IMAGES)) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES)) \
 	$(if $(filter true,$(ENABLE_CPU_DEMO)),$(CPU_DEMO_IMAGES))
@@ -843,7 +843,7 @@ edge-rbac-teardown:
 .PHONY: build-all-images
 build-all-images: build-ingestion-image \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),build-aap-mock-image) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),build-servicenow-mock-image) \
+	$(if $(and $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(filter true,$(ENABLE_SERVICENOW_MOCK))),build-servicenow-mock-image) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image) \
 	$(if $(filter true,$(ENABLE_CPU_DEMO)),cpu-demo-build-images)
