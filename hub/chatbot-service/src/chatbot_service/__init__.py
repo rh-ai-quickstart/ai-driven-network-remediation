@@ -20,6 +20,7 @@ import socket
 import time
 from typing import Any
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -31,11 +32,14 @@ from .chat import build_chat_context, call_model, format_chat_reply
 from .config import (
     APP_VERSION,
     CORS_ORIGINS,
+    CPU_DEMO_SITE_B,
     DEMO_TOPIC,
+    EDGE_NAMESPACE,
     EDGE_SITE_ID,
     INTEGRATION_TARGETS,
     INTEGRATIONS_CACHE_TTL,
     KAFKA_BOOTSTRAP,
+    MCP_OPENSHIFT_URL,
     MODEL_NAME,
     SERVICENOW_URL,
     SSL_VERIFY,
@@ -191,12 +195,41 @@ async def integrations_endpoint(force_refresh: bool = False) -> dict:
     return await get_integrations(force_refresh=force_refresh)
 
 
+DEMO_RESET_TIMEOUT_SECONDS = 150
+
+
+@app.post("/api/demo/reset")
+async def reset_demo() -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=DEMO_RESET_TIMEOUT_SECONDS, verify=SSL_VERIFY) as client:
+            response = await client.post(
+                f"{MCP_OPENSHIFT_URL}/demo/reset",
+                json={"namespace": EDGE_NAMESPACE, "edge_site_id": CPU_DEMO_SITE_B},
+            )
+            response.raise_for_status()
+            if response.json().get("success") is not True:
+                raise ValueError("Workload reset failed")
+    except (httpx.HTTPError, ValueError):
+        logger.exception("Failed to reset Lightspeed demo")
+        return JSONResponse(
+            status_code=502, content={"message": "Demo reset failed; check the OpenShift service logs."}
+        )
+    return {
+        "status": "reset",
+        "site": CPU_DEMO_SITE_B,
+        "namespace": EDGE_NAMESPACE,
+        "workload": "microservice-b",
+        "message": "Initial CPU settings restored; demo is ready.",
+    }
+
+
 @app.post("/api/demo/trigger")
 async def trigger_demo(req: DemoTriggerRequest) -> dict:
     from uuid import uuid4
 
     incident_id = str(uuid4())
     event = build_demo_event(req.scenario, req.site, incident_id)
+    target_site = event["labels"]["edge_site_id"]
     try:
         offset = await asyncio.to_thread(publish_demo_event, event)
     except Exception as exc:
@@ -209,7 +242,7 @@ async def trigger_demo(req: DemoTriggerRequest) -> dict:
                 "error": str(exc),
                 "incident_id": incident_id,
                 "scenario": req.scenario,
-                "site": req.site,
+                "site": target_site,
             },
         )
 
@@ -220,7 +253,7 @@ async def trigger_demo(req: DemoTriggerRequest) -> dict:
         "status": "queued",
         "incident_id": incident_id,
         "scenario": scenario,
-        "site": req.site,
+        "site": target_site,
         "topic": DEMO_TOPIC,
         "kafka_offset": offset,
         "event_message": event["message"],

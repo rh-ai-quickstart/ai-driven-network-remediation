@@ -60,6 +60,10 @@ def normalize_incident_record(payload: dict[str, Any]) -> dict[str, Any]:
         "remediation_success": remediation_success,
         "servicenow_ticket": servicenow_ticket,
         "aap_job_id": aap_job_id,
+        "lightspeed_conversation_id": str(
+            event.get("lightspeed_conversation_id") or payload.get("lightspeed_conversation_id") or ""
+        ),
+        "remediation_summary": str(event.get("remediation_summary") or payload.get("remediation_summary") or ""),
         "edge_site_id": edge_site,
         "ai_confidence": confidence,
         "total_duration_ms": duration_ms,
@@ -177,9 +181,11 @@ def build_incident_movie(
                 "incident_id": str(rec.get("incident_id", "n/a")),
                 "title": f"{rec.get('failure_type', 'unknown')} on {rec.get('edge_site_id', 'edge-site-01')}",
                 "stage": stage,
-                "summary": f"Action: {action} · Result: {'success' if success else 'failed'}",
+                "summary": rec.get("remediation_summary")
+                or f"Action: {action} · Result: {'success' if success else 'failed'}",
                 "artifacts": {
                     "aap_job_id": rec.get("aap_job_id") or None,
+                    "lightspeed_conversation_id": rec.get("lightspeed_conversation_id") or None,
                     "servicenow_ticket": servicenow_ticket or None,
                 },
             }

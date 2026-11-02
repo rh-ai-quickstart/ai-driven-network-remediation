@@ -290,3 +290,40 @@ class TestAuditNode:
         result = audit_node(state)
 
         assert result == {"total_duration_ms": 1200.0}
+
+
+def test_cpu_generation_failure_preserves_diagnosis_and_conversation():
+    state = IncidentState(
+        raw_event="{}",
+        root_cause_analysis=_RCA.model_copy(update={"failure_type": "CPUThrottling"}),
+        remediation_result=_REMEDIATION_FAILED.model_copy(
+            update={
+                "tool_used": "lightspeed",
+                "action_taken": "generate-playbook",
+                "lightspeed_conversation_id": "conv-123",
+                "output_summary": "Generated playbook failed validation: Invalid YAML",
+            }
+        ),
+    )
+    payload = build_audit_payload(state)
+    assert payload["failure_type"] == "CPUThrottling"
+    assert payload["lightspeed_conversation_id"] == "conv-123"
+    assert "failed validation" in payload["remediation_summary"]
+    assert "aap_job_id" not in payload
+    _assert_valid_schema(payload)
+
+
+def test_lightspeed_execution_preserves_both_identifiers():
+    state = IncidentState(
+        raw_event="{}",
+        remediation_result=_REMEDIATION.model_copy(
+            update={
+                "tool_used": "lightspeed",
+                "lightspeed_conversation_id": "conv-123",
+            }
+        ),
+    )
+    payload = build_audit_payload(state)
+    assert payload["aap_job_id"] == "101"
+    assert payload["lightspeed_conversation_id"] == "conv-123"
+    _assert_valid_schema(payload)

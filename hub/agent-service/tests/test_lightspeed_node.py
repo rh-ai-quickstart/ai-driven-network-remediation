@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -272,6 +273,22 @@ def test_prompt_with_llm_summary_overrides_fields():
     assert "manual review" not in prompt
 
 
+def test_prompt_uses_only_resource_stamped_summary_site():
+    log_event = make_log_event(edge_site_id="edge-site-01")
+    summary = {"edge_site_id": "edge-site-02"}
+
+    unstamped_prompt = _build_prompt(make_rca(), log_event, llm_summary=summary)
+    stamped_prompt = _build_prompt(
+        make_rca(),
+        log_event,
+        llm_summary=summary,
+        resource_specs="Edge site: edge-site-02\nPod: microservice-b",
+    )
+
+    assert "Edge site cluster: edge-site-01" in unstamped_prompt
+    assert "Edge site cluster: edge-site-02" in stamped_prompt
+
+
 def test_prompt_with_empty_llm_summary_uses_rca():
     prompt = _build_prompt(
         make_rca(summary="OOM kill"),
@@ -342,6 +359,7 @@ class TestLightspeedNodeSuccess:
         assert isinstance(rr, RemediationResult)
         assert rr.success is True
         assert rr.job_id == "42"
+        assert rr.lightspeed_conversation_id == "conv-123"
         assert rr.generated_playbook_name == "remediate-oomkilled-nginx-abc123"
         assert "hosts: all" in rr.generated_playbook_preview
         assert "```" not in rr.generated_playbook_preview
@@ -1511,6 +1529,7 @@ class TestGeneratedRestartValidation:
         invalid_body = _make_playbook(
             {
                 "method": "PATCH",
+                "headers": {"Authorization": "Bearer {{ token }}"},
                 "url": "https://api/apis/apps/v1/deployments/{{ deployment_name }}",
                 "body": '{"spec": {"replicas": 3}}}',
             }
@@ -1519,6 +1538,7 @@ class TestGeneratedRestartValidation:
         valid_body = _make_playbook(
             {
                 "method": "PATCH",
+                "headers": {"Authorization": "Bearer {{ token }}"},
                 "url": "https://api/apis/apps/v1/deployments/{{ deployment_name }}",
                 "body": {"spec": {"replicas": 3}},
             }
@@ -1529,7 +1549,14 @@ class TestGeneratedRestartValidation:
                 {"response": yaml.safe_dump(invalid_body)},
                 {
                     "response": yaml.safe_dump(
-                        valid_body if corrected else _make_playbook({"url": "https://api/api/v1/pods/app/exec"})
+                        valid_body
+                        if corrected
+                        else _make_playbook(
+                            {
+                                "headers": {"Authorization": "Bearer {{ token }}"},
+                                "url": "https://api/api/v1/pods/app/exec",
+                            }
+                        )
                     )
                 },
             ],
@@ -1551,6 +1578,7 @@ class TestGeneratedRestartValidation:
         generated_play = _make_playbook(
             {
                 "method": "GET",
+                "headers": {"Authorization": "Bearer {{ token }}"},
                 "url": "https://api/apis/apps/v1/deployments/{{ pod_name | regex_replace('-[^-]+$', '') }}",
             }
         )
@@ -1571,7 +1599,10 @@ class TestGeneratedRestartValidation:
     @pytest.mark.parametrize("deployment_expression", ["{{deployment_name}}", "{{ deployment_name }}"])
     def test_injected_deployment_target_is_allowed(self, deployment_expression):
         parsed = _make_playbook(
-            {"url": "{{ hub_url }}/{{ edge_site_id }}/apis/apps/v1/deployments/" + deployment_expression}
+            {
+                "headers": {"Authorization": "Bearer {{ token }}"},
+                "url": "{{ hub_url }}/{{ edge_site_id }}/apis/apps/v1/deployments/" + deployment_expression,
+            }
         )
         assert playbook_validation_error(parsed) == ""
 
@@ -1584,6 +1615,7 @@ class TestGeneratedRestartValidation:
                 _make_playbook(
                     {
                         "method": method,
+                        "headers": {"Authorization": "Bearer {{ token }}"},
                         "url": "https://api/api/v1/namespaces/test/pods/{{ pod_name }}/exec" + query,
                     }
                 )
@@ -1608,6 +1640,7 @@ class TestGeneratedRestartValidation:
                     {
                         "uri": {
                             "method": "PATCH",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
                             "url": "https://api/apis/apps/v1/deployments/{{ deployment_name }}",
                             "body": {
                                 "spec": {
@@ -1619,7 +1652,11 @@ class TestGeneratedRestartValidation:
                         }
                     },
                     {
-                        "uri": {"url": "https://api/api/v1/pods/{{ pod_name }}", "method": method},
+                        "uri": {
+                            "headers": {"Authorization": "Bearer {{ token }}"},
+                            "url": "https://api/api/v1/pods/{{ pod_name }}",
+                            "method": method,
+                        },
                         **({"until": "pod.status == 'Running'"} if poll else {}),
                     },
                 ],
@@ -1647,6 +1684,7 @@ class TestGeneratedRestartValidation:
         restart_play = _make_playbook(
             {
                 "method": "PATCH",
+                "headers": {"Authorization": "Bearer {{ token }}"},
                 "url": "https://api/apis/apps/v1/deployments/{{ deployment_name }}",
                 "body": timestamp_body,
             }
@@ -1656,7 +1694,14 @@ class TestGeneratedRestartValidation:
             '{"spec": {"template": {"metadata": {"annotations": '
             '{"kubectl.kubernetes.io/restartedAt": "{{ ansible_date_time.iso8601 }}"}}}}}}'
         )
-        restart_play[0]["tasks"].append({"uri": {"url": "https://api/api/v1/pods/{{ pod_name }}"}})
+        restart_play[0]["tasks"].append(
+            {
+                "uri": {
+                    "headers": {"Authorization": "Bearer {{ token }}"},
+                    "url": "https://api/api/v1/pods/{{ pod_name }}",
+                }
+            }
+        )
         invalid_response = {"response": yaml.safe_dump(restart_play)}
         node_result, als_mock, invoke_mock = await _run_node(
             als_side_effect=[invalid_response, valid_response if corrected else invalid_response],
@@ -1689,6 +1734,7 @@ class TestGeneratedRestartValidation:
                         "name": "Restart the edge-nginx Deployment",
                         "uri": {
                             "method": "PATCH",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
                             "url": "https://api/apis/apps/v1/namespaces/ns/deployments/{{ deployment_name }}",
                             "body": {
                                 "spec": {
@@ -1701,11 +1747,19 @@ class TestGeneratedRestartValidation:
                     },
                     {
                         "name": "Clear DNS cache in the nginx container",
-                        "uri": {"method": "GET", "url": "https://api/api/v1/namespaces/ns/pods"},
+                        "uri": {
+                            "method": "GET",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
+                            "url": "https://api/api/v1/namespaces/ns/pods",
+                        },
                     },
                     {
                         "name": "Exec into the pod to clear dns cache",
-                        "uri": {"method": "POST", "url": "https://api/api/v1/namespaces/ns/pods/{{ item }}/exec"},
+                        "uri": {
+                            "method": "POST",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
+                            "url": "https://api/api/v1/namespaces/ns/pods/{{ item }}/exec",
+                        },
                         "with_items": "{{ pod_list.json.items | map(attribute='metadata.name') | list }}",
                     },
                 ],
@@ -1732,6 +1786,7 @@ class TestGeneratedRestartValidation:
                     {
                         "uri": {
                             "method": "PATCH",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
                             "url": "https://api/apis/apps/v1/deployments/{{ deployment_name }}",
                             "body": {
                                 "spec": {
@@ -1742,7 +1797,13 @@ class TestGeneratedRestartValidation:
                             },
                         }
                     },
-                    {"uri": {"method": "POST", "url": "https://api/api/v1/pods/{{ pod_name }}/exec"}},
+                    {
+                        "uri": {
+                            "method": "POST",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
+                            "url": "https://api/api/v1/pods/{{ pod_name }}/exec",
+                        }
+                    },
                 ],
             }
         ]
@@ -1755,7 +1816,15 @@ class TestGeneratedRestartValidation:
         play = [
             {
                 "hosts": "localhost",
-                "tasks": [{"uri": {"method": "POST", "url": "https://api/api/v1/pods/{{ pod_name }}/exec"}}],
+                "tasks": [
+                    {
+                        "uri": {
+                            "method": "POST",
+                            "headers": {"Authorization": "Bearer {{ token }}"},
+                            "url": "https://api/api/v1/pods/{{ pod_name }}/exec",
+                        }
+                    }
+                ],
             }
         ]
         sanitized = sanitize_playbook(play)
@@ -1779,6 +1848,7 @@ class TestGeneratedRestartValidation:
         parsed = _make_playbook(
             {
                 "method": "PATCH",
+                "headers": {"Authorization": "Bearer {{ token }}"},
                 "url": "https://api/apis/apps/v1/deployments/{{ deployment_name }}",
                 "body": {
                     "spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": "now"}}}}
@@ -1786,7 +1856,14 @@ class TestGeneratedRestartValidation:
             }
         )
         parsed[0]["pre_tasks"] = parsed[0].pop("tasks")
-        parsed[0][section] = [{"uri": {"url": "https://api/api/v1/pods/{{ pod_name }}"}}]
+        parsed[0][section] = [
+            {
+                "uri": {
+                    "headers": {"Authorization": "Bearer {{ token }}"},
+                    "url": "https://api/api/v1/pods/{{ pod_name }}",
+                }
+            }
+        ]
         assert "subsequent GET/assertion" in playbook_validation_error(parsed)
         parsed[0]["pre_tasks"], parsed[0][section] = parsed[0][section], parsed[0]["pre_tasks"]
         assert playbook_validation_error(parsed) == ""
@@ -1803,7 +1880,13 @@ class TestGeneratedRestartValidation:
             {
                 "hosts": "localhost",
                 "tasks": [
-                    {"uri": {"url": "https://api/api/v1/pods/app"}, "until": "pod.status == 'Running'"},
+                    {
+                        "uri": {
+                            "headers": {"Authorization": "Bearer {{ token }}"},
+                            "url": "https://api/api/v1/pods/app",
+                        },
+                        "until": "pod.status == 'Running'",
+                    },
                 ],
             }
         ]
@@ -2207,3 +2290,166 @@ async def test_generated_playbook_uses_scoped_aap_resources(monkeypatch):
     assert calls["upsert_job_template"]["template_name"] == template_name
     assert calls["launch_job"]["job_template_name"] == template_name
     assert outcome["remediation_result"].generated_template_name == template_name
+
+
+async def test_generation_validation_failure_has_no_aap_job():
+    node_result, _, invoke_mock = await _run_node(
+        als_return={"response": "not: [valid: yaml: {{", "conversation_id": "conv-invalid"}
+    )
+    remediation = node_result["remediation_result"]
+    assert not remediation.success
+    assert remediation.job_id == ""
+    assert remediation.lightspeed_conversation_id == "conv-invalid"
+    invoke_mock.assert_not_called()
+
+
+async def test_aap_monitoring_exception_preserves_launched_job_id():
+    with patch("agent_service.nodes.lightspeed.evaluate_job", side_effect=RuntimeError("monitor unavailable")):
+        node_result, _, _ = await _run_node(als_return=_ALS_RESPONSE)
+    remediation = node_result["remediation_result"]
+    assert not remediation.success
+    assert remediation.job_id == "42"
+    assert remediation.lightspeed_conversation_id == "conv-123"
+    assert "monitoring failed" in remediation.output_summary
+
+
+class TestKubernetesAuthentication:
+    @pytest.mark.parametrize(
+        "mode,base,token",
+        [
+            ("single-cluster", "{{ lookup('env', 'K8S_AUTH_HOST') }}", "K8S_AUTH_API_KEY"),
+            ("hub-spoke", "{{hub_url}}/{{ edge_site_id }}", "token_acm"),
+        ],
+    )
+    @pytest.mark.parametrize("headers", [None, {}, {"Authorization": ""}, {"authorization": "Bearer "}])
+    @pytest.mark.parametrize("section", ["tasks", "pre_tasks", "post_tasks", "handlers"])
+    def test_repairs_missing_auth_in_nested_tasks(self, monkeypatch, mode, base, token, headers, section):
+        monkeypatch.setattr("agent_service.playbook_sanitize.DEPLOYMENT_MODE", mode)
+        uri = {
+            "url": "{{ api_base }}/apis/apps/v1/deployments/{{ deployment_name }}",
+            "method": "PATCH",
+            "body": {"spec": {}},
+            "headers": headers,
+        }
+        play = {"vars": {"api_base": base}, section: [{"block": [{"uri": uri}]}]}
+        repaired = sanitize_playbook([play])
+        repaired_uri = list(_iter_uri_tasks(repaired[0]))[0][1]
+        assert token in repaired_uri["headers"]["Authorization"]
+        assert "authorization" not in repaired_uri["headers"]
+        assert playbook_validation_error(repaired) == ""
+
+    @pytest.mark.parametrize(
+        "headers", [None, {}, {"Authorization": ""}, {"Authorization": "Bearer "}, "{{ headers }}"]
+    )
+    async def test_unrepairable_auth_never_published_or_executed(self, headers):
+        play = _make_playbook({"url": "https://api/api/v1/pods", "headers": headers})
+        generated = {"response": yaml.safe_dump(play)}
+        node_result, als_mock, invoke_mock = await _run_node(als_side_effect=[generated, generated])
+        assert als_mock.await_count == 2
+        assert "Authorization" in als_mock.call_args.args[0]
+        assert node_result["remediation_result"].success is False
+        invoke_mock.assert_not_called()
+
+    async def test_missing_local_auth_corrected_before_publication(self, monkeypatch):
+        monkeypatch.setattr("agent_service.playbook_sanitize.DEPLOYMENT_MODE", "single-cluster")
+        play = _make_playbook(
+            {
+                "url": "{{ lookup('env', 'K8S_AUTH_HOST') }}/apis/apps/v1/deployments/{{ deployment_name }}",
+                "method": "PATCH",
+                "body": {"spec": {}},
+            }
+        )
+        node_result, als_mock, invoke_mock = await _run_node(als_side_effect=[{"response": yaml.safe_dump(play)}])
+        assert node_result["remediation_result"].success is True
+        assert als_mock.await_count == 1
+        committed = next(
+            call.args[1]["playbook_content"] for call in invoke_mock.call_args_list if call.args[0] == "commit_playbook"
+        )
+        assert "K8S_AUTH_API_KEY" in yaml.safe_load(committed)[0]["tasks"][0]["uri"]["headers"]["Authorization"]
+
+    def test_no_credentials_added_to_external_url(self):
+        play = _make_playbook({"url": "https://example.org/api/v1/pods"})
+        repaired = sanitize_playbook(play)
+        assert not repaired[0]["tasks"][0]["uri"].get("headers", {}).get("Authorization")
+        assert "Authorization" in playbook_validation_error(repaired)
+
+
+_ROLLOUT_FIXTURE = Path(__file__).parent / "fixtures" / "lightspeed_invalid_rollout.yaml"
+
+
+class TestDeploymentRolloutChecks:
+    async def test_job_1001_repaired_before_publication_and_launch(self):
+        generated = {"response": _ROLLOUT_FIXTURE.read_text()}
+        node_result, als_mock, invoke_mock = await _run_node(als_return=generated)
+        assert node_result["remediation_result"].success is True
+        assert als_mock.await_count == 1
+        committed = next(
+            call.args[1]["playbook_content"] for call in invoke_mock.call_args_list if call.args[0] == "commit_playbook"
+        )
+        poll = yaml.safe_load(committed)[0]["tasks"][1]
+        assert (
+            poll["until"][0]
+            == "(deployment_status.json.status.observedGeneration | default(0)) == deployment_status.json.metadata.generation"
+        )
+        for field in ("updatedReplicas", "readyReplicas", "availableReplicas"):
+            assert (
+                f"(deployment_status.json.status.{field} | default(0)) == deployment_status.json.spec.replicas"
+                in poll["until"]
+            )
+        assert poll["retries"] == 10
+        assert poll["delay"] == 10
+        assert any(call.args[0] == "launch_job" for call in invoke_mock.call_args_list)
+
+    @pytest.mark.parametrize("section", ["tasks", "pre_tasks", "post_tasks", "handlers"])
+    @pytest.mark.parametrize("block", ["block", "rescue", "always"])
+    def test_nested_poll_and_string_condition(self, section, block):
+        poll = yaml.safe_load(_ROLLOUT_FIXTURE.read_text())[0]["tasks"][1]
+        poll["register"] = "rollout_check"
+        poll["until"] = poll["until"][0].replace("deployment_status", "rollout_check")
+        parsed = sanitize_playbook([{section: [{block: [poll]}]}])
+        repaired_poll = list(_iter_uri_tasks(parsed[0]))[0][0]
+        assert "rollout_check.json.status.observedGeneration | default(0)" in repaired_poll["until"]
+        assert not playbook_validation_error(parsed)
+
+    @pytest.mark.parametrize(
+        "method,url",
+        [
+            ("PATCH", "https://api/apis/apps/v1/deployments/{{ deployment_name }}"),
+            ("GET", "https://example.test/status"),
+            ("GET", "https://api/api/v1/pods/app"),
+        ],
+    )
+    def test_other_requests_are_not_rewritten(self, method, url):
+        poll = yaml.safe_load(_ROLLOUT_FIXTURE.read_text())[0]["tasks"][1]
+        poll["uri"].update(method=method, url=url)
+        conditions = poll["until"].copy()
+        assert sanitize_playbook([{"tasks": [poll]}])[0]["tasks"][0]["until"] == conditions
+
+    def test_valid_guarded_conditions_preserved_and_repair_is_idempotent(self):
+        repaired = sanitize_playbook(yaml.safe_load(_ROLLOUT_FIXTURE.read_text()))
+        conditions = repaired[0]["tasks"][1]["until"].copy()
+        assert sanitize_playbook(repaired)[0]["tasks"][1]["until"] == conditions
+        assert "deployment_status.json.metadata.generation" in conditions[0]
+        assert not playbook_validation_error(repaired)
+
+    @pytest.mark.parametrize("defined_test", ["is defined", "is not defined"])
+    def test_explicit_defined_guards_keep_their_meaning(self, defined_test):
+        play = yaml.safe_load(_ROLLOUT_FIXTURE.read_text())
+        field = "deployment_status.json.status.readyReplicas"
+        guard = f"{field} {defined_test}"
+        play[0]["tasks"][1]["until"] = [guard, f"{field} == deployment_status.json.spec.replicas"]
+        conditions = sanitize_playbook(play)[0]["tasks"][1]["until"]
+        assert conditions == [guard, f"({field} | default(0)) == deployment_status.json.spec.replicas"]
+
+    @pytest.mark.parametrize("invalid_path", ["json.status.generation", "json.spec.generation", "json.generation"])
+    async def test_unresolved_rollout_check_is_not_executed(self, invalid_path):
+        play = yaml.safe_load(_ROLLOUT_FIXTURE.read_text())
+        poll = play[0]["tasks"][1]
+        poll["register"] = "different_result"
+        poll["until"] = f"deployment_status.{invalid_path} == deployment_status.json.metadata.generation"
+        generated = {"response": yaml.safe_dump(play)}
+        node_result, als_mock, invoke_mock = await _run_node(als_side_effect=[generated, generated])
+        assert node_result["remediation_result"].success is False
+        assert als_mock.await_count == 2
+        assert "Invalid Deployment rollout generation check" in als_mock.call_args.args[0]
+        invoke_mock.assert_not_called()

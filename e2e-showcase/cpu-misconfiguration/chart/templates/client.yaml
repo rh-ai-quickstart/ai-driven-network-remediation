@@ -1,0 +1,48 @@
+{{- if .Values.client.enabled }}
+{{- $registry := required "showcaseImage.registry is required (set REGISTRY)" .Values.showcaseImage.registry }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.client.name }}
+  labels:
+    {{- include "cpu-misconfiguration.labels" . | nindent 4 }}
+    app: {{ .Values.client.name }}
+spec:
+  replicas: {{ .Values.client.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.client.name }}
+      {{- include "cpu-misconfiguration.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.client.name }}
+        {{- include "cpu-misconfiguration.selectorLabels" . | nindent 8 }}
+        adnr.io/site-id: {{ required "siteId is required (e.g. edge-01)" .Values.siteId | quote }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ .Values.client.name }}
+          image: "{{ $registry }}/{{ .Values.client.image.name }}:{{ .Values.showcaseImage.tag }}"
+          imagePullPolicy: {{ .Values.showcaseImage.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: MICROSERVICE_A_URL
+              value: {{ .Values.client.env.microserviceAUrl | quote }}
+            - name: REQUEST_RATE
+              value: {{ .Values.client.env.requestRate | quote }}
+            - name: PRIME_N
+              value: {{ .Values.client.env.primeN | quote }}
+          resources:
+            {{- toYaml .Values.client.resources | nindent 12 }}
+{{- end }}

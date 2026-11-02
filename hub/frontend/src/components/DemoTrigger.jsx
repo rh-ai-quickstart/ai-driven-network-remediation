@@ -5,36 +5,39 @@ const SCENARIOS = [
   { id: "oom", label: "Trigger OOM Demo" },
   { id: "lightspeed", label: "Trigger Lightspeed Demo" },
   { id: "escalation", label: "Trigger Escalation Demo" },
+  { id: "cpu-misconfiguration", label: "Trigger CPU Misconfiguration Demo" },
 ];
+const CPU_DEMO_SCENARIO = "cpu-misconfiguration";
+const CPU_DEMO_SUMMARY =
+  "microservice-a request queue is backing up; incident investigation is queued.";
 
 export function DemoTrigger({ baseUrl }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
 
-  async function trigger(scenario) {
+  async function trigger(scenario, reset = false) {
     setLoading(true);
     setError("");
     setResult(null);
     try {
-      const url = baseUrl
-        ? `${baseUrl}/api/demo/trigger`
-        : "/api/demo/trigger";
+      const action = reset ? "reset" : "trigger";
+      const url = `${baseUrl || ""}/api/demo/${action}`;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario }),
+        body: reset ? undefined : JSON.stringify({ scenario }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(
-          body.detail || body.message || `Demo trigger failed (${res.status})`
+          body.detail || body.message || `Demo request failed (${res.status})`
         );
       }
       const data = await res.json();
       setResult(data);
     } catch (err) {
-      setError(err.message || "Demo trigger failed");
+      setError(err.message || "Demo request failed");
     } finally {
       setLoading(false);
     }
@@ -57,9 +60,13 @@ export function DemoTrigger({ baseUrl }) {
             {s.label}
           </button>
         ))}
+        <button disabled={loading} onClick={() => trigger(null, true)}>
+          Reset Lightspeed Demo
+        </button>
       </div>
       {error && <p className="demo-error">{error}</p>}
-      {result && (
+      {result?.status === "reset" && <p role="status">{result.message}</p>}
+      {result && result.status !== "reset" && (
         <div className="demo-result">
           <p>
             <strong>Incident ID:</strong>{" "}
@@ -76,7 +83,10 @@ export function DemoTrigger({ baseUrl }) {
           </p>
           {result.event_message && (
             <p>
-              <strong>Event:</strong> {result.event_message}
+              <strong>{result.scenario === CPU_DEMO_SCENARIO ? "Summary:" : "Event:"}</strong>{" "}
+              {result.scenario === CPU_DEMO_SCENARIO
+                ? CPU_DEMO_SUMMARY
+                : result.event_message}
             </p>
           )}
         </div>

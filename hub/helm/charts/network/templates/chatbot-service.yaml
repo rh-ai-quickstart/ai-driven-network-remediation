@@ -1,4 +1,14 @@
 {{- if .Values.chatbotService.enabled }}
+{{- $defaultCpuDemoSiteA := .Values.chatbotService.env.edgeSiteId -}}
+{{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 0) -}}
+{{- $defaultCpuDemoSiteA = index (index .Values.topology.spokes 0) "siteId" -}}
+{{- end -}}
+{{- $cpuDemoSiteA := .Values.chatbotService.env.cpuDemoSiteA | default $defaultCpuDemoSiteA -}}
+{{- $defaultCpuDemoSiteB := $cpuDemoSiteA -}}
+{{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 1) -}}
+{{- $defaultCpuDemoSiteB = index (index .Values.topology.spokes 1) "siteId" -}}
+{{- end -}}
+{{- $cpuDemoSiteB := .Values.chatbotService.env.cpuDemoSiteB | default $defaultCpuDemoSiteB -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,6 +61,10 @@ spec:
               value: {{ .Values.chatbotService.env.edgeSiteId | quote }}
             - name: DEMO_WORKLOAD
               value: {{ .Values.chatbotService.env.demoWorkload | quote }}
+            - name: CPU_DEMO_SITE_A
+              value: {{ $cpuDemoSiteA | quote }}
+            - name: CPU_DEMO_SITE_B
+              value: {{ $cpuDemoSiteB | quote }}
             - name: DEMO_TOPIC
               value: {{ .Values.chatbotService.env.demoTopic | quote }}
             - name: AUDIT_TOPIC

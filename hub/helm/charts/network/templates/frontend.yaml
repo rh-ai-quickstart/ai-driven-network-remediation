@@ -85,6 +85,8 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
+  annotations:
+    haproxy.router.openshift.io/timeout: 180s
   name: {{ include "network.fullname" . }}-frontend
   labels:
     {{- include "network.labels" . | nindent 4 }}

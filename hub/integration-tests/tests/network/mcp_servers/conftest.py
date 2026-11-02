@@ -127,7 +127,8 @@ def _make_client(name: str) -> httpx.Client:
     return httpx.Client(
         base_url=svc.base_url,
         timeout=svc.timeout,
-        limits=httpx.Limits(keepalive_expiry=5),
+        # Idle port-forwarded connections might close; use a fresh connection per request.
+        limits=httpx.Limits(max_keepalive_connections=0),
     )
 
 

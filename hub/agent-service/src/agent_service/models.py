@@ -16,6 +16,7 @@ FailureType = Literal[
     "KafkaLag",
     "PostgresConnPool",
     "AAPJobFailure",
+    "CPUThrottling",  # CPU misconfiguration demo.
     "Unknown",
 ]
 
@@ -58,6 +59,7 @@ class RemediationResult(BaseModel):
     output_summary: str
     timestamp: str
     timed_out: bool = False
+    lightspeed_conversation_id: Optional[str] = None
     generated_template_name: Optional[str] = None
     generated_template_id: Optional[str] = None
     generated_playbook_name: Optional[str] = None
