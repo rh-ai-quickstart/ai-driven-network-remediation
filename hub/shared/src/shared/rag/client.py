@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import time
 
-from llama_stack_client import AsyncLlamaStackClient
+from llama_stack_client import AsyncLlamaStackClient, BadRequestError
 from loguru import logger
 
 _NEGATIVE_CACHE_TTL_SECONDS = 300.0
+
+
+def _store_id_not_found(error: BadRequestError, store_id: str) -> bool:
+    body = error.body
+    if not isinstance(body, dict):
+        return False
+    detail = body.get("error")
+    return isinstance(detail, dict) and detail.get("message") == f"Vector_store '{store_id}' not found"
 
 
 class RagClient:
@@ -30,12 +38,20 @@ class RagClient:
         if vs_id is None:
             return []
 
-        response = await self._client.vector_stores.search(
-            vs_id,
-            query=query,
-            max_num_results=max_num_results,
-            ranking_options={"score_threshold": score_threshold},
-        )
+        search_options = {
+            "query": query,
+            "max_num_results": max_num_results,
+            "ranking_options": {"score_threshold": score_threshold},
+        }
+        try:
+            response = await self._client.vector_stores.search(vs_id, **search_options)
+        except BadRequestError as error:
+            if not _store_id_not_found(error, vs_id):
+                raise
+            vs_id = await self._refresh_stale_store_id(vs_id)
+            if vs_id is None:
+                return []
+            response = await self._client.vector_stores.search(vs_id, **search_options)
         return [content.text for item in response.data for content in item.content]
 
     async def upload_file(
@@ -55,17 +71,32 @@ class RagClient:
             file=(filename, content, mime_type),
             purpose="assistants",
         )
-        await self._client.vector_stores.files.create(
-            vs_id,
-            file_id=created_file.id,
-            chunking_strategy={
+        attach_options = {
+            "file_id": created_file.id,
+            "chunking_strategy": {
                 "type": "static",
                 "static": {
                     "max_chunk_size_tokens": chunk_size_tokens,
                     "chunk_overlap_tokens": chunk_overlap_tokens,
                 },
             },
-        )
+        }
+        try:
+            await self._client.vector_stores.files.create(vs_id, **attach_options)
+        except BadRequestError as error:
+            if not _store_id_not_found(error, vs_id):
+                raise
+            vs_id = await self._refresh_stale_store_id(vs_id)
+            if vs_id is None:
+                return
+            await self._client.vector_stores.files.create(vs_id, **attach_options)
+
+    async def _refresh_stale_store_id(self, stale_id: str) -> str | None:
+        if self._vector_store_id == stale_id:
+            logger.info("Cached vector store '{}' was deleted; resolving again", self._vector_store_name)
+            self._vector_store_id = None
+            self._negative_cache_until = 0.0
+        return await self._resolve_vector_store_id()
 
     async def _resolve_vector_store_id(self) -> str | None:
         if self._vector_store_id is not None:
