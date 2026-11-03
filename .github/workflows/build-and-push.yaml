@@ -92,13 +92,3 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: make push-all-images
-
-      - name: Build and push AAP mock image
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: make build-push-aap-mock
-
-      - name: Build and push ServiceNow mock image
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: make build-push-servicenow-mock
