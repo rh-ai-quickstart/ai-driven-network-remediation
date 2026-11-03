@@ -25,7 +25,9 @@ def _route_after_decide(state: IncidentState) -> str:
 
 
 def _route_after_act(state: IncidentState) -> str:
-    return "decide" if state.should_retry else "notify"
+    if state.remediation_result and state.remediation_result.success:
+        return "servicenow_close"
+    return "escalate"
 
 
 def _route_after_lightspeed(state: IncidentState) -> str:
@@ -68,7 +70,7 @@ def build_graph(config: Optional[GraphConfig] = None):
     graph.add_conditional_edges(
         "remediate",
         _route_after_act,
-        {"decide": "decide", "notify": "servicenow_close"},
+        {"servicenow_close": "servicenow_close", "escalate": "escalate"},
     )
     graph.add_conditional_edges(
         "lightspeed",

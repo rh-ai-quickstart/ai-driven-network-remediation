@@ -60,9 +60,9 @@ Runs an AAP (Ansible Automation Platform) job to fix the incident.
 1. Takes the first `recommended_action` from the RCA as the AAP job template name.
 2. Launches the job via LlamaStack tool invocation with context from the log event (namespace, pod, container, edge site).
 3. Polls `get_job_status` until the job reaches a terminal status or the timeout expires (`GraphConfig.job_timeout`, default 120s).
-4. On success - records the result and routes to `notify`.
-5. On failure - records the attempt in `failed_attempts` and sets `should_retry = True` if under `GraphConfig.max_retries` (default 1). The graph loops back to `decide` for another attempt.
-6. On timeout - records `timed_out = True` and routes directly to `notify` (no retry).
+4. On success - records the result and routes through `servicenow_close` to `notify`.
+5. On failure - records the failure details in `remediation_result` and routes to `escalate`, then `notify`. Failed actions are not retried automatically.
+6. On timeout - records `timed_out = True` and follows the same escalation path.
 
 **Key files:**
 
@@ -107,7 +107,7 @@ Creates a ServiceNow incident when confidence is too low for automated remediati
 
 **Flow:**
 
-1. Builds a multi-section description from the RCA (failure type, confidence, severity, summary, evidence, recommended actions), log event context, and any failed remediation attempts.
+1. Builds a multi-section description from the RCA (failure type, confidence, severity, summary, evidence, recommended actions), log event context, and any failed remediation result.
 2. Maps `estimated_severity` to ServiceNow priority (critical=1, high=2, medium=3, low=4).
 3. Calls `create_incident` via LlamaStack tool invocation (`_invoke_tool`) with the description and priority.
 4. On success, stores the ticket number in `servicenow_ticket` and routes to `notify`.

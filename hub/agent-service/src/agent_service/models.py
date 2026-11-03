@@ -1,7 +1,7 @@
 import os
 import time
 import uuid
-from typing import Literal, NotRequired, Optional, TypedDict
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -66,13 +66,6 @@ class RemediationResult(BaseModel):
     generated_playbook_preview: Optional[str] = None
 
 
-class FailedAttempt(TypedDict):
-    action: str
-    template: str
-    error: str
-    job_id: NotRequired[int]
-
-
 class GraphConfig(BaseModel):
     remediate_threshold: float = 0.8
     escalate_threshold: float = 0.7
@@ -81,7 +74,6 @@ class GraphConfig(BaseModel):
     # otherwise escalate to a human.
     lightspeed_threshold: float = 0.9
     enable_match_guard: bool = True
-    max_retries: int = 1
     job_timeout: float = 120.0
     tool_call_timeout: int = 10
     investigate_timeout: int = 120
@@ -120,8 +112,6 @@ class IncidentState(BaseModel):
     analysis_latency_ms: float = 0.0
     decision: str = ""
     selected_template: Optional[str] = None
-    failed_attempts: list[FailedAttempt] = []
-    should_retry: bool = False
     remediation_result: Optional[RemediationResult] = None
     pod_status: dict = {}
     cluster_events: list[dict] = []
@@ -131,7 +121,6 @@ class IncidentState(BaseModel):
     recent_errors: list[dict] = []
     slack_thread_ts: str = ""
     servicenow_ticket: str = ""
-    langfuse_trace_id: str = ""
     fast_path_actuation: str = ""
     total_duration_ms: float = 0.0
     error_message: str = ""

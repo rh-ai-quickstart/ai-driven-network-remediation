@@ -2,8 +2,9 @@ from unittest.mock import patch
 
 from helpers import make_state
 
-from agent_service.models import RootCauseAnalysis
+from agent_service.models import RemediationResult, RootCauseAnalysis
 from agent_service.nodes.escalate import escalate_node
+from agent_service.nodes.remediate import _failure
 
 
 def _stub_rca(**overrides):
@@ -18,6 +19,20 @@ def _stub_rca(**overrides):
     )
     defaults.update(overrides)
     return RootCauseAnalysis(**defaults)
+
+
+def _stub_remediation(**overrides):
+    defaults = dict(
+        action_taken="generate-playbook",
+        tool_used="lightspeed",
+        success=False,
+        job_id="conversation-1",
+        duration_seconds=1.0,
+        output_summary="Generated playbook failed validation: invalid task",
+        timestamp="2024-01-01T00:00:00Z",
+    )
+    defaults.update(overrides)
+    return RemediationResult(**defaults)
 
 
 _FAKE_URL = "https://dev.service-now.com/incident.do?sys_id=abc123"
@@ -168,15 +183,11 @@ class TestEscalateErrorHandling:
         assert "connection refused" in mock_logger.warning.call_args[0][0]
 
 
-class TestEscalateFailedAttempts:
-    async def test_failed_attempts_appear_in_description(self):
-        attempts = [
-            {"action": "remediate", "template": "restart_deployment", "error": "timeout after 120s", "job_id": 42},
-            {"action": "remediate", "template": "scale_up", "error": "quota exceeded", "job_id": 99},
-        ]
+class TestEscalateRemediationResult:
+    async def test_failed_lightspeed_result_includes_validation_error(self):
         state = make_state(
             root_cause_analysis=_stub_rca(),
-            failed_attempts=attempts,
+            remediation_result=_stub_remediation(),
         )
         captured, capture_invoke = _make_capture_invoke()
 
@@ -184,27 +195,76 @@ class TestEscalateFailedAttempts:
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
-        assert "--- Failed Remediation Attempts ---" in desc
-        assert "1. Template: restart_deployment | Job: 42 | Error: timeout after 120s" in desc
-        assert "2. Template: scale_up | Job: 99 | Error: quota exceeded" in desc
+        assert "--- Failed Remediation Result ---" in desc
+        assert "Tool: lightspeed" in desc
+        assert "Action: generate-playbook" in desc
+        assert "Job ID:" not in desc
+        assert "Output: Generated playbook failed validation: invalid task" in desc
 
-    async def test_empty_failed_attempts_omits_section(self):
-        state = make_state(root_cause_analysis=_stub_rca(), failed_attempts=[])
+    async def test_failed_aap_result_includes_job_id(self):
+        state = make_state(
+            root_cause_analysis=_stub_rca(),
+            remediation_result=_stub_remediation(
+                tool_used="aap",
+                action_taken="remediate-oomkilled-nginx",
+                job_id="42",
+                output_summary="Job 42 failed: fatal task error",
+            ),
+        )
         captured, capture_invoke = _make_capture_invoke()
 
         with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
             await escalate_node(state)
 
-        desc = captured["kwargs"]["description"]
-        assert "Failed Remediation Attempts" not in desc
+        description = captured["kwargs"]["description"]
+        assert "Tool: aap" in description
+        assert "Action: remediate-oomkilled-nginx" in description
+        assert "Job ID: 42" in description
+        assert "Output: Job 42 failed: fatal task error" in description
 
-    async def test_missing_job_id_omits_job_field(self):
-        attempts = [
-            {"action": "remediate", "template": "restart_deployment", "error": "timeout after 120s"},
-        ]
+    async def test_failed_aap_result_without_job_id_omits_job_line(self):
         state = make_state(
             root_cause_analysis=_stub_rca(),
-            failed_attempts=attempts,
+            remediation_result=_stub_remediation(
+                tool_used="aap",
+                action_taken="restart",
+                job_id="",
+            ),
+        )
+        captured, capture_invoke = _make_capture_invoke()
+
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+            await escalate_node(state)
+
+        description = captured["kwargs"]["description"]
+        assert "Tool: aap" in description
+        assert "Action: restart" in description
+        assert "Job ID:" not in description
+
+    async def test_failure_over_500_characters_appears_once_with_tail(self):
+        failure_prefix = "AAP failure prefix:"
+        failure = failure_prefix + " x" * 300 + " retained-tail: task module traceback"
+        state = make_state(root_cause_analysis=_stub_rca())
+        state = state.model_copy(update=_failure("restart", failure, job_id=42))
+        captured, capture_invoke = _make_capture_invoke()
+
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+            await escalate_node(state)
+
+        description = captured["kwargs"]["description"]
+        assert description.count(failure_prefix) == 1
+        assert "retained-tail: task module traceback" in description
+        assert "Tool: aap" in description
+        assert "Action: restart" in description
+        assert "Job ID: 42" in description
+
+    async def test_successful_remediation_result_is_omitted(self):
+        state = make_state(
+            root_cause_analysis=_stub_rca(),
+            remediation_result=_stub_remediation(
+                success=True,
+                output_summary="Generated playbook: fix-crashloop",
+            ),
         )
         captured, capture_invoke = _make_capture_invoke()
 
@@ -212,5 +272,15 @@ class TestEscalateFailedAttempts:
             await escalate_node(state)
 
         desc = captured["kwargs"]["description"]
-        assert "1. Template: restart_deployment | Error: timeout after 120s" in desc
-        assert "Job:" not in desc
+        assert "Failed Remediation Result" not in desc
+        assert "Generated playbook: fix-crashloop" not in desc
+
+    async def test_plain_escalation_omits_failure_sections(self):
+        state = make_state(root_cause_analysis=_stub_rca())
+        captured, capture_invoke = _make_capture_invoke()
+
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+            await escalate_node(state)
+
+        desc = captured["kwargs"]["description"]
+        assert "Failed Remediation Result" not in desc

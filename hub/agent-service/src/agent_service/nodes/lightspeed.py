@@ -52,6 +52,8 @@ from agent_service.utils import (
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
 _SUMMARY_KEYS = ("affected_component", "root_cause", "remediation_steps", "edge_site_id")
 _MAX_GENERATION_ATTEMPTS = 3
+_MAX_ERROR_SUMMARY_CHARS = 1000
+_AAP_TOOL = "aap"
 
 
 _als_client: httpx.AsyncClient | None = None
@@ -391,7 +393,7 @@ async def lightspeed_node(state) -> dict:
             generated_playbook_name=playbook_name,
             generated_playbook_preview=playbook_yaml,
         )
-    except Exception:
+    except Exception as exc:
         duration = time.monotonic() - t0
         logger.exception(f"Lightspeed call failed after {duration:.2f}s")
         result = RemediationResult(
@@ -400,7 +402,7 @@ async def lightspeed_node(state) -> dict:
             success=False,
             job_id="",
             duration_seconds=round(duration, 2),
-            output_summary="Lightspeed playbook generation failed",
+            output_summary=f"Lightspeed playbook generation failed: {exc}"[:_MAX_ERROR_SUMMARY_CHARS],
             timestamp=now_iso(),
         )
         return {"decision": "lightspeed", "remediation_result": result}
@@ -423,7 +425,7 @@ async def lightspeed_node(state) -> dict:
         result = result.model_copy(
             update={
                 "success": False,
-                "output_summary": f"AAP execution failed for {playbook_name}: {exc}"[:1000],
+                "output_summary": f"AAP execution failed for {playbook_name}: {exc}"[:_MAX_ERROR_SUMMARY_CHARS],
                 "timestamp": now_iso(),
             }
         )
@@ -447,10 +449,15 @@ def _aap_step_failed(
     response: dict,
     step_name: str,
 ) -> RemediationResult:
-    error = response.get("error", f"{step_name} failed")
-    logger.warning(f"{step_name} failed: {error}")
+    error = response.get("error")
+    failure_summary = f"{step_name} failed" + (f": {error}" if error else "")
+    logger.warning(failure_summary)
     return result.model_copy(
-        update={"success": False, "output_summary": error[:1000], "timestamp": now_iso()},
+        update={
+            "success": False,
+            "output_summary": failure_summary[:_MAX_ERROR_SUMMARY_CHARS],
+            "timestamp": now_iso(),
+        },
     )
 
 
@@ -590,6 +597,8 @@ async def _execute_in_aap(
     logger.info(f"AAP job {job_id} for '{name}' finished: success={outcome.success} timed_out={outcome.timed_out}")
     return result.model_copy(
         update={
+            "action_taken": name,
+            "tool_used": _AAP_TOOL,
             "job_id": job_id,
             "success": outcome.success,
             "timed_out": outcome.timed_out,

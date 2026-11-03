@@ -16,8 +16,11 @@ from agent_service.models import (
 from agent_service.nodes.match_guard import MatchVerdict
 from agent_service.nodes.remediate import make_remediate_node
 
+LONG_FAILURE_PADDING = 600
+
 
 def _analyze_stub(state: dict) -> dict:
+    print("ANALYZE STUB", flush=True)
     confidence = state.confidence_override if state.confidence_override is not None else 0.85
     failure_type = state.failure_type_override if state.failure_type_override is not None else "CrashLoopBackOff"
     rca = RootCauseAnalysis(
@@ -33,14 +36,17 @@ def _analyze_stub(state: dict) -> dict:
 
 
 def _enrich_stub(state: dict) -> dict:
+    print("ENRICH STUB", flush=True)
     return {"pod_status": {"items": [{"metadata": {"name": "stub-pod"}}]}}
 
 
 async def _investigate_stub(state: dict) -> dict:
+    print("INVESTIGATE STUB", flush=True)
     return {"cluster_events": [{"reason": "Pulled", "message": "stub event"}]}
 
 
 def _rag_stub(state: dict) -> dict:
+    print("RAG STUB", flush=True)
     log_event = state.log_event
     query = f"{log_event.message} namespace={log_event.namespace} pod={log_event.pod_name}"
     return {"context_snippets": ["stub snippet"], "rag_query_used": query}
@@ -349,20 +355,73 @@ class TestConditionalRouting:
         assert result["decision"] == "remediate"
         guard.assert_not_awaited()
 
-    async def test_lightspeed_failure_escalates(self, _patch_graph_nodes):
-        als_fail = AsyncMock(side_effect=ConnectionError("ALS unreachable"))
-        with patch("agent_service.nodes.lightspeed._call_als", als_fail):
+    @pytest.mark.parametrize("validation_failure", [False, True])
+    async def test_lightspeed_failure_escalates(self, _patch_graph_nodes, validation_failure):
+        failure_reason = "Missing hosts" if validation_failure else "ALS unreachable"
+        generate_playbook = AsyncMock(return_value=({"validation_error": failure_reason}, None))
+        if not validation_failure:
+            generate_playbook.side_effect = ConnectionError(failure_reason)
+        create_incident = AsyncMock(side_effect=_mock_escalate_invoke)
+        send_notification = AsyncMock(return_value="123.456")
+        with (
+            patch("agent_service.nodes.lightspeed._generate_playbook", generate_playbook),
+            patch("agent_service.nodes.escalate._invoke_tool", create_incident),
+            patch.multiple("agent_service.nodes.notify", SLACK_ENABLED=True, SLACK_BOT_TOKEN="test-token"),
+            patch("agent_service.nodes.notify._send_slack_message", send_notification),
+        ):
             graph = build_graph()
-            result = await graph.ainvoke(
-                {
-                    "raw_event": "test event",
-                    "failure_type_override": "KafkaLag",
-                }
-            )
+            final_state = await graph.ainvoke({"raw_event": "test event", "failure_type_override": "KafkaLag"})
 
-        assert result["decision"] == "lightspeed"
+        assert final_state["decision"] == "lightspeed"
+        assert final_state["remediation_result"].success is False
+        assert final_state["servicenow_ticket"] == "INC0000001"
+        assert failure_reason in create_incident.await_args.args[1]["description"]
+        notification = json.dumps(send_notification.await_args.args[0])
+        assert failure_reason in notification
+        assert "Escalated" in notification
+        assert "Playbook Generated" not in notification
+
+    async def test_launch_failure_escalates_once(self, _patch_graph_nodes):
+        failure_reason = "x" * LONG_FAILURE_PADDING + " retained-tail: template lookup failed"
+        launch = AsyncMock(return_value={"success": False, "error": failure_reason})
+        create_incident = AsyncMock(return_value={"success": True, "ticket_number": "INC0000001"})
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", launch),
+            patch("agent_service.nodes.escalate._invoke_tool", create_incident),
+        ):
+            graph = build_graph()
+            await graph.ainvoke({"raw_event": "test event"})
+
+        launch.assert_awaited_once()
+        create_incident.assert_awaited_once()
+        description = create_incident.await_args.args[1]["description"]
+        assert description.count(failure_reason) == 1
+        assert "retained-tail: template lookup failed" in description
+
+    async def test_terminal_aap_job_failure_creates_ticket_with_error(self, _patch_graph_nodes):
+        failure_reason = "dict has no attribute generation"
+        create_incident = AsyncMock(return_value={"success": True, "ticket_number": "INC0000001"})
+        launch = {"success": True, "job_id": 1001, "status": "pending", "template_name": "restart-pod"}
+        status = {
+            "success": True,
+            "job_id": 1001,
+            "status": "failed",
+            "elapsed": 5.0,
+            "finished": "2024-01-01T00:01:00Z",
+            "failed": True,
+            "result_traceback": failure_reason,
+        }
+        with (
+            patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool(launch=launch)),
+            patch("agent_service.nodes._aap_job._invoke_tool", _mock_invoke_tool(status=status)),
+            patch("agent_service.nodes.escalate._invoke_tool", create_incident),
+        ):
+            graph = build_graph()
+            result = await graph.ainvoke({"raw_event": "test event"})
+
         assert result["remediation_result"].success is False
         assert result["servicenow_ticket"] == "INC0000001"
+        assert failure_reason in create_incident.await_args.args[1]["description"]
 
     async def test_custom_thresholds_alter_routing(self, _patch_graph_nodes):
         config = GraphConfig(remediate_threshold=0.9, escalate_threshold=0.8)
@@ -460,17 +519,35 @@ class TestRouteAfterLightspeed:
 
 
 class TestRouteAfterAct:
-    def test_should_retry_routes_to_decide(self):
-        state = IncidentState(raw_event="test", should_retry=True)
-        assert _route_after_act(state) == "decide"
+    def test_success_routes_to_servicenow_close(self):
+        result = RemediationResult(
+            action_taken="restart-pod",
+            tool_used="aap",
+            success=True,
+            job_id="42",
+            duration_seconds=5.0,
+            output_summary="PLAY OK",
+            timestamp="2024-01-01T00:01:00Z",
+        )
+        state = IncidentState(raw_event="test", remediation_result=result)
+        assert _route_after_act(state) == "servicenow_close"
 
-    def test_no_retry_routes_to_notify(self):
-        state = IncidentState(raw_event="test", should_retry=False)
-        assert _route_after_act(state) == "notify"
+    def test_failure_routes_to_escalate(self):
+        result = RemediationResult(
+            action_taken="restart-pod",
+            tool_used="aap",
+            success=False,
+            job_id="42",
+            duration_seconds=5.0,
+            output_summary="task failed",
+            timestamp="2024-01-01T00:01:00Z",
+        )
+        state = IncidentState(raw_event="test", remediation_result=result)
+        assert _route_after_act(state) == "escalate"
 
-    def test_default_routes_to_notify(self):
+    def test_missing_result_routes_to_escalate(self):
         state = IncidentState(raw_event="test")
-        assert _route_after_act(state) == "notify"
+        assert _route_after_act(state) == "escalate"
 
 
 class TestRemediateNode:
@@ -492,31 +569,8 @@ class TestRemediateNode:
         assert result["remediation_result"].success is True
         assert result["remediation_result"].job_id == "42"
         assert result["remediation_result"].action_taken == "restart-nginx"
-        assert result["should_retry"] is False
 
-    async def test_success_after_failure_clears_should_retry(self):
-        config = GraphConfig()
-        node = make_remediate_node(config)
-        state = IncidentState(
-            raw_event="test",
-            log_event=_STUB_LOG_EVENT,
-            root_cause_analysis=_STUB_RCA,
-            failed_attempts=[
-                {"action": "remediate", "template": "x", "error": "prev"},
-            ],
-            should_retry=True,
-        )
-        mock = _mock_invoke_tool()
-        with (
-            patch("agent_service.nodes.remediate._invoke_tool", mock),
-            patch("agent_service.nodes._aap_job._invoke_tool", mock),
-        ):
-            result = await node(state)
-
-        assert result["remediation_result"].success is True
-        assert result["should_retry"] is False
-
-    async def test_launch_failure_sets_should_retry(self):
+    async def test_launch_failure_returns_failure_result(self):
         config = GraphConfig()
         node = make_remediate_node(config)
         state = IncidentState(
@@ -529,11 +583,10 @@ class TestRemediateNode:
             result = await node(state)
 
         assert result["remediation_result"].success is False
-        assert result["should_retry"] is True
-        assert len(result["failed_attempts"]) == 1
-        assert result["failed_attempts"][0]["error"] == "template not found"
+        assert result["remediation_result"].output_summary == "template not found"
+        assert "failed_attempts" not in result
 
-    async def test_job_failure_sets_should_retry(self):
+    async def test_job_failure_returns_failure_result(self):
         config = GraphConfig()
         node = make_remediate_node(config)
         state = IncidentState(
@@ -559,8 +612,8 @@ class TestRemediateNode:
             result = await node(state)
 
         assert result["remediation_result"].success is False
-        assert result["should_retry"] is False
-        assert len(result["failed_attempts"]) == 1
+        assert "task failed" in result["remediation_result"].output_summary
+        assert "failed_attempts" not in result
 
     async def test_timeout_does_not_retry(self):
         config = GraphConfig(job_timeout=0.1)
@@ -579,49 +632,7 @@ class TestRemediateNode:
 
         assert result["remediation_result"].success is False
         assert result["remediation_result"].timed_out is True
-        assert result["should_retry"] is False
-        assert len(result["failed_attempts"]) == 1
-
-    async def test_failure_then_timeout_stops_retrying(self):
-        config = GraphConfig(max_retries=1, job_timeout=0.1)
-        node = make_remediate_node(config)
-        state = IncidentState(
-            raw_event="test",
-            log_event=_STUB_LOG_EVENT,
-            root_cause_analysis=_STUB_RCA,
-            failed_attempts=[
-                {"action": "remediate", "template": "x", "error": "prev"},
-            ],
-            should_retry=True,
-        )
-        with (
-            patch("agent_service.nodes.remediate._invoke_tool", _slow_invoke),
-            patch("agent_service.nodes._aap_job._invoke_tool", _slow_invoke),
-            patch("agent_service.nodes._aap_job.POLL_INTERVAL_SECONDS", 0.01),
-        ):
-            result = await node(state)
-
-        assert result["remediation_result"].success is False
-        assert result["remediation_result"].timed_out is True
-        assert result["should_retry"] is False
-        assert len(result["failed_attempts"]) == 2
-
-    async def test_max_retries_exceeded_no_retry(self):
-        config = GraphConfig(max_retries=1)
-        node = make_remediate_node(config)
-        state = IncidentState(
-            raw_event="test",
-            log_event=_STUB_LOG_EVENT,
-            root_cause_analysis=_STUB_RCA,
-            failed_attempts=[{"action": "remediate", "template": "x", "error": "prev"}],
-        )
-        mock = _mock_invoke_tool(launch={"success": False, "error": "still broken"})
-        with patch("agent_service.nodes.remediate._invoke_tool", mock):
-            result = await node(state)
-
-        assert result["remediation_result"].success is False
-        assert result["should_retry"] is False
-        assert len(result["failed_attempts"]) == 2
+        assert "failed_attempts" not in result
 
     async def test_no_recommended_actions(self):
         config = GraphConfig()
@@ -647,5 +658,4 @@ class TestRemediateNode:
             result = await node(state)
 
         assert result["remediation_result"].success is False
-        assert result["should_retry"] is False
-        assert "failed_attempts" not in result
+        assert set(result) == {"remediation_result"}

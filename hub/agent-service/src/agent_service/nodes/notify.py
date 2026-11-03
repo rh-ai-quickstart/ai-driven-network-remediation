@@ -30,6 +30,7 @@ _STATUS_EMOJIS = {
     "Failed": "❌",
     "Escalated": "🔺",
 }
+_SLACK_SECTION_TEXT_LIMIT = 3000
 
 
 def _build_title(rca, log_event, severity: str) -> str:
@@ -39,23 +40,58 @@ def _build_title(rca, log_event, severity: str) -> str:
     return f"{prefix} - {log_event.namespace}/{log_event.pod_name}"[:150]
 
 
-def _resolve_status(decision, rem) -> tuple[str, str]:
-    if decision == "remediate" and rem:
-        if rem.action_taken == "fast_path_skip":
-            return "Resolved", rem.output_summary
-        if rem.success:
+def _format_remediation_failure(remediation_result) -> str:
+    return (
+        f"Remediation failed via {remediation_result.tool_used} "
+        f"for {remediation_result.action_taken}: {remediation_result.output_summary}"
+    )
+
+
+def _resolve_escalation(
+    remediation_result,
+    servicenow_ticket: str,
+    error_message: str,
+) -> tuple[str, str]:
+    if servicenow_ticket:
+        resolution = "Escalated to ServiceNow"
+        if remediation_result and not remediation_result.success:
+            resolution = f"{_format_remediation_failure(remediation_result)}; {resolution}"
+        return "Escalated", resolution
+
+    resolution = "ServiceNow escalation failed"
+    if error_message:
+        resolution = f"{resolution}: {error_message}"
+    if remediation_result and not remediation_result.success:
+        resolution = f"{_format_remediation_failure(remediation_result)}; {resolution}"
+    return "Failed", resolution
+
+
+def _resolve_status(
+    decision,
+    remediation_result,
+    servicenow_ticket: str,
+    error_message: str,
+) -> tuple[str, str]:
+    if decision == "remediate" and remediation_result:
+        if remediation_result.action_taken == "fast_path_skip":
+            return "Resolved", remediation_result.output_summary
+        if remediation_result.success:
             return (
                 "Resolved",
-                f"Remediated via {rem.tool_used} (job {rem.job_id})",
+                f"Remediated via {remediation_result.tool_used} " f"(job {remediation_result.job_id})",
             )
-        return "Failed", f"Remediation failed: {rem.output_summary}"
-    if decision == "lightspeed" and rem:
-        return (
-            "Playbook Generated",
-            f"Lightspeed playbook generated: {rem.output_summary}",
-        )
+        if servicenow_ticket or error_message:
+            return _resolve_escalation(remediation_result, servicenow_ticket, error_message)
+        return "Failed", _format_remediation_failure(remediation_result)
+    if decision == "lightspeed" and remediation_result:
+        if remediation_result.success:
+            return (
+                "Playbook Generated",
+                f"Lightspeed playbook generated: {remediation_result.output_summary}",
+            )
+        return _resolve_escalation(remediation_result, servicenow_ticket, error_message)
     if decision == "escalate":
-        return "Escalated", "Escalated to ServiceNow"
+        return _resolve_escalation(remediation_result, servicenow_ticket, error_message)
     return decision or "unknown", f"Decision: {decision or 'none'}"
 
 
@@ -70,6 +106,8 @@ def _build_payload(state) -> dict:
     status, resolution = _resolve_status(
         state.decision,
         state.remediation_result,
+        state.servicenow_ticket,
+        state.error_message,
     )
     summary = f"{title} - {resolution}"
     description = (rca and rca.summary) or (log_event and log_event.message) or ""
@@ -92,7 +130,11 @@ def _build_payload(state) -> dict:
     ]
     if description:
         blocks += [DividerBlock(), SectionBlock(text=f"*Description:*\n{description}")]
-    blocks += [DividerBlock(), SectionBlock(text=f"*Resolution:*\n{resolution_line}")]
+    resolution_text = f"*Resolution:*\n{resolution_line}"
+    blocks += [
+        DividerBlock(),
+        SectionBlock(text=resolution_text[:_SLACK_SECTION_TEXT_LIMIT]),
+    ]
 
     # Optional ServiceNow ticket link
     if state.servicenow_ticket and SERVICENOW_INSTANCE_URL:
