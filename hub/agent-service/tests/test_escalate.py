@@ -143,6 +143,21 @@ class TestPriorityMapping:
 
 
 class TestEscalateErrorHandling:
+    async def test_missing_namespace_reason_reaches_ticket_without_changing_diagnosis(self):
+        target_error = "Selected Deployment microservice-b namespace is missing; resolve it from target evidence"
+        diagnosis = _stub_rca(summary="microservice-b CPU limit is too low")
+        original_diagnosis = diagnosis.model_dump()
+        state = make_state(root_cause_analysis=diagnosis, error_message=target_error)
+        captured, capture_invoke = _make_capture_invoke()
+
+        with patch("agent_service.nodes.escalate._invoke_tool", capture_invoke):
+            await escalate_node(state)
+
+        description = captured["kwargs"]["description"]
+        assert f"--- Workflow Error ---\n{target_error}" in description
+        assert f"Summary: {diagnosis.summary}" in description
+        assert state.root_cause_analysis.model_dump() == original_diagnosis
+
     async def test_servicenow_failure_returns_empty_ticket(self):
         state = make_state(root_cause_analysis=_stub_rca())
 
@@ -284,3 +299,4 @@ class TestEscalateRemediationResult:
 
         desc = captured["kwargs"]["description"]
         assert "Failed Remediation Result" not in desc
+        assert "Workflow Error" not in desc

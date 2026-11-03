@@ -1,11 +1,10 @@
 import asyncio
+import json
 import re
 import time
 
 import httpx
-import json_repair
 import yaml
-from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from agent_service.config import (
@@ -13,47 +12,34 @@ from agent_service.config import (
     AAP_PROJECT_SYNC_TIMEOUT_SECONDS,
     AAP_RESOURCE_PREFIX,
     GITEA_PROJECT_NAME,
-    LIGHTSPEED_MAX_SUMMARIZE_CHARS,
+    LIGHTSPEED_MAX_GENERATION_ATTEMPTS,
     LIGHTSPEED_PROMPT_TEMPLATE,
     LIGHTSPEED_SKIP_AAP,
-    LIGHTSPEED_SUMMARIZE_PROMPT,
     LIGHTSPEED_SYSTEM_PROMPT,
     LIGHTSPEED_TIMEOUT_SECONDS,
     LIGHTSPEED_TOKEN,
     LIGHTSPEED_URL,
     LIGHTSPEED_VERIFY_SSL,
-    get_llm,
+    PLAYBOOK_VALIDATION_TIMEOUT_SECONDS,
     now_iso,
 )
 from agent_service.evidence import (
-    build_evidence_prompt,
-    build_grounding_text,
     get_pod_logs_for_attachment,
     get_structured_attachments,
 )
-from agent_service.models import GraphConfig, RemediationResult
+from agent_service.models import GraphConfig, RemediationResult, SelectedAction
 from agent_service.nodes._aap_job import evaluate_job
 from agent_service.nodes.rag_retrieval import store_generated_playbook
-from agent_service.playbook_sanitize import (
-    playbook_validation_error,
-    quote_jinja,
-    sanitize_playbook,
-)
-from agent_service.utils import (
-    build_launch_extra_vars,
-)
+from agent_service.playbook_sanitize import quote_jinja
+from agent_service.target_resolution import resolve_target_with_lookup
 from agent_service.utils import invoke_tool as _invoke_tool
-from agent_service.utils import (
-    normalize_component_name,
-    resolve_remediation_deployment,
-)
 
 # Strip markdown code fences (``` or ```yaml/```yml) from LLM responses
 _FENCE_RE = re.compile(r"```\w*\s*\n?", re.IGNORECASE)
-_SUMMARY_KEYS = ("affected_component", "root_cause", "remediation_steps", "edge_site_id")
-_MAX_GENERATION_ATTEMPTS = 3
 _MAX_ERROR_SUMMARY_CHARS = 1000
+_MAX_REJECTED_RESPONSE_CHARS = 16000
 _AAP_TOOL = "aap"
+_PLAY_ACTION_SECTIONS = ("tasks", "pre_tasks", "post_tasks", "roles")
 
 
 _als_client: httpx.AsyncClient | None = None
@@ -92,116 +78,84 @@ def _build_playbook_name(rca, log_event) -> str:
 
 
 def _extract_yaml(text: str) -> tuple[str, list | dict | None]:
-    """Strip markdown fences and parse YAML once. Returns (cleaned_text, parsed)."""
+    """Parse valid YAML unchanged; try quoting bare Jinja only after a parse failure."""
     cleaned = _FENCE_RE.sub("", text).strip()
-    cleaned = quote_jinja(cleaned)
     try:
         parsed = yaml.safe_load(cleaned)
         return cleaned, parsed
     except yaml.YAMLError:
-        return cleaned, None
+        cleaned = quote_jinja(cleaned)
+        try:
+            return cleaned, yaml.safe_load(cleaned)
+        except yaml.YAMLError:
+            return cleaned, None
 
 
 def _playbook_name_from_parsed(parsed, rca, log_event) -> str:
     """Extract the play name from already-parsed YAML and slugify it."""
     if isinstance(parsed, list) and parsed:
         name = parsed[0].get("name", "") if isinstance(parsed[0], dict) else ""
-        if name:
+        if isinstance(name, str) and name:
             slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
             if slug:
                 return slug
     return _build_playbook_name(rca, log_event)
 
 
-def _parse_summary_json(text: str) -> dict:
-    """Parse a summarizer response into the overlay keys we accept."""
-    parsed = json_repair.loads(text)
-    candidates = parsed if isinstance(parsed, list) else [parsed]
-    for candidate in candidates:
-        if not isinstance(candidate, dict):
-            continue
-        overlay = {
-            key: candidate[key] for key in _SUMMARY_KEYS if isinstance(candidate.get(key), str) and candidate[key]
-        }
-        if overlay:
-            return overlay
-    return {}
+_REQUEST_TEMPLATE = """GOAL
+{goal}
+
+TARGET
+{target}
+
+OBSERVED FACTS
+{evidence}
+
+DIAGNOSIS
+{diagnosis}
+
+PARAMETERS
+{parameters}
+
+ANSIBLE EXTRA VARS (each key is a top-level variable)
+{launch_vars}
+
+EXECUTION CONSTRAINTS
+{instructions}
+
+OUTPUT
+Return the complete Ansible playbook as a YAML list, without prose or code fences.
+Choose appropriate Ansible modules and tasks to implement only the requested change.
+"""
 
 
-async def _summarize_evidence(rca, investigation_evidence: str) -> dict:
-    """Use the LLM to synthesize RCA + evidence into targeted remediation fields."""
-    prompt = LIGHTSPEED_SUMMARIZE_PROMPT.format(
-        rca_summary=rca.summary if rca else "",
-        rca_evidence="\n".join(rca.evidence) if rca and rca.evidence else "",
-        recommended_actions=", ".join(rca.recommended_actions) if rca else "",
-        investigation_evidence=investigation_evidence[:LIGHTSPEED_MAX_SUMMARIZE_CHARS],
+def _launch_vars(action: SelectedAction) -> dict:
+    target = action.target
+    launch_vars = {
+        "edge_site_id": target.edge_site_id,
+        "namespace": target.namespace,
+        "resource_kind": target.kind,
+        "resource_name": target.name,
+        "container_name": target.container,
+        "remediation_parameters": action.parameters,
+    }
+    if target.kind.casefold() == "deployment":
+        launch_vars.update(deployment_name=target.name, deployment=target.name)
+    return launch_vars
+
+
+def _build_prompt(rca, action: SelectedAction) -> str:
+    """Pass the selected change to ALS without post-remediation checks."""
+    diagnosis = {"summary": rca.summary, "confidence": rca.confidence, "runbook_reference": rca.runbook_reference}
+    return _REQUEST_TEMPLATE.format(
+        goal=" ".join(action.goal.split()),
+        target=json.dumps(action.target.model_dump()),
+        evidence=json.dumps(action.evidence),
+        diagnosis=json.dumps(diagnosis),
+        parameters=json.dumps(action.parameters),
+        launch_vars=json.dumps(_launch_vars(action)),
+        instructions=LIGHTSPEED_PROMPT_TEMPLATE,
     )
-    messages = [
-        SystemMessage(content="Respond ONLY with valid JSON, no extra text."),
-        HumanMessage(content=prompt),
-    ]
-    response = await get_llm().ainvoke(messages)
-    text = response.content.strip()
-    parsed = _parse_summary_json(text)
-    if not parsed and text:
-        logger.warning(f"Summarize response was not valid JSON: {text[:200]}")
-    return parsed
-
-
-def _build_prompt(
-    rca,
-    log_event,
-    llm_summary: dict | None = None,
-    extra_evidence: str = "",
-    resource_specs: str = "",
-) -> str:
-    """Build the ALS prompt, omitting fields that have no useful value."""
-    summary = rca.summary if rca else ""
-    target_component = log_event.pod_name if log_event else "unknown"
-    evidence_items = list(dict.fromkeys(rca.evidence)) if rca and rca.evidence else []
-    evidence_str = "\n".join(evidence_items[:_MAX_EVIDENCE_ITEMS])[:_MAX_EVIDENCE_CHARS]
-    actions = ", ".join(rca.recommended_actions) if rca else ""
-
-    if llm_summary:
-        if llm_summary.get("affected_component"):
-            target_component = llm_summary["affected_component"]
-        if llm_summary.get("root_cause"):
-            summary = llm_summary["root_cause"]
-        if llm_summary.get("remediation_steps"):
-            actions = llm_summary["remediation_steps"]
-
-    if extra_evidence:
-        evidence_str = (evidence_str + "\n\n" + extra_evidence) if evidence_str else extra_evidence
-
-    edge_site_id = build_launch_extra_vars(
-        log_event,
-        llm_summary=llm_summary,
-        resource_specs=resource_specs,
-    ).get("edge_site_id", "")
-    fields = [
-        ("Failure type", rca.failure_type if rca else "Unknown"),
-        ("Severity", rca.estimated_severity if rca else "unknown"),
-        ("Edge site cluster", edge_site_id),
-        ("Namespace", log_event.namespace if log_event else "unknown"),
-        ("Target component", target_component),
-        ("Summary", summary),
-    ]
-
-    lines = ["Generate an Ansible playbook to remediate this OpenShift cluster issue.\n"]
-    for label, value in fields:
-        if value:
-            lines.append(f"{label}: {value}")
-
-    if evidence_str:
-        lines.append(f"\nEvidence:\n{evidence_str}")
-
-    if actions:
-        lines.append(f"\nRecommended actions: {actions}")
-
-    lines.append("")
-    lines.append(LIGHTSPEED_PROMPT_TEMPLATE)
-
-    return "\n".join(lines)
 
 
 _MAX_RAW_LOG_CHARS = 2000
@@ -211,9 +165,9 @@ _MAX_ATTACHMENT_CHARS = 6000
 
 
 def _build_attachments(rca, log_event, pod_logs: str = "", extra_attachments: list[dict] | None = None) -> list[dict]:
-    result = [
-        a
-        for a in (
+    attachments = [
+        attachment
+        for attachment in (
             (
                 {"attachment_type": "log", "content_type": "text/plain", "content": log_event.raw[-_MAX_RAW_LOG_CHARS:]}
                 if log_event and log_event.raw
@@ -230,14 +184,20 @@ def _build_attachments(rca, log_event, pod_logs: str = "", extra_attachments: li
                 else None
             ),
         )
-        if a
+        if attachment
     ]
-    if extra_attachments:
-        for att in extra_attachments:
-            if len(att.get("content", "")) > _MAX_ATTACHMENT_CHARS:
-                att = {**att, "content": att["content"][:_MAX_ATTACHMENT_CHARS]}
-            result.append(att)
-    return result
+    attachments.extend(_budget_attachment(attachment) for attachment in extra_attachments or [])
+    return attachments
+
+
+def _budget_attachment(attachment: dict) -> dict:
+    if len(attachment.get("content", "")) <= _MAX_ATTACHMENT_CHARS:
+        return attachment
+    if attachment.get("content_type") == "application/json":
+        content = json.dumps({"omitted": "Supplementary attachment exceeds budget"})
+    else:
+        content = attachment["content"][:_MAX_ATTACHMENT_CHARS] + "\n[Supplementary evidence omitted]"
+    return {**attachment, "content": content}
 
 
 def _log_task_exception(task: asyncio.Task) -> None:
@@ -259,38 +219,92 @@ async def drain_background_tasks(timeout_seconds: float = 10.0) -> None:
 async def _call_als(prompt: str, attachments: list[dict]) -> dict:
     query = f"{LIGHTSPEED_SYSTEM_PROMPT}\n\n{prompt}" if LIGHTSPEED_SYSTEM_PROMPT else prompt
     payload = {"query": query, "attachments": attachments}
+    logger.debug(f"ALS prompt: {query}")
+    logger.info(f"ALS attachments count: {len(attachments)}")
+    started = time.monotonic()
     resp = await _get_als_client().post("/v1/query", json=payload)
     resp.raise_for_status()
-    return resp.json()
+    als_response = resp.json()
+    duration = time.monotonic() - started
+    logger.info(f"ALS responded in {duration:.2f}s, conversation_id={als_response.get('conversation_id', '')}")
+    return als_response
 
 
-async def _generate_playbook(prompt: str, attachments: list[dict]) -> tuple[dict, list | dict | None]:
+_CORRECTION_TEMPLATE = """{prompt}
+
+Your previous response failed validation and was not executed.
+Return a complete corrected YAML list of plays. Fix the reported YAML or Ansible syntax error.
+Keep the original selected action, exact target and parameters. Do not add post-remediation checks.
+
+Validation error: {error}
+
+Rejected response (may be truncated):
+{rejected}
+"""
+
+
+def _playbook_validation_error(parsed) -> str:
+    """Check basic playbook structure, not the chosen remediation or its implementation."""
+    if not isinstance(parsed, list) or not parsed:
+        return "Expected a non-empty YAML list of plays"
+    for play in parsed:
+        if not isinstance(play, dict):
+            return "Each play must be a YAML mapping"
+        if play.get("import_playbook") or play.get("ansible.builtin.import_playbook"):
+            continue
+        if not play.get("hosts"):
+            return "Each play must specify hosts"
+        if not any(isinstance(play.get(section), list) and play[section] for section in _PLAY_ACTION_SECTIONS):
+            return "Each play must contain tasks or roles"
+    return ""
+
+
+async def _generate_playbook(prompt: str, attachments: list[dict], extra_vars: dict) -> tuple[dict, list | None]:
     generation_prompt = prompt
     previous_error = ""
-    for attempt in range(_MAX_GENERATION_ATTEMPTS):
+    for attempt in range(LIGHTSPEED_MAX_GENERATION_ATTEMPTS):
         als_response = await _call_als(generation_prompt, attachments)
         logger.debug(f"Raw ALS response: {als_response}")
         playbook_yaml, parsed = _extract_yaml(als_response.get("response", ""))
-        parsed = sanitize_playbook(parsed)
-        validation_error = playbook_validation_error(parsed)
+        try:
+            validation_error = await _generation_validation_error(playbook_yaml, parsed, extra_vars)
+        except Exception as exc:
+            return {**als_response, "validation_error": f"Playbook validation unavailable: {exc}"}, None
         if not validation_error:
-            return als_response, parsed
+            return {**als_response, "response": playbook_yaml}, parsed
         parsed = None
         if validation_error == previous_error:
             break
         previous_error = validation_error
-        if attempt + 1 < _MAX_GENERATION_ATTEMPTS:
+        if attempt + 1 < LIGHTSPEED_MAX_GENERATION_ATTEMPTS:
             logger.warning(f"Generated playbook validation failed: {validation_error}; requesting one correction")
-            generation_prompt = (
-                f"{prompt}\n\nYour previous response failed validation and was not executed. "
-                "Return a complete corrected Ansible playbook as a YAML list of plays. "
-                "Check matching quotes (especially URL values), indentation, and brackets. "
-                "Use a YAML mapping for every strategic-merge PATCH body, never a quoted JSON string. "
-                "Follow all original remediation and authentication requirements.\n\n"
-                f"Validation error: {validation_error}\n\n"
-                f"Rejected response:\n{playbook_yaml}"
+            generation_prompt = _CORRECTION_TEMPLATE.format(
+                prompt=prompt,
+                error=validation_error[:_MAX_ERROR_SUMMARY_CHARS],
+                rejected=playbook_yaml[:_MAX_REJECTED_RESPONSE_CHARS],
             )
     return {**als_response, "validation_error": validation_error}, parsed
+
+
+async def _generation_validation_error(playbook_yaml: str, parsed, extra_vars: dict) -> str:
+    if parsed is None:
+        try:
+            yaml.safe_load(playbook_yaml)
+        except yaml.YAMLError as exc:
+            return f"Invalid YAML: {exc}"
+    structural_error = _playbook_validation_error(parsed)
+    if structural_error:
+        return structural_error
+    validation = await _invoke_tool(
+        "validate_playbook",
+        {"playbook_content": playbook_yaml, "base_template_name": AAP_LIGHTSPEED_TEMPLATE, "extra_vars": extra_vars},
+        timeout_seconds=PLAYBOOK_VALIDATION_TIMEOUT_SECONDS,
+    )
+    if validation.get("success") is not True or not isinstance(validation.get("valid"), bool):
+        raise RuntimeError(validation.get("error") or "Validator returned an unsuccessful or malformed response")
+    if validation["valid"]:
+        return ""
+    return str(validation.get("error") or "Ansible syntax validation failed")
 
 
 async def _upsert_template(name: str, playbook_path: str) -> dict:
@@ -307,141 +321,102 @@ async def _upsert_template(name: str, playbook_path: str) -> dict:
     )
 
 
-# Needed for testing without Lightspeed.
-def _stub_result() -> dict:
-    result = RemediationResult(
+def _failed_generation(message: str, started: float, conversation_id: str = "") -> RemediationResult:
+    return RemediationResult(
+        action_taken="generate-playbook",
+        tool_used="lightspeed",
+        success=False,
+        job_id="",
+        lightspeed_conversation_id=conversation_id or None,
+        duration_seconds=round(time.monotonic() - started, 2),
+        output_summary=message[:_MAX_ERROR_SUMMARY_CHARS],
+        timestamp=now_iso(),
+    )
+
+
+def _generation_result(state, als_response: dict, parsed, started: float) -> RemediationResult:
+    conversation_id = als_response.get("conversation_id", "")
+    if not isinstance(parsed, list):
+        error = als_response.get("validation_error", "Invalid YAML")
+        logger.warning(f"Playbook validation failed, refusing to launch: {error}")
+        explanation = als_response.get("response", "")
+        message = f"Generated playbook failed validation: {error}"
+        if explanation:
+            message += f". ALS response: {explanation}"
+        return _failed_generation(message, started, conversation_id)
+    playbook_yaml = als_response["response"]
+    name = AAP_RESOURCE_PREFIX + _playbook_name_from_parsed(parsed, state.root_cause_analysis, state.log_event)
+    logger.debug(f"Generated playbook '{name}' passed syntax validation:\n{playbook_yaml}")
+    return RemediationResult(
         action_taken="generate-playbook",
         tool_used="lightspeed",
         success=True,
         job_id="",
-        duration_seconds=0.0,
-        output_summary="Lightspeed not configured (LIGHTSPEED_URL is empty)",
+        lightspeed_conversation_id=conversation_id or None,
+        duration_seconds=round(time.monotonic() - started, 2),
+        output_summary=f"Generated playbook: {name}",
         timestamp=now_iso(),
+        generated_template_name=name,
+        generated_playbook_name=name,
+        generated_playbook_preview=playbook_yaml,
     )
-    return {"decision": "lightspeed", "remediation_result": result}
+
+
+async def _generate_selected_playbook(state, action: SelectedAction, started: float) -> RemediationResult:
+    prompt = _build_prompt(state.root_cause_analysis, action)
+    attachments = _build_attachments(
+        state.root_cause_analysis,
+        state.log_event,
+        pod_logs=get_pod_logs_for_attachment(state),
+        extra_attachments=get_structured_attachments(state),
+    )
+    als_response, parsed = await _generate_playbook(prompt, attachments, _launch_vars(action))
+    return _generation_result(state, als_response, parsed, started)
+
+
+def _store_successful_playbook(outcome: RemediationResult, rca) -> None:
+    if not outcome.success:
+        return
+    task = asyncio.create_task(
+        store_generated_playbook(
+            outcome.generated_playbook_name,
+            outcome.generated_playbook_preview,
+            rca.failure_type,
+            rca.summary,
+        )
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(_log_task_exception)
 
 
 async def lightspeed_node(state) -> dict:
-    """Ask Ansible Lightspeed to generate an Ansible playbook from RCA."""
+    """Ask ALS to implement NOC's remediation goal, then execute through AAP."""
     logger.info("Lightspeed node invoked")
-
-    if not LIGHTSPEED_URL:
-        logger.warning("LIGHTSPEED_URL not set, returning stub result")
-        return _stub_result()
-
-    rca = state.root_cause_analysis
-    log_event = state.log_event
-
-    t0 = time.monotonic()
+    started = time.monotonic()
     try:
-        investigation_evidence = build_evidence_prompt(state)
-        grounding_text = build_grounding_text(state)
-        llm_summary = None
-        if grounding_text:
-            try:
-                llm_summary = await _summarize_evidence(rca, grounding_text)
-                logger.info(f"LLM remediation summary: {llm_summary}")
-            except Exception:
-                logger.opt(exception=True).warning("LLM summarization failed, falling back to template-only prompt")
-
-        prompt = _build_prompt(
-            rca,
-            log_event,
-            llm_summary,
-            investigation_evidence,
-            resource_specs=state.resource_specs,
-        )
-        pod_logs = get_pod_logs_for_attachment(state)
-        structured = get_structured_attachments(state)
-        attachments = _build_attachments(rca, log_event, pod_logs=pod_logs, extra_attachments=structured)
-        logger.debug(f"ALS prompt: {prompt}")
-        logger.info(f"ALS attachments count: {len(attachments)}")
-
-        data, parsed = await _generate_playbook(prompt, attachments)
-        duration = time.monotonic() - t0
-        if not isinstance(parsed, list):
-            duration = time.monotonic() - t0
-            validation_error = data.get("validation_error", "Invalid YAML")
-            logger.warning(f"Playbook validation failed, refusing to launch: {validation_error}")
-            result = RemediationResult(
-                action_taken="generate-playbook",
-                tool_used="lightspeed",
-                success=False,
-                job_id="",
-                lightspeed_conversation_id=data.get("conversation_id") or None,
-                duration_seconds=round(duration, 2),
-                output_summary=f"Generated playbook failed validation: {validation_error}",
-                timestamp=now_iso(),
-            )
-            return {"decision": "lightspeed", "remediation_result": result}
-        playbook_yaml = yaml.dump(parsed, default_flow_style=False, sort_keys=False)
-        playbook_name = AAP_RESOURCE_PREFIX + _playbook_name_from_parsed(parsed, rca, log_event)
-
-        logger.info(f"ALS responded in {duration:.2f}s, conversation_id={data.get('conversation_id', '')}")
-        logger.debug(f"Generated playbook '{playbook_name}':\n{playbook_yaml}")
-
-        result = RemediationResult(
-            action_taken="generate-playbook",
-            tool_used="lightspeed",
-            success=True,
-            job_id="",
-            lightspeed_conversation_id=data.get("conversation_id") or None,
-            duration_seconds=round(duration, 2),
-            output_summary=f"Generated playbook: {playbook_name}",
-            timestamp=now_iso(),
-            generated_template_name=playbook_name,
-            generated_playbook_name=playbook_name,
-            generated_playbook_preview=playbook_yaml,
-        )
+        action = state.root_cause_analysis.selected_action if state.root_cause_analysis else None
+        if action is None:
+            raise ValueError("NOC did not select a remediation goal")
+        action = await resolve_target_with_lookup(action, state.deployment_observations, state.log_event, _invoke_tool)
+        action = action.model_copy(deep=True)
+        if not LIGHTSPEED_URL:
+            raise ValueError("Lightspeed is not configured")
+        outcome = await _generate_selected_playbook(state, action, started)
     except Exception as exc:
-        duration = time.monotonic() - t0
-        logger.exception(f"Lightspeed call failed after {duration:.2f}s")
-        result = RemediationResult(
-            action_taken="generate-playbook",
-            tool_used="lightspeed",
-            success=False,
-            job_id="",
-            duration_seconds=round(duration, 2),
-            output_summary=f"Lightspeed playbook generation failed: {exc}"[:_MAX_ERROR_SUMMARY_CHARS],
-            timestamp=now_iso(),
-        )
-        return {"decision": "lightspeed", "remediation_result": result}
-
+        logger.exception(f"Lightspeed generation failed after {time.monotonic() - started:.2f}s")
+        outcome = _failed_generation(f"Lightspeed playbook generation failed: {exc}", started)
+        return {"decision": "lightspeed", "remediation_result": outcome}
     try:
-        if LIGHTSPEED_SKIP_AAP:
-            logger.info(f"LIGHTSPEED_SKIP_AAP=true, skipping AAP execution for '{playbook_name}'")
-        else:
-            result = await _execute_in_aap(
-                result,
-                playbook_name,
-                playbook_yaml,
-                log_event,
-                llm_summary=llm_summary,
-                evidence_text=grounding_text,
-                resource_specs=state.resource_specs,
-            )
+        if outcome.success and not LIGHTSPEED_SKIP_AAP:
+            outcome = await _execute_in_aap(outcome, action)
+        elif outcome.success:
+            logger.info(f"LIGHTSPEED_SKIP_AAP=true, skipping AAP execution for '{outcome.generated_playbook_name}'")
     except Exception as exc:
-        logger.exception(f"AAP execution failed for playbook '{playbook_name}'")
-        result = result.model_copy(
-            update={
-                "success": False,
-                "output_summary": f"AAP execution failed for {playbook_name}: {exc}"[:_MAX_ERROR_SUMMARY_CHARS],
-                "timestamp": now_iso(),
-            }
-        )
-
-    if result.success:
-        if rca is None:
-            logger.warning("RCA is missing; storing generated playbook with default failure type and summary")
-        failure_type = rca.failure_type if rca else "Unknown"
-        summary = rca.summary if rca else ""
-        # Scheduled on the event loop; the asyncio scheduler will execute it.
-        task = asyncio.create_task(store_generated_playbook(playbook_name, playbook_yaml, failure_type, summary))
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
-        task.add_done_callback(_log_task_exception)
-
-    return {"decision": "lightspeed", "remediation_result": result}
+        logger.exception(f"AAP execution failed for playbook '{outcome.generated_playbook_name}'")
+        outcome = _aap_step_failed(outcome, {"error": f"AAP execution failed: {exc}"}, "execution")
+    _store_successful_playbook(outcome, state.root_cause_analysis)
+    return {"decision": "lightspeed", "remediation_result": outcome}
 
 
 def _aap_step_failed(
@@ -483,126 +458,63 @@ async def _await_project_sync(update_id: int) -> bool:
     return False
 
 
-async def _resolve_target(
-    extra_vars: dict, llm_summary: dict | None, original_edge_site_id: str = ""
-) -> tuple[dict, str]:
-    """Confirm the remediation target exists on the resolved spoke before launching.
-
-    Fails closed: the LLM is free to name the affected component, but we mutate only a
-    pod the cluster confirms. On success pod_name is retargeted to the live pod so the
-    playbook derives the right deployment; on failure the caller blocks the launch.
-    """
-    if not extra_vars:
-        return extra_vars, ""
-    candidate = ""
-    if llm_summary:
-        candidate = normalize_component_name(llm_summary.get("affected_component", ""))
-    original = extra_vars.get("pod_name", "")
-    candidate = candidate or original
-    site_changed = original_edge_site_id and extra_vars.get("edge_site_id", "") != original_edge_site_id
-    if not candidate or (candidate == original and not site_changed):
-        return extra_vars, ""
-    edge_site_id = extra_vars.get("edge_site_id", "")
-    spec = await _invoke_tool(
-        "get_pod_spec",
-        {"name": candidate, "namespace": extra_vars.get("namespace", ""), "edge_site_id": edge_site_id},
-    )
-    if not spec.get("success"):
-        site = edge_site_id or "default cluster"
-        return extra_vars, f"target '{candidate}' not found on {site}: {spec.get('error', '')}"
-    resolved_pod = spec.get("name") or candidate
-    deployment = resolve_remediation_deployment(
-        extra_vars.get("namespace", "") or "",
-        resolved_pod,
-    )
-    return {
-        **extra_vars,
-        "pod_name": resolved_pod,
-        "deployment": deployment,
-        "deployment_name": deployment,
-    }, ""
-
-
-async def _execute_in_aap(
-    result: RemediationResult,
-    name: str,
-    yaml_content: str,
-    log_event,
-    llm_summary=None,
-    evidence_text="",
-    resource_specs="",
-) -> RemediationResult:
-    logger.info(f"AAP execution pipeline started for playbook '{name}'")
-
-    # Push playbook to Gitea
-    commit = await _invoke_tool(
-        "commit_playbook",
-        {"playbook_name": name, "playbook_content": yaml_content},
-    )
+async def _publish_in_aap(outcome: RemediationResult, name: str, yaml_content: str) -> RemediationResult | None:
+    commit = await _invoke_tool("commit_playbook", {"playbook_name": name, "playbook_content": yaml_content})
     if not commit.get("success"):
-        return _aap_step_failed(result, commit, "commit_playbook")
+        return _aap_step_failed(outcome, commit, "commit_playbook")
     logger.info(f"Playbook committed to Gitea: file_path={commit.get('file_path', '')}")
-
-    # Sync AAP project to pick up the new commit
     sync = await _invoke_tool("sync_project", {"project_name": GITEA_PROJECT_NAME})
     if not sync.get("success"):
-        return _aap_step_failed(result, sync, "sync_project")
-
+        return _aap_step_failed(outcome, sync, "sync_project")
     update_id = sync.get("update_id")
-    if update_id is not None:
-        sync_ok = await _await_project_sync(update_id)
-        if not sync_ok:
-            return _aap_step_failed(
-                result,
-                {"error": f"Project sync timed out (update_id={update_id})"},
-                "sync_project",
-            )
-
-    # Create or update the job template
+    if update_id is not None and not await _await_project_sync(update_id):
+        return _aap_step_failed(outcome, {"error": f"Project sync timed out (update_id={update_id})"}, "sync_project")
     upsert = await _upsert_template(name, playbook_path=commit.get("file_path", ""))
     if not upsert.get("success"):
-        return _aap_step_failed(result, upsert, "upsert_job_template")
+        return _aap_step_failed(outcome, upsert, "upsert_job_template")
     logger.info(f"Job template upserted: '{name}'")
+    return None
 
-    # Launch the job with target-specific variables
-    extra_vars = build_launch_extra_vars(
-        log_event, llm_summary=llm_summary, evidence_text=evidence_text, resource_specs=resource_specs
-    )
-    extra_vars, verify_error = await _resolve_target(
-        extra_vars, llm_summary, log_event.edge_site_id if log_event else ""
-    )
-    if verify_error:
-        return _aap_step_failed(result, {"error": verify_error}, "verify_target")
-    launch = await _invoke_tool(
-        "launch_job",
-        {"job_template_name": name, "extra_vars": extra_vars},
-    )
+
+async def _execute_in_aap(result: RemediationResult, action: SelectedAction) -> RemediationResult:
+    name = result.generated_playbook_name
+    logger.info(f"AAP execution pipeline started for playbook '{name}'")
+    publication_failure = await _publish_in_aap(result, name, result.generated_playbook_preview)
+    if publication_failure is not None:
+        return publication_failure
+    launch = await _invoke_tool("launch_job", {"job_template_name": name, "extra_vars": _launch_vars(action)})
     if not launch.get("success"):
         return _aap_step_failed(result, launch, "launch_job")
 
-    job_id = str(launch.get("job_id", ""))
-    logger.info(f"AAP job launched: job_id={job_id} template='{name}'")
+    launched_result = result.model_copy(update={"action_taken": name, "tool_used": _AAP_TOOL})
+    return await _monitor_launched_job(launched_result, launch.get("job_id"))
+
+
+async def _monitor_launched_job(result: RemediationResult, launched_job_id) -> RemediationResult:
+    job_id = str(launched_job_id or "")
+    logger.info(f"AAP job launched: job_id={job_id} template='{result.generated_template_name}'")
 
     try:
-        outcome = await evaluate_job(launch.get("job_id"), GraphConfig().job_timeout)
+        outcome = await evaluate_job(launched_job_id, GraphConfig().job_timeout)
     except Exception as exc:
         return result.model_copy(
             update={
                 "job_id": job_id,
                 "success": False,
-                "output_summary": f"AAP job {job_id} monitoring failed: {exc}"[:1000],
+                "output_summary": f"AAP job {job_id} monitoring failed: {exc}"[:_MAX_ERROR_SUMMARY_CHARS],
                 "timestamp": now_iso(),
             }
         )
-    logger.info(f"AAP job {job_id} for '{name}' finished: success={outcome.success} timed_out={outcome.timed_out}")
+    logger.info(
+        f"AAP job {job_id} for '{result.generated_playbook_name}' finished: "
+        f"success={outcome.success} timed_out={outcome.timed_out}"
+    )
     return result.model_copy(
         update={
-            "action_taken": name,
-            "tool_used": _AAP_TOOL,
             "job_id": job_id,
             "success": outcome.success,
             "timed_out": outcome.timed_out,
             "output_summary": outcome.output_summary,
             "timestamp": outcome.timestamp,
-        },
+        }
     )

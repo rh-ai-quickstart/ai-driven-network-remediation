@@ -2,7 +2,9 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import yaml
 from click.testing import CliRunner
+from helpers import restart_playbook, selected_state
 
 from agent_service import main
 from agent_service.graph import _route_after_act, _route_after_lightspeed, build_graph
@@ -133,6 +135,15 @@ async def _mock_escalate_invoke(tool_name, kwargs):
     if tool_name == "create_incident":
         return {"success": True, "ticket_number": "INC0000001"}
     return {}
+
+
+@pytest.fixture(autouse=True)
+def _isolate_external_side_effects():
+    with (
+        patch("agent_service.fast_path.invoke_tool", AsyncMock(return_value={"success": True, "annotations": {}})),
+        patch("agent_service.nodes.notify._send_slack_message", AsyncMock(return_value="")),
+    ):
+        yield
 
 
 @pytest.fixture
@@ -276,7 +287,7 @@ class TestConditionalRouting:
         assert result["remediation_result"].success is True
         assert result["remediation_result"].generated_template_name is None
 
-    async def test_high_confidence_generation_type_routes_through_lightspeed(self, graph):
+    async def test_generation_type_without_selection_escalates(self, graph):
         result = await graph.ainvoke(
             {
                 "raw_event": "test event",
@@ -284,11 +295,10 @@ class TestConditionalRouting:
             }
         )
 
-        assert result["decision"] == "lightspeed"
-        assert isinstance(result["remediation_result"], RemediationResult)
-        assert result["remediation_result"].generated_template_name is not None
-        assert result["remediation_result"].generated_playbook_name is not None
-        assert result["remediation_result"].lightspeed_conversation_id == "stub-conv-id"
+        assert result["decision"] == "escalate"
+        assert result.get("remediation_result") is None
+        assert result["servicenow_ticket"] == "INC0000001"
+        _als_mock.assert_not_awaited()
 
     async def test_low_confidence_routes_through_escalate(self, graph):
         result = await graph.ainvoke(
@@ -323,7 +333,7 @@ class TestConditionalRouting:
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
 
-    async def test_guard_no_match_high_confidence_routes_to_lightspeed(self, _patch_graph_nodes):
+    async def test_guard_no_match_without_selection_escalates(self, _patch_graph_nodes):
         with patch(
             "agent_service.nodes.decide.verify_playbook_match",
             AsyncMock(return_value=MatchVerdict.NO_MATCH),
@@ -331,8 +341,10 @@ class TestConditionalRouting:
             graph = build_graph()
             result = await graph.ainvoke({"raw_event": "test event", "confidence_override": 0.95})
 
-        assert result["decision"] == "lightspeed"
-        assert result["remediation_result"].generated_template_name is not None
+        assert result["decision"] == "escalate"
+        assert result.get("remediation_result") is None
+        assert result["servicenow_ticket"] == "INC0000001"
+        _als_mock.assert_not_awaited()
 
     async def test_guard_error_escalates_fail_closed(self, _patch_graph_nodes):
         with patch(
@@ -357,6 +369,9 @@ class TestConditionalRouting:
 
     @pytest.mark.parametrize("validation_failure", [False, True])
     async def test_lightspeed_failure_escalates(self, _patch_graph_nodes, validation_failure):
+        selected = selected_state()
+        selected.root_cause_analysis.failure_type = "KafkaLag"
+        selected.root_cause_analysis.confidence = 0.95
         failure_reason = "Missing hosts" if validation_failure else "ALS unreachable"
         generate_playbook = AsyncMock(return_value=({"validation_error": failure_reason}, None))
         if not validation_failure:
@@ -364,13 +379,22 @@ class TestConditionalRouting:
         create_incident = AsyncMock(side_effect=_mock_escalate_invoke)
         send_notification = AsyncMock(return_value="123.456")
         with (
+            patch("agent_service.graph.normalize_node", lambda state: {"log_event": selected.log_event}),
+            patch(
+                "agent_service.graph.analyze_node", lambda state: {"root_cause_analysis": selected.root_cause_analysis}
+            ),
             patch("agent_service.nodes.lightspeed._generate_playbook", generate_playbook),
             patch("agent_service.nodes.escalate._invoke_tool", create_incident),
             patch.multiple("agent_service.nodes.notify", SLACK_ENABLED=True, SLACK_BOT_TOKEN="test-token"),
             patch("agent_service.nodes.notify._send_slack_message", send_notification),
         ):
             graph = build_graph()
-            final_state = await graph.ainvoke({"raw_event": "test event", "failure_type_override": "KafkaLag"})
+            final_state = await graph.ainvoke(
+                {
+                    "raw_event": "test event",
+                    "pod_logs": selected.pod_logs,
+                }
+            )
 
         assert final_state["decision"] == "lightspeed"
         assert final_state["remediation_result"].success is False
@@ -380,6 +404,17 @@ class TestConditionalRouting:
         assert failure_reason in notification
         assert "Escalated" in notification
         assert "Playbook Generated" not in notification
+
+    async def test_missing_selection_escalates_before_als(self, _patch_graph_nodes):
+        als_fail = AsyncMock(side_effect=ConnectionError("ALS unreachable"))
+        with patch("agent_service.nodes.lightspeed._call_als", als_fail):
+            graph = build_graph()
+            final_state = await graph.ainvoke({"raw_event": "test event", "failure_type_override": "KafkaLag"})
+
+        assert final_state["decision"] == "escalate"
+        assert final_state.get("remediation_result") is None
+        assert final_state["servicenow_ticket"] == "INC0000001"
+        als_fail.assert_not_awaited()
 
     async def test_launch_failure_escalates_once(self, _patch_graph_nodes):
         failure_reason = "x" * LONG_FAILURE_PADDING + " retained-tail: template lookup failed"
@@ -432,18 +467,27 @@ class TestConditionalRouting:
 
     async def test_custom_thresholds_route_to_lightspeed(self, _patch_graph_nodes):
         config = GraphConfig(remediate_threshold=0.7, escalate_threshold=0.5)
-        graph = build_graph(config)
-        result = await graph.ainvoke(
-            {
-                "raw_event": "test event",
-                "confidence_override": 0.75,
-                "failure_type_override": "DNSFailure",
-            }
+        selected_rca = selected_state().root_cause_analysis.model_copy(
+            update={"confidence": 0.75, "failure_type": "KafkaLag"}
         )
+        generation = AsyncMock(return_value={"response": yaml.safe_dump(restart_playbook())})
+        with (
+            patch("agent_service.graph.analyze_node", lambda state: {"root_cause_analysis": selected_rca}),
+            patch("agent_service.nodes.lightspeed._call_als", generation),
+            patch(
+                "agent_service.nodes.lightspeed._invoke_tool", AsyncMock(return_value={"success": True, "valid": True})
+            ),
+            patch("agent_service.nodes.lightspeed.LIGHTSPEED_SKIP_AAP", True),
+            patch("agent_service.nodes.lightspeed.store_generated_playbook", AsyncMock()),
+        ):
+            graph = build_graph(config)
+            result = await graph.ainvoke({"raw_event": "test event"})
 
         assert result["decision"] == "lightspeed"
-        assert result["remediation_result"].generated_template_name is not None
-        assert result["remediation_result"].lightspeed_conversation_id == "stub-conv-id"
+        assert result["remediation_result"].success is True
+        assert result["remediation_result"].generated_playbook_name == "restart-selected-deployment"
+        generation.assert_awaited_once()
+        assert selected_rca.selected_action.goal in generation.await_args.args[0]
 
 
 @pytest.mark.usefixtures("_patch_graph_nodes")
@@ -464,12 +508,12 @@ class TestCli:
         assert result.exit_code == 0
         assert "next_action: escalate" in result.output
 
-    def test_lightspeed_route_via_failure_type(self):
+    def test_generation_failure_type_without_selection_escalates(self):
         runner = CliRunner()
         result = runner.invoke(main, ["--failure-type", "KafkaLag"])
 
         assert result.exit_code == 0
-        assert "next_action: lightspeed" in result.output
+        assert "next_action: escalate" in result.output
 
 
 class TestRouteAfterLightspeed:

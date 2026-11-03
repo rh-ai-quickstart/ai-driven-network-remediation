@@ -23,6 +23,7 @@ INCIDENT_STATE_FIELDS = {
     "cluster_events",
     "pod_logs",
     "resource_specs",
+    "deployment_observations",
     "log_search_results",
     "recent_errors",
     "slack_thread_ts",

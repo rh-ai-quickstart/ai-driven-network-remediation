@@ -368,7 +368,7 @@ def get_deployment(
         edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
-        Dict with deployment name, namespace, and annotations
+        Dict with deployment name, namespace, UID, and annotations
     """
     result = _run_oc(
         ["get", "deployment", deployment, "-n", namespace, "-o", "json"],
@@ -386,6 +386,7 @@ def get_deployment(
             "success": True,
             "deployment": deployment,
             "namespace": namespace,
+            "uid": data.get("metadata", {}).get("uid", ""),
             "annotations": {**tpl, **meta},
         }
     except json.JSONDecodeError as e:

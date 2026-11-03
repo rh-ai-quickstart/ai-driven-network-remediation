@@ -442,6 +442,17 @@ class TestFindPod:
 
 @patch("mcp_openshift.tools._run_oc")
 class TestGetDeployment:
+    def test_uid_is_returned_from_observed_metadata(self, mock_oc):
+        mock_oc.return_value = {
+            "stdout": json.dumps({"metadata": {"uid": "observed-deployment-uid"}}),
+            "stderr": "",
+            "success": True,
+        }
+        result = get_deployment(deployment="orders-api", namespace="prod")
+        assert result["uid"] == "observed-deployment-uid"
+        assert result["deployment"] == "orders-api"
+        assert result["namespace"] == "prod"
+
     def test_success_returns_annotations(self, mock_oc):
         mock_oc.return_value = {
             "stdout": '{"metadata": {"annotations": {"adnr.io/fast-path-last-heal": "2026-08-18T12:00:00Z"}}}',
@@ -451,6 +462,7 @@ class TestGetDeployment:
         }
         result = get_deployment(deployment="edge-nginx", namespace="dark-noc-edge")
         assert result["success"] is True
+        assert result["uid"] == ""
         assert result["annotations"]["adnr.io/fast-path-last-heal"] == "2026-08-18T12:00:00Z"
 
     def test_template_annotations_are_merged(self, mock_oc):
@@ -694,6 +706,7 @@ def test_reset_cpu_demo_rollout_failure_is_not_success(mock_oc):
 @patch("mcp_openshift.server.asyncio.to_thread")
 def test_reset_http_route(mock_thread):
     import asyncio
+
     import httpx
     from mcp_openshift.server import app
 

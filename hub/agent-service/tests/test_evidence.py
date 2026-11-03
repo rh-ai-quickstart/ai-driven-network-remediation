@@ -2,7 +2,6 @@ from helpers import make_state
 
 from agent_service.evidence import (
     build_evidence_prompt,
-    build_grounding_text,
     get_pod_logs_for_attachment,
     get_structured_attachments,
 )
@@ -57,19 +56,15 @@ class TestBuildEvidencePrompt:
         assert "Pod Logs" in result
         assert "OOMKilled" in result
 
-    def test_analysis_and_grounding_use_bounded_pod_logs(self):
+    def test_analysis_bounds_logs(self):
         lines = [f"log-line-{index:03}" for index in range(40)]
         state = make_state(pod_logs="\n".join(lines))
 
         prompt = build_evidence_prompt(state)
-        grounding = build_grounding_text(state)
 
         assert "log-line-009" not in prompt
         assert "log-line-010" in prompt
         assert "log-line-039" in prompt
-        assert "log-line-009" not in grounding
-        assert "log-line-010" in grounding
-        assert "log-line-039" in grounding
 
     def test_character_limit_preserves_log_source_prefix(self):
         provenance = "Edge site: edge-2 Pod: microservice-b-abc | "
@@ -115,13 +110,18 @@ class TestBuildEvidencePrompt:
 class TestDictPodStatusNotSliced:
     """pod_status is a dict; slicing it like a list raised KeyError."""
 
-    def test_build_grounding_text_handles_dict_pod_status(self):
-        state = make_state(pod_status={"namespace": "edge-site-01", "pods": [{"name": "memory-hog"}]})
-        result = build_grounding_text(state)
-        assert "memory-hog" in result
-        assert "edge-site-01" in result
-
     def test_get_structured_attachments_handles_dict_pod_status(self):
         state = make_state(pod_status={"namespace": "edge-site-01", "pods": [{"name": "memory-hog"}]})
         attachments = get_structured_attachments(state)
         assert any("memory-hog" in a["content"] for a in attachments)
+
+
+def test_deployment_observations_are_complete_in_noc_evidence():
+    observations = [
+        {"edge_site_id": "edge-2", "namespace": "prod", "deployment": f"service-{index}"} for index in range(20)
+    ]
+    state = make_state(deployment_observations=observations)
+    evidence_text = build_evidence_prompt(state)
+    assert "service-19" in evidence_text
+    assert "edge-2" in evidence_text
+    assert "prod" in evidence_text

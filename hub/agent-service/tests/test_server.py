@@ -96,14 +96,15 @@ class TestRemediateEndpoint:
         assert set(body.keys()) == INCIDENT_STATE_FIELDS
         assert body["decision"] != ""
 
-    def test_post_remediate_with_failure_type_override(self, client):
+    def test_failure_type_override_without_selection_escalates(self, client):
         response = client.post(
             "/remediate",
             json={"raw_event": "test event", "confidence_override": 0.9, "failure_type_override": "KafkaLag"},
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["decision"] == "lightspeed"
+        assert body["decision"] == "escalate"
+        assert body["remediation_result"] is None
 
     def test_post_remediate_rejects_invalid_failure_type_override(self, client):
         response = client.post(

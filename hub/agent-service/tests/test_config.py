@@ -61,7 +61,7 @@ def test_workflow_timeout_tracks_lightspeed_budget(monkeypatch):
         environment.setenv("LIGHTSPEED_TIMEOUT_SECONDS", "600")
         try:
             importlib.reload(config)
-            assert config.GRAPH_INVOKE_TIMEOUT_SECONDS == 1800
+            assert config.GRAPH_INVOKE_TIMEOUT_SECONDS == 4740
         finally:
             environment.undo()
             importlib.reload(config)

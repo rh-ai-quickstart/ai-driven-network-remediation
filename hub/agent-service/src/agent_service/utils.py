@@ -5,14 +5,8 @@ from loguru import logger
 
 from agent_service.config import EDGE_NAMESPACE, get_http_client
 
-# Prefix stamped onto pod-spec evidence in investigate.py to record which cluster
-# it came from. Retargeting only trusts an edge_site_id that carries this stamp,
-# so a namespace or log line that merely mentions a cluster name is not enough.
+# Prefix stamped onto investigation evidence to record its source cluster.
 EDGE_SITE_STAMP = "Edge site:"
-_RESOURCE_KIND_PREFIX = re.compile(
-    r"^(?:pods?|deploy(?:ment)?s?|statefulsets?|sts|daemonsets?|ds|replicasets?|rs|services?|svc|jobs?|cronjobs?)/",
-    re.IGNORECASE,
-)
 
 
 async def warm_tool_cache() -> bool:
@@ -26,17 +20,6 @@ async def warm_tool_cache() -> bool:
     tools = resp.json().get("data") or []
     logger.info(f"LlamaStack tool cache warmed: {len(tools)} tools indexed")
     return True
-
-
-def normalize_component_name(component: str) -> str:
-    """Turn a free-text affected component into a matchable pod-name prefix.
-
-    Strip resource-kind prefixes and container suffixes while keeping the pod name.
-    """
-    without_paren = re.sub(r"\(.*?\)", " ", component)
-    resource_name = _RESOURCE_KIND_PREFIX.sub("", without_paren.strip()).split("/")[0]
-    tokens = resource_name.split()
-    return tokens[0].lower() if tokens else ""
 
 
 # A Deployment pod name is "<deployment>-<replicaset-hash>-<pod-hash>". Match the
@@ -69,7 +52,7 @@ def resolve_remediation_deployment(namespace: str, pod_name: str) -> str:
     return derived
 
 
-def build_launch_extra_vars(log_event, llm_summary=None, evidence_text="", resource_specs="") -> dict:
+def build_launch_extra_vars(log_event) -> dict:
     """Build the extra_vars dict from a log event for AAP job launches."""
     if not log_event:
         return {}
@@ -77,7 +60,7 @@ def build_launch_extra_vars(log_event, llm_summary=None, evidence_text="", resou
         log_event.namespace or "",
         log_event.pod_name or "",
     )
-    extra_vars = {
+    return {
         "namespace": log_event.namespace,
         "pod_name": log_event.pod_name,
         "container": log_event.container,
@@ -85,17 +68,6 @@ def build_launch_extra_vars(log_event, llm_summary=None, evidence_text="", resou
         "deployment": deployment,
         "deployment_name": deployment,
     }
-    if not llm_summary:
-        return extra_vars
-    component = normalize_component_name(llm_summary.get("affected_component", ""))
-    if component and re.search(rf"\b{re.escape(component)}\b", evidence_text):
-        deployment = resolve_remediation_deployment(log_event.namespace or "", component)
-        extra_vars["deployment"] = deployment
-        extra_vars["deployment_name"] = deployment
-    site_id = llm_summary.get("edge_site_id")
-    if isinstance(site_id, str) and site_id and f"{EDGE_SITE_STAMP} {site_id}" in resource_specs:
-        extra_vars["edge_site_id"] = site_id
-    return extra_vars
 
 
 def _parse_tool_content(content) -> dict:
@@ -108,12 +80,14 @@ def _parse_tool_content(content) -> dict:
     return {}
 
 
-async def invoke_tool(tool_name: str, kwargs: dict) -> dict:
+async def invoke_tool(tool_name: str, kwargs: dict, *, timeout_seconds: float | None = None) -> dict:
     """Call an MCP tool via LlamaStack's /v1/tool-runtime/invoke endpoint."""
     logger.info(f"MCP tool invoke: {tool_name} args={kwargs}")
+    request_options = {"timeout": timeout_seconds} if timeout_seconds is not None else {}
     resp = await get_http_client().post(
         "/v1/tool-runtime/invoke",
         json={"tool_name": tool_name, "kwargs": kwargs},
+        **request_options,
     )
     resp.raise_for_status()
     data = resp.json()
