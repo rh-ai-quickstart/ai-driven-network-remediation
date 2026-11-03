@@ -157,6 +157,7 @@ agentService:
     tokenSecretName: ""
     tokenSecretKey: "api_key"
     verifySSL: "false"
+    timeoutSeconds: 180
     namespace: "aap"
     # Existing source template to copy; the original is never modified.
     baseTemplateName: "lightspeed-runner"

@@ -92,6 +92,8 @@ spec:
             {{- if .Values.agentService.lightspeed.url }}
             - name: LIGHTSPEED_VERIFY_SSL
               value: {{ .Values.agentService.lightspeed.verifySSL | quote }}
+            - name: LIGHTSPEED_TIMEOUT_SECONDS
+              value: {{ .Values.agentService.lightspeed.timeoutSeconds | quote }}
             {{- end }}
             - name: AAP_RESOURCE_PREFIX
               value: {{ include "network.aapResourcePrefix" . | quote }}

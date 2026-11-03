@@ -113,6 +113,7 @@ ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
+LIGHTSPEED_TIMEOUT_SECONDS ?= 180
 AUTO_INGEST_ON_STARTUP ?= true
 AAP_NAMESPACE          ?= aap
 AAP_URL                ?= $(if $(filter true,$(ENABLE_AAP_MOCK)),http://aap-mock.$(NAMESPACE).svc:8080,http://aap.aap.svc)
@@ -330,7 +331,8 @@ endif
 helm_lightspeed_args = \
 	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.url='$(LIGHTSPEED_URL)',) \
 	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.token='$(LIGHTSPEED_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',)
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',) \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.timeoutSeconds='$(LIGHTSPEED_TIMEOUT_SECONDS)',)
 
 helm_slack_args = \
 	--set network.agentService.slack.enabled=$(ENABLE_SLACK) \
