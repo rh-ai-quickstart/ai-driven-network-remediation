@@ -7,9 +7,6 @@ import httpx
 
 from .close_codes import load_close_code_fallbacks
 from .config import (
-    SLACK_BASE_URL,
-    SLACK_BOT_TOKEN,
-    SLACK_NOC_CHANNEL,
     SNOW_API_KEY,
     SNOW_CALLER_NAME,
     SNOW_PASSWORD,
@@ -126,38 +123,6 @@ def _incident_url(sys_id: str, ticket_number: str = "") -> str:
     return f"{SNOW_URL}/incident_list.do"
 
 
-def _notify_slack_ticket_created(ticket: dict) -> dict:
-    """Send a Slack notification when a ServiceNow incident is created."""
-    if not SLACK_BOT_TOKEN:
-        return {"sent": False, "reason": "missing_token"}
-
-    text = (
-        f":ticket: ServiceNow incident created\n"
-        f"- Number: {ticket.get('ticket_number', '')}\n"
-        f"- Priority: {ticket.get('priority', '')}\n"
-        f"- Caller: {SNOW_CALLER_NAME}\n"
-        f"- State: {ticket.get('state', 'New')}\n"
-        f"- Short Description: {ticket.get('short_description', '')}\n"
-        f"- URL: {ticket.get('incident_url', '')}"
-    )
-    headers = {
-        "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
-        "Content-Type": "application/json; charset=utf-8",
-    }
-
-    try:
-        with httpx.Client(timeout=12) as http:
-            resp = http.post(
-                f"{SLACK_BASE_URL}/chat.postMessage", json={"channel": SLACK_NOC_CHANNEL, "text": text}, headers=headers
-            )
-            data = resp.json()
-        if not data.get("ok", False):
-            return {"sent": False, "reason": data.get("error", "unknown_error")}
-        return {"sent": True, "ts": data.get("ts", "")}
-    except Exception as exc:
-        return {"sent": False, "reason": str(exc)}
-
-
 @mcp.tool()
 def create_incident(
     short_description: str,
@@ -204,7 +169,7 @@ def create_incident(
             resp.raise_for_status()
             data = resp.json().get("result", {})
 
-        result = {
+        return {
             "success": True,
             "ticket_number": data.get("number", ""),
             "sys_id": data.get("sys_id", ""),
@@ -214,8 +179,6 @@ def create_incident(
             "caller_name": SNOW_CALLER_NAME,
             "incident_url": _incident_url(data.get("sys_id", ""), data.get("number", "")),
         }
-        result["slack_notification"] = _notify_slack_ticket_created(result)
-        return result
     except httpx.HTTPStatusError as e:
         return {"success": False, "error": f"ServiceNow API error: {e.response.status_code} – {e.response.text[:200]}"}
     except httpx.HTTPError as e:

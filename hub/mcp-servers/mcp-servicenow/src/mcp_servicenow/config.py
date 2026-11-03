@@ -17,10 +17,6 @@ SNOW_PASSWORD = os.getenv("SERVICENOW_PASSWORD", "admin")
 SNOW_API_KEY = os.getenv("SERVICENOW_API_KEY", "").strip()
 SNOW_CALLER_NAME = os.getenv("SERVICENOW_CALLER_NAME", "NOC Agent")
 
-SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
-SLACK_NOC_CHANNEL = os.getenv("SLACK_NOC_CHANNEL", "#dark-noc-alerts")
-SLACK_BASE_URL = "https://slack.com/api"
-
 mcp = FastMCP(
     "noc-servicenow",
     instructions=(
