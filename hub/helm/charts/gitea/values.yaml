@@ -1,6 +1,10 @@
 nameOverride: "gitea"
 fullnameOverride: "gitea"
 
+global:
+  routes:
+    enabled: true
+
 gitea:
   enabled: true
   external: false
@@ -12,6 +16,9 @@ gitea:
 
   service:
     port: 3000
+
+  route:
+    enabled: false
 
   adminUser: ""
   adminPassword: ""

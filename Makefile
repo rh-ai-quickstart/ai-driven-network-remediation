@@ -122,6 +122,7 @@ ENABLE_NETWORK_REMEDIATION ?= true
 ENABLE_TELCO_ORAN          ?= true
 ENABLE_MULTICLUSTER    ?= false
 ENABLE_GITEA           ?= $(if $(filter false,$(ENABLE_AAP_MOCK)),true,false)
+ENABLE_GITEA_UI        ?= false
 GITEA_EXTERNAL         ?= false
 GITEA_URL              ?=
 GITEA_REPO             ?=
@@ -300,6 +301,7 @@ helm_servicenow_real_args = \
 
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
+	--set gitea.gitea.route.enabled=$(ENABLE_GITEA_UI) \
 	$(if $(GITEA_ADMIN_USER),--set-string gitea.gitea.adminUser='$(GITEA_ADMIN_USER)' --set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_OWNER='$(GITEA_ADMIN_USER)' --set-string network.gitea.adminUser='$(GITEA_ADMIN_USER)',) \
 	$(if $(GITEA_ADMIN_PASSWORD),--set-string gitea.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)' --set-string network.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)',) \
 	$(if $(GITEA_ADMIN_EMAIL),--set-string gitea.gitea.adminEmail='$(GITEA_ADMIN_EMAIL)',) \
