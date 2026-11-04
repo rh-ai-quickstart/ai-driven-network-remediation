@@ -36,8 +36,13 @@ def get_llm() -> ChatOpenAI:
 
 # Kafka
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+CLASSIFY_INFERENCE_URL = os.getenv("CLASSIFY_INFERENCE_URL", "")
+CLASSIFY_TOKEN = os.getenv("CLASSIFY_TOKEN", "")
+
+
 KAFKA_ANOMALIES_TOPIC = os.getenv("KAFKA_ANOMALIES_TOPIC", "ran-anomalies")
 KAFKA_ENRICHED_TOPIC = os.getenv("KAFKA_ENRICHED_TOPIC", "ran-anomalies-enriched")
+KAFKA_INCIDENT_STATUS_TOPIC = os.getenv("KAFKA_INCIDENT_STATUS_TOPIC", "ran-incident-status")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "ran-rca-service")
 KAFKA_CONSUMER_ENABLED = _env_bool("KAFKA_CONSUMER_ENABLED", True)
 

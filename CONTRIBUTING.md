@@ -59,6 +59,24 @@ Skip the ServiceNow and Network dashboard checks when Network is disabled, and s
 
 Mock job success confirms simulated automation, not an actual repair. Mock ServiceNow incidents are stored in memory and are lost on restart. The AAP mock also holds its job records in memory. Mocks do not make the entire deployment inert: cluster access remains real, and the [edge fast-path healer](docs/edge-fast-path-healer.md) can modify workloads independently of AAP.
 
+To exercise a RAN remediation failure, patch the selected mock job template with
+`mock_outcome` set to `launch_error`, `timeout`, or `failed`. The setting applies
+to subsequent launches of that template until changed or the mock restarts.
+`successful` restores the normal mock behavior. For example, after forwarding
+the mock service to `localhost:8080`:
+
+```bash
+curl -X PATCH http://localhost:8080/api/controller/v2/job_templates/9/ \
+  -H 'Content-Type: application/json' -d '{"mock_outcome":"failed"}'
+# Trigger the Antenna Failure demo and inspect its incident card.
+curl -X PATCH http://localhost:8080/api/controller/v2/job_templates/9/ \
+  -H 'Content-Type: application/json' -d '{"mock_outcome":"successful"}'
+```
+
+Template 9 is the seeded `ran-cell-recovery` template. A missing template or
+launch error leaves the chosen template on the incident without a job ID;
+timeout and failed-job outcomes include the launched job ID.
+
 If diagnosis does not complete, inspect the relevant logs and check the model endpoints:
 
 ```bash

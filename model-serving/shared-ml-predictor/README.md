@@ -98,7 +98,7 @@ TASK=classify MANTIS_MODEL_PATH=/path/to/mantis_pretrained_rca.pt uv run ran-ml-
 
 The Mantis-8M backbone must be present in the Hugging Face cache for offline
 mode. `POST /v1/classify` accepts `{"kpi_window": [...]}` with all 128 rows and
-returns `class`, `class_index`, and `confidence`. `/ready` stays unavailable if
+returns `root_cause_category`, `class_index`, and `confidence`. `/ready` stays unavailable if
 the checkpoint task, head dimensions, or preprocessing artifact (including its
 ordered RCA class mapping) is invalid.
 

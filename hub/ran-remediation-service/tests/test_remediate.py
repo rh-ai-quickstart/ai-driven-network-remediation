@@ -58,6 +58,10 @@ async def test_launch_failure():
 
     assert result["success"] is False
     assert "not found" in result["output_summary"]
+    assert result["failure_stage"] == "aap_launch"
+    assert result["failure_reason"] == "Job template 'ran-antenna-tilt-adjust' not found"
+    assert result["job_id"] == ""
+    assert result["timestamp"]
 
 
 @pytest.mark.asyncio
@@ -77,6 +81,23 @@ async def test_job_failure():
 
     assert result["success"] is False
     assert result["job_status"] == "failed"
+    assert result["failure_stage"] == "aap_job"
+    assert result["failure_reason"] == "error occurred"
+    assert result["job_id"] == "5"
+
+
+@pytest.mark.asyncio
+async def test_unsuccessful_terminal_status_cannot_look_successful():
+    launch, status, output = _patch_aap(
+        5, {"status": "canceled", "failed": False, "finished": "2026-09-21T10:00:00Z"}, "",
+    )
+    with launch, status, output:
+        result = await remediate_node(_state())
+
+    assert result["success"] is False
+    assert result["job_status"] == "canceled"
+    assert result["failure_stage"] == "aap_job"
+    assert "canceled" in result["failure_reason"]
 
 
 @pytest.mark.asyncio
@@ -93,6 +114,9 @@ async def test_job_timeout():
 
     assert result["success"] is False
     assert result["timed_out"] is True
+    assert result["job_id"] == "7"
+    assert result["failure_stage"] == "aap_timeout"
+    assert "timed out" in result["failure_reason"]
 
 
 @pytest.mark.asyncio

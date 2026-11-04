@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ran-incident-status.schema.json",
+  "title": "RAN incident status (ran-incident-status topic)",
+  "type": "object",
+  "required": ["incident_id", "stage", "outcome", "error_reason", "timestamp", "zone", "application", "ad_label", "ad_confidence"],
+  "properties": {
+    "incident_id": {"type": "string", "minLength": 1},
+    "stage": {"enum": ["rca_classification", "rca_explanation"]},
+    "outcome": {"const": "failed"},
+    "error_reason": {"type": "string", "minLength": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "zone": {"type": "string"},
+    "application": {"type": "string"},
+    "ad_label": {"const": "anomalous"},
+    "ad_confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "additionalProperties": false
+}

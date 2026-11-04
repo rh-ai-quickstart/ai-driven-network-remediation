@@ -11,6 +11,10 @@ concurrency:
 
 env:
   NAMESPACE: ci-hub-telco-oran
+  REGISTRY: ${{ vars.QUAY_REPOSITORY }}
+  VERSION: ${{ github.sha }}
+  CONTAINER_TOOL: docker
+  ADNR_CLASSIFY_INFERENCE_URL: http://ran-rca-ml-service-predictor.model-serving.svc.cluster.local/v1/classify
 
 jobs:
   telco-e2e-ocp:
@@ -70,6 +74,34 @@ jobs:
       - name: Setup uv
         uses: astral-sh/setup-uv@v6
 
+      - name: Validate image registry credentials
+        shell: bash
+        env:
+          QUAY_USER: ${{ vars.QUAY_USER }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+        run: |
+          for name in REGISTRY QUAY_USER QUAY_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "${name} is missing or empty. Set the Quay repository, user, and token in repository or organization settings."
+              exit 1
+            fi
+          done
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ vars.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Build and push RCA images from this commit
+        shell: bash
+        run: |
+          make build-ran-rca-image build-ran-chatbot-image build-ran-ml-service-image
+          docker push "${REGISTRY}/noc-ran-rca-service:${VERSION}"
+          docker push "${REGISTRY}/noc-ran-chatbot-service:${VERSION}"
+          docker push "${REGISTRY}/noc-ran-ml-service:${VERSION}"
+
       - name: Log into the cluster
         shell: bash
         run: |
@@ -77,6 +109,13 @@ jobs:
         env:
           OCP_TOKEN: ${{ secrets.OCP_TOKEN }}
           OCP_SERVER: ${{ secrets.OCP_SERVER }}
+
+      - name: Deploy RCA classifier from this commit
+        shell: bash
+        run: |
+          TASK=classify SKIP_HF_UPLOAD=1 SKIP_BUILD=1 \
+            IMAGE="${REGISTRY}/noc-ran-ml-service:${VERSION}" \
+            ./model-serving/shared-ml-predictor/deploy/publish-and-deploy.sh
 
       - name: Resolve shared detector URL
         shell: bash
@@ -116,7 +155,8 @@ jobs:
             ENABLE_NETWORK_REMEDIATION=false \
             EDGE_RBAC_ENABLED=false \
             ROUTES_ENABLED=false \
-            AUTO_INGEST_ON_STARTUP=false
+            AUTO_INGEST_ON_STARTUP=false \
+            HELM_EXTRA_ARGS="-f hub/helm/values-ci-rca.yaml --set-string telco.ranRcaService.image=${REGISTRY}/noc-ran-rca-service:${VERSION} --set-string telco.ranChatbotService.image=${REGISTRY}/noc-ran-chatbot-service:${VERSION}"
         env:
           ADNR_LLM_ID: ${{ vars.ADNR_LLM_ID }}
           ADNR_LLM_URL: ${{ vars.ADNR_LLM_URL }}

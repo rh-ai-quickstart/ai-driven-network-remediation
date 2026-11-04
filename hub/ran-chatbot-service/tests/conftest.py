@@ -1,5 +1,5 @@
 from collections import deque
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,7 +13,7 @@ SAMPLE_ANOMALY_DICT = {
     "kpi_window": [{"RSRP": -85.0, "DL_BLER": 0.1}] * 128,
     "ad_label": "anomalous",
     "ad_confidence": 0.94,
-    "root_cause_category": "antenna_misalignment",
+    "root_cause_category": "Antenna Failure",
     "root_cause": "Signal degradation due to antenna misalignment in zone A.",
     "recommended_fix": "Section 4.2 — Verify antenna tilt and azimuth alignment.",
 }
@@ -46,6 +46,9 @@ def client():
     with (
         patch("ran_chatbot_service.AnomaliesConsumer", return_value=mock_anomalies_consumer),
         patch("ran_chatbot_service.RemediationConsumer", return_value=mock_remediation_consumer),
+        patch("ran_chatbot_service.probe_http", new_callable=AsyncMock, return_value={
+            "status": "up", "http_code": 200, "reachable": True,
+        }),
     ):
         with TestClient(app) as test_client:
             test_client.app.state.recent_remediations = deque(maxlen=100)

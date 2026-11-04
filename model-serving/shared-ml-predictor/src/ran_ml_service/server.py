@@ -46,7 +46,7 @@ class DetectResponse(BaseModel):
 
 
 class ClassifyResponse(BaseModel):
-    class_: str = Field(alias="class")
+    root_cause_category: str
     confidence: float
     class_index: int
 
@@ -99,7 +99,7 @@ def classify(req: DetectRequest) -> ClassifyResponse | JSONResponse:
         return JSONResponse({"error": "model not loaded"}, status_code=503)
     try:
         prediction = predictor.predict(req.kpi_window)
-        return ClassifyResponse.model_validate({"class": prediction["label"], "confidence": prediction["confidence"], "class_index": prediction["class_index"]})
+        return ClassifyResponse(root_cause_category=prediction["label"], confidence=prediction["confidence"], class_index=prediction["class_index"])
     except InvalidKpiWindowError as exc:
         return JSONResponse({"error": str(exc)}, status_code=422)
     except Exception:

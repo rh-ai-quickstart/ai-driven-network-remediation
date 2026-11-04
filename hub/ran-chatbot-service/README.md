@@ -12,7 +12,7 @@ through chat; `DELETE /api/anomalies` to clear that list for a clean demo/UI sta
 | Path | Method | Purpose |
 |---|---|---|
 | `/health` | GET | Liveness probe |
-| `/ready` | GET | Readiness (Kafka + LLM dependency status, always returns 200) |
+| `/ready` | GET | Readiness (Kafka + LLM + RCA dependency status, always returns 200) |
 | `/api/chat` | POST | Conversational reply grounded in recently detected anomalies and their remediation outcomes |
 | `/api/anomalies` | GET | Recent enriched anomalies (in-memory buffer), newest first |
 | `/api/anomalies` | DELETE | Clear the in-memory anomaly buffer |
@@ -39,7 +39,7 @@ see below) and formats the LLM's reply, so operators can ask things like "was th
 incident X successful?" without checking `/api/anomalies` separately.
 
 When the most recent anomaly carries a `root_cause_category`, `/api/chat` replies are
-prefixed with a title-cased tag — `[Antenna Misalignment] …`. `ran-frontend` strips that
+prefixed with the predicted label — `[Antenna Failure] …`. `ran-frontend` strips that
 prefix with a regex and renders it as a badge, so the two sides are coupled: changing the
 prefix format here means changing `ChatPanel.jsx` too.
 
@@ -69,10 +69,28 @@ does **not** use a Kafka consumer group — the topic has multiple partitions, a
 would split them across replicas if this service is ever scaled beyond one, so each replica stays
 group-less and independently sees the full topic.
 
-`DELETE /api/anomalies` clears that in-memory buffer directly (`deque.clear()`) for a clean
+`DELETE /api/anomalies` clears the in-memory anomaly, status, and remediation buffers for a clean
 demo/UI state. It does **not** survive a restart or Kafka reconnect: `_seed_recent_history()`
 re-drains the same recent window from `ran-anomalies-enriched` (7-day retention by default) on
 every (re)connect, so anomalies still on that topic will resurface then.
+
+If Mantis RCA classification fails, `ran-rca-service` publishes a keyed record to
+`ran-incident-status` instead of `ran-anomalies-enriched`. The BFF consumes that
+topic as well and includes the incident in `GET /api/anomalies` with
+`incident_status` containing the failed stage, short reason, and timestamp.
+The incident card shows those details without a remediation job. The status
+record follows `contracts/ran-incident-status.schema.json`.
+If the RCA explanation fails after a valid classification, the RCA service
+publishes both an enriched anomaly (with empty `root_cause` and
+`recommended_fix`) and an `rca_explanation` failure status. The BFF joins that
+status to the anomaly, including its independent remediation job result. Chat
+labels the missing explanation and fix as unavailable; when the chat model is
+also down, it returns that incident summary without generated explanation text.
+The BFF also probes `RCA_READY_URL` (default:
+`http://hub-ran-rca-service:8003/ready`) when serving `/ready` and
+`GET /api/anomalies`. A non-200 response or connection failure reports
+`rca_service` as unavailable in the public dependency health, independently
+of incident status records.
 
 That topic is populated by [`ran-rca-service`](../ran-rca-service) (LLM root cause analysis + RAG-
 based recommended fix), which enriches each anomaly detected by
@@ -88,11 +106,23 @@ AD) with `root_cause` and `recommended_fix`, matching this output contract
   "kpi_window": [ /* 128 × 18 TelecomTS channels */ ],
   "ad_label": "anomalous",
   "ad_confidence": 0.9995,
-  "root_cause_category": "antenna_misalignment",
-  "root_cause": "Signal degradation consistent with antenna misalignment...",
-  "recommended_fix": "Verify antenna tilt per vendor guide Section 4.3.2..."
+  "ml_confidence": 0.91,
+  "root_cause_category": "Antenna Failure",
+  "root_cause": "Antenna failure detected from the KPI pattern...",
+  "recommended_fix": "Run cell recovery per vendor guide Section 4.3.2..."
 }
 ```
+
+## Co-channel interference remediation
+
+`Co-Channel Interference (Mild)` and `Co-Channel Interference (Severe)` remain
+distinct `root_cause_category` values. Any valid classifier confidence,
+including a value near zero, selects that label's playbook. The incident card
+displays the prediction and its confidence while remediation proceeds.
+
+`ran-remediation-service` selects `ran-interference-mitigation` for the mild
+label and `ran-severe-interference-mitigation` for the severe label. Both are
+simulated AAP jobs and do not change radio settings.
 
 ## Demo trigger
 
@@ -109,12 +139,25 @@ Available scenarios (from `hub/telco-oran/src/telco_oran/fixtures/`):
 |---|---|---|
 | `antenna_failure` (default) | Anomalous (>99% confidence) | Antenna Failure |
 | `high_congestion_sudden` | Anomalous (>90%) | High Network Congestion (Sudden Spike) |
+| `high_congestion_gradual` | Anomalous | High Network Congestion (Gradual Buildup) |
 | `co_channel_interference_severe` | Anomalous (>90%) | Co-Channel Interference (Severe) |
 | `doppler_shift_severe` | Anomalous (>95%) | Doppler Shift (Severe) |
+| `handover_fault` | Anomalous | Faulty Handover Algorithm (Too Frequent) |
+| `buffer_overflow` | Anomalous | Buffer Overflow (Gradual Buildup) |
+| `resource_allocation_bugs` | Anomalous | Resource Allocation Bugs |
 | `normal_traffic` | Normal (no anomaly published) | Normal |
 
 **Prerequisite:** `ran-anomaly-detector` AND `ran-ml-service` must be running for the trigger to
 have any downstream effect — see `docs/RAN-DEMO-SCRIPT.md`.
+
+For `resource_allocation_bugs`, Mantis RCA returns `Resource Allocation Bugs`
+directly as `root_cause_category`. The remediation service selects
+`ran-resource-allocation-correction`, whose AAP mock job reports a simulated PRB
+assignment review and corrected allocation plan with `changed=0`; no RAN device
+is changed. `/api/anomalies` and the incident card show the prediction,
+job, and result under the trigger's incident ID. With a configured classifier,
+run the live incident check using `RCA_FIXTURE_SCENARIO=resource_allocation_bugs`
+and `hub/integration-tests/tests/telco/test_rca_real_e2e.py`.
 
 ## Usage
 
