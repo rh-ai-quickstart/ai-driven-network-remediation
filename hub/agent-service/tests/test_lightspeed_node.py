@@ -53,6 +53,60 @@ _LAUNCH_OK = {
     "template_name": "restart-selected-deployment",
 }
 
+_DAEMONSET_MATCH = {
+    "kind": "DaemonSet",
+    "name": "dns-default",
+    "namespace": "openshift-dns",
+    "edge_site_id": "edge-site-01",
+}
+_DAEMONSET_ALS_RESPONSE = {
+    **_ALS_RESPONSE,
+    "response": (
+        "- name: Repair selected DNS DaemonSet\n"
+        "  hosts: localhost\n"
+        "  tasks:\n"
+        "    - name: Apply selected DaemonSet configuration\n"
+        "      kubernetes.core.k8s:\n"
+        "        state: present\n"
+        "        definition:\n"
+        "          apiVersion: apps/v1\n"
+        "          kind: DaemonSet\n"
+        "          metadata:\n"
+        "            name: '{{ resource_name }}'\n"
+        "            namespace: '{{ namespace }}'\n"
+    ),
+}
+_AMBIGUOUS_DAEMONSET_MATCHES = [
+    _DAEMONSET_MATCH,
+    {**_DAEMONSET_MATCH, "namespace": "kube-system"},
+]
+_INVALID_DAEMONSET_LOOKUPS = [
+    {"success": False, "matches": []},
+    {"success": True, "matches": []},
+    {"success": True, "matches": [{**_DAEMONSET_MATCH, "name": "other"}]},
+    {"success": True, "matches": [{**_DAEMONSET_MATCH, "edge_site_id": "other-site"}]},
+    {"success": True, "matches": _AMBIGUOUS_DAEMONSET_MATCHES},
+]
+
+
+def _daemonset_state():
+    state = selected_state(site="edge-site-01", namespace="")
+    update_selection(
+        state,
+        goal="Repair the selected DNS DaemonSet configuration",
+        target={"kind": "DaemonSet", "name": "dns-default"},
+    )
+    return state
+
+
+def _daemonset_lookup(lookup_reply):
+    async def lookup_then_invoke(tool_name, kwargs):
+        if tool_name == "get_daemonset":
+            return lookup_reply
+        return await _default_invoke(tool_name, kwargs)
+
+    return lookup_then_invoke
+
 
 def _state(rca=None, log_event=None, use_defaults=True, **extra):
     state = selected_state(**extra)
@@ -809,6 +863,47 @@ async def test_missing_namespace_uses_confirmed_exact_deployment_for_generation_
     assert prompt_target["namespace"] == launch["namespace"] == "edge-ofridman"
     assert prompt_target["name"] == launch["resource_name"] == "microservice-b"
     assert state.root_cause_analysis.selected_action.target.namespace == ""
+
+
+async def test_missing_daemonset_namespace_uses_exact_lookup_for_generation_and_launch():
+    state = _daemonset_state()
+    original_evidence = list(state.root_cause_analysis.selected_action.evidence)
+    outcome, generation, invoke = await _run_node(
+        als_return=_DAEMONSET_ALS_RESPONSE,
+        invoke_fn=_daemonset_lookup({"success": True, "matches": [_DAEMONSET_MATCH]}),
+        rca=state.root_cause_analysis,
+        log_event=make_log_event(namespace="edge-ofridman", edge_site_id="edge-site-01"),
+    )
+
+    assert outcome["remediation_result"].success is True
+    prompt = generation.call_args.args[0]
+    prompt_target = json.loads(prompt.split("\nTARGET\n")[1].split("\n\nOBSERVED FACTS")[0])
+    launch_vars = next(call.args[1]["extra_vars"] for call in invoke.call_args_list if call.args[0] == "launch_job")
+    assert prompt_target["kind"] == launch_vars["resource_kind"] == "DaemonSet"
+    assert prompt_target["name"] == launch_vars["resource_name"] == "dns-default"
+    assert prompt_target["namespace"] == launch_vars["namespace"] == "openshift-dns"
+    assert invoke.call_args_list[0].args == (
+        "get_daemonset",
+        {"daemonset_name": "dns-default", "edge_site_id": "edge-site-01"},
+    )
+    assert state.root_cause_analysis.selected_action.target.namespace == ""
+    assert state.root_cause_analysis.selected_action.evidence == original_evidence
+
+
+@pytest.mark.parametrize("lookup_reply", _INVALID_DAEMONSET_LOOKUPS)
+async def test_unconfirmed_daemonset_namespace_stops_before_als_or_aap(lookup_reply):
+    state = _daemonset_state()
+    outcome, generation, invoke = await _run_node(
+        als_return=_ALS_RESPONSE,
+        invoke_fn=_daemonset_lookup(lookup_reply),
+        rca=state.root_cause_analysis,
+        log_event=make_log_event(namespace="edge-ofridman", edge_site_id="edge-site-01"),
+    )
+
+    assert outcome["remediation_result"].success is False
+    assert "namespace lookup" in outcome["remediation_result"].output_summary.lower()
+    generation.assert_not_called()
+    assert [call.args[0] for call in invoke.call_args_list] == ["get_daemonset"]
 
 
 @pytest.mark.parametrize(

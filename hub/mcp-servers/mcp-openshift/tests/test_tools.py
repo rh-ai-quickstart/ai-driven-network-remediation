@@ -8,6 +8,7 @@ from mcp_openshift.tools import (
     _find_pod,
     _is_not_found,
     _run_oc,
+    get_daemonset,
     get_deployment,
     get_events,
     get_namespaces,
@@ -488,6 +489,67 @@ class TestGetDeployment:
         }
         result = get_deployment(deployment="missing")
         assert result["success"] is False
+
+
+@patch("mcp_openshift.tools._run_oc")
+class TestGetDaemonSet:
+    def test_returns_exact_name_matches_with_namespace_and_site(self, mock_oc):
+        mock_oc.return_value = {
+            "stdout": json.dumps(
+                {
+                    "items": [
+                        {"kind": "DaemonSet", "metadata": {"name": "dns-default", "namespace": "openshift-dns"}},
+                        {"kind": "DaemonSet", "metadata": {"name": "other", "namespace": "default"}},
+                        {"kind": "DaemonSet", "metadata": {"name": "dns-default", "namespace": "kube-system"}},
+                        {"kind": "CronJob", "metadata": {"name": "dns-default", "namespace": "default"}},
+                    ]
+                }
+            ),
+            "stderr": "",
+            "success": True,
+        }
+
+        with patch("mcp_openshift.tools._kubeconfig_for", return_value="/edge/kubeconfig") as kubeconfig_for:
+            result = get_daemonset("dns-default", edge_site_id="edge-site-01")
+
+        assert result == {
+            "success": True,
+            "matches": [
+                {
+                    "kind": "DaemonSet",
+                    "name": "dns-default",
+                    "namespace": namespace,
+                    "edge_site_id": "edge-site-01",
+                }
+                for namespace in ("openshift-dns", "kube-system")
+            ]
+            + [
+                {
+                    "kind": "CronJob",
+                    "name": "dns-default",
+                    "namespace": "default",
+                    "edge_site_id": "edge-site-01",
+                }
+            ],
+        }
+        mock_oc.assert_called_once_with(
+            ["get", "daemonsets", "-A", "--field-selector", "metadata.name=dns-default", "-o", "json"],
+            kubeconfig="/edge/kubeconfig",
+        )
+        kubeconfig_for.assert_called_once_with("edge-site-01")
+
+    def test_failure_and_invalid_output_fail_closed(self, mock_oc):
+        mock_oc.return_value = {"stdout": "", "stderr": "forbidden", "success": False}
+        assert get_daemonset("dns-default", edge_site_id="edge-site-01") == {
+            "success": False,
+            "error": "forbidden",
+            "matches": [],
+        }
+
+        mock_oc.return_value = {"stdout": "not json", "stderr": "", "success": True}
+        parsed = get_daemonset("dns-default", edge_site_id="edge-site-01")
+        assert parsed["success"] is False
+        assert parsed["matches"] == []
 
 
 @patch("mcp_openshift.tools._run_oc")

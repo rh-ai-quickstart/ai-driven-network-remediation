@@ -34,7 +34,10 @@ def test_empty_namespace_does_not_implicitly_mean_cluster_scope(namespace):
         resolve_selected_target(state.root_cause_analysis.selected_action, [])
 
 
-@pytest.mark.parametrize("kind, namespace", [("Deployment", ""), ("deployment", ""), ("CustomResource", "prod")])
+@pytest.mark.parametrize(
+    "kind, namespace",
+    [("Deployment", ""), ("deployment", ""), ("DaemonSet", ""), ("CustomResource", "prod")],
+)
 def test_rejects_conflicting_cluster_scope_declaration(kind, namespace):
     state = selected_state(namespace=namespace)
     update_selection(state, target={"kind": kind, "cluster_scoped": True})
@@ -112,3 +115,67 @@ async def test_lookup_requires_a_namespace_hint_from_the_selected_site(log_event
         await resolve_target_with_lookup(selected, [], log_event, lookup)
 
     lookup.assert_not_called()
+
+
+async def test_daemonset_namespace_uses_exact_cluster_lookup_without_alert_namespace():
+    state = selected_state(site="edge-site-01", namespace="")
+    update_selection(state, target={"kind": "DaemonSet", "name": "dns-default"})
+    selected = state.root_cause_analysis.selected_action
+    lookup = AsyncMock(
+        return_value={
+            "success": True,
+            "matches": [
+                {
+                    "kind": "DaemonSet",
+                    "name": "dns-default",
+                    "namespace": "openshift-dns",
+                    "edge_site_id": "edge-site-01",
+                }
+            ],
+        }
+    )
+
+    resolved = await resolve_target_with_lookup(selected, [], None, lookup)
+
+    assert resolved.target.namespace == "openshift-dns"
+    assert selected.target.namespace == ""
+    assert resolved.evidence == selected.evidence
+    lookup.assert_awaited_once_with("get_daemonset", {"daemonset_name": "dns-default", "edge_site_id": "edge-site-01"})
+
+
+@pytest.mark.parametrize(
+    "matches",
+    [
+        None,
+        [],
+        [None],
+        [{"kind": "DaemonSet", "name": "other", "namespace": "openshift-dns", "edge_site_id": "edge-site-01"}],
+        [{"kind": "Deployment", "name": "dns-default", "namespace": "openshift-dns", "edge_site_id": "edge-site-01"}],
+        [{"name": "dns-default", "namespace": "openshift-dns", "edge_site_id": "edge-site-01"}],
+        [{"kind": "DaemonSet", "name": "dns-default", "edge_site_id": "edge-site-01"}],
+        [{"kind": "DaemonSet", "name": "dns-default", "namespace": "openshift-dns", "edge_site_id": "other-site"}],
+        [{"kind": "DaemonSet", "name": "dns-default", "namespace": " ", "edge_site_id": "edge-site-01"}],
+        [
+            {"kind": "DaemonSet", "name": "dns-default", "namespace": "openshift-dns", "edge_site_id": "edge-site-01"},
+            {"kind": "DaemonSet", "name": "dns-default", "namespace": "kube-system", "edge_site_id": "edge-site-01"},
+        ],
+    ],
+)
+async def test_daemonset_namespace_rejects_missing_mismatched_or_ambiguous_lookup(matches):
+    state = selected_state(site="edge-site-01", namespace="")
+    update_selection(state, target={"kind": "DaemonSet", "name": "dns-default"})
+    lookup = AsyncMock(return_value={"success": True, "matches": matches})
+
+    with pytest.raises(ValueError, match="namespace lookup"):
+        await resolve_target_with_lookup(state.root_cause_analysis.selected_action, [], None, lookup)
+
+    lookup.assert_awaited_once()
+
+
+async def test_daemonset_lookup_failure_is_not_accepted_as_namespace_evidence():
+    state = selected_state(site="edge-site-01", namespace="")
+    update_selection(state, target={"kind": "DaemonSet", "name": "dns-default"})
+    lookup = AsyncMock(return_value={"success": False, "matches": []})
+
+    with pytest.raises(ValueError, match="namespace lookup"):
+        await resolve_target_with_lookup(state.root_cause_analysis.selected_action, [], None, lookup)
