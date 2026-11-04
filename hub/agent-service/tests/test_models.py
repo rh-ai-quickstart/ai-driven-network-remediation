@@ -173,7 +173,6 @@ class TestIncidentState:
         assert state.log_event is None
         assert state.incident_id != ""
         assert state.incident_start_ms > 0
-        assert state.confidence_override is None
 
     def test_rag_and_analysis_fields_have_defaults(self):
         state = IncidentState(raw_event="pod crashloop")

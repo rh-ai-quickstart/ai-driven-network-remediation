@@ -35,19 +35,10 @@ def make_decide_node(config: GraphConfig):
         if rca.failure_type not in KNOWN_PLAYBOOK_TYPES:
             return _generated_remediation_decision(rca)
 
-        # Overrides force a synthetic failure_type/confidence for testing while
-        # summary/recommended_actions stay real; guarding that incoherent RCA
-        # with the LLM is meaningless, so skip it and trust the resolved template.
-        has_overrides = state.confidence_override is not None and state.failure_type_override is not None
-
         action = rca.recommended_actions[0] if rca.recommended_actions else None
         template = _resolve_template(action, rca.failure_type) if action else None
         if template:
-            verdict = (
-                await verify_playbook_match(rca, template)
-                if config.enable_match_guard and not has_overrides
-                else MatchVerdict.MATCH
-            )
+            verdict = await verify_playbook_match(rca, template) if config.enable_match_guard else MatchVerdict.MATCH
             if verdict == MatchVerdict.MATCH:
                 return {"decision": "remediate", "selected_template": template}
             if verdict == MatchVerdict.ERROR:

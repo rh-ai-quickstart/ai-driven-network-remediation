@@ -21,20 +21,17 @@ from agent_service.nodes.remediate import make_remediate_node
 LONG_FAILURE_PADDING = 600
 
 
-def _analyze_stub(state: dict) -> dict:
-    print("ANALYZE STUB", flush=True)
-    confidence = state.confidence_override if state.confidence_override is not None else 0.85
-    failure_type = state.failure_type_override if state.failure_type_override is not None else "CrashLoopBackOff"
-    rca = RootCauseAnalysis(
-        failure_type=failure_type,
-        confidence=confidence,
+@pytest.fixture
+def analyzed_rca():
+    return RootCauseAnalysis(
+        failure_type="CrashLoopBackOff",
+        confidence=0.85,
         summary="stub summary",
         evidence=["stub evidence"],
         recommended_actions=["stub action"],
         estimated_severity="medium",
         runbook_reference="stub-runbook",
     )
-    return {"root_cause_analysis": rca}
 
 
 def _enrich_stub(state: dict) -> dict:
@@ -147,13 +144,13 @@ def _isolate_external_side_effects():
 
 
 @pytest.fixture
-def _patch_graph_nodes():
+def _patch_graph_nodes(analyzed_rca):
     _als_mock.reset_mock()
     with (
         patch("agent_service.graph.enrich_node", _enrich_stub),
         patch("agent_service.graph.make_investigate_node", lambda config: _investigate_stub),
         patch("agent_service.graph.rag_retrieval_node", _rag_stub),
-        patch("agent_service.graph.analyze_node", _analyze_stub),
+        patch("agent_service.graph.analyze_node", lambda state: {"root_cause_analysis": analyzed_rca}),
         patch("agent_service.nodes.remediate._invoke_tool", _mock_invoke_tool()),
         patch(
             "agent_service.nodes.decide.verify_playbook_match",
@@ -287,37 +284,25 @@ class TestConditionalRouting:
         assert result["remediation_result"].success is True
         assert result["remediation_result"].generated_template_name is None
 
-    async def test_generation_type_without_selection_escalates(self, graph):
-        result = await graph.ainvoke(
-            {
-                "raw_event": "test event",
-                "failure_type_override": "KafkaLag",
-            }
-        )
+    async def test_generation_type_without_selection_escalates(self, graph, analyzed_rca):
+        analyzed_rca.failure_type = "KafkaLag"
+        result = await graph.ainvoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
         assert result["servicenow_ticket"] == "INC0000001"
         _als_mock.assert_not_awaited()
 
-    async def test_low_confidence_routes_through_escalate(self, graph):
-        result = await graph.ainvoke(
-            {
-                "raw_event": "test event",
-                "confidence_override": 0.5,
-            }
-        )
+    async def test_low_confidence_routes_through_escalate(self, graph, analyzed_rca):
+        analyzed_rca.confidence = 0.5
+        result = await graph.ainvoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
 
-    async def test_low_confidence_escalates_regardless_of_failure_type(self, graph):
-        result = await graph.ainvoke(
-            {
-                "raw_event": "test event",
-                "confidence_override": 0.5,
-                "failure_type_override": "KafkaLag",
-            }
-        )
+    async def test_low_confidence_escalates_regardless_of_failure_type(self, graph, analyzed_rca):
+        analyzed_rca.confidence = 0.5
+        analyzed_rca.failure_type = "KafkaLag"
+        result = await graph.ainvoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
@@ -333,26 +318,28 @@ class TestConditionalRouting:
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
 
-    async def test_guard_no_match_without_selection_escalates(self, _patch_graph_nodes):
+    async def test_guard_no_match_without_selection_escalates(self, _patch_graph_nodes, analyzed_rca):
+        analyzed_rca.confidence = 0.95
         with patch(
             "agent_service.nodes.decide.verify_playbook_match",
             AsyncMock(return_value=MatchVerdict.NO_MATCH),
         ):
             graph = build_graph()
-            result = await graph.ainvoke({"raw_event": "test event", "confidence_override": 0.95})
+            result = await graph.ainvoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
         assert result["servicenow_ticket"] == "INC0000001"
         _als_mock.assert_not_awaited()
 
-    async def test_guard_error_escalates_fail_closed(self, _patch_graph_nodes):
+    async def test_guard_error_escalates_fail_closed(self, _patch_graph_nodes, analyzed_rca):
+        analyzed_rca.confidence = 0.95
         with patch(
             "agent_service.nodes.decide.verify_playbook_match",
             AsyncMock(return_value=MatchVerdict.ERROR),
         ):
             graph = build_graph()
-            result = await graph.ainvoke({"raw_event": "test event", "confidence_override": 0.95})
+            result = await graph.ainvoke({"raw_event": "test event"})
 
         assert result["decision"] == "escalate"
         assert result.get("remediation_result") is None
@@ -404,17 +391,6 @@ class TestConditionalRouting:
         assert failure_reason in notification
         assert "Escalated" in notification
         assert "Playbook Generated" not in notification
-
-    async def test_missing_selection_escalates_before_als(self, _patch_graph_nodes):
-        als_fail = AsyncMock(side_effect=ConnectionError("ALS unreachable"))
-        with patch("agent_service.nodes.lightspeed._call_als", als_fail):
-            graph = build_graph()
-            final_state = await graph.ainvoke({"raw_event": "test event", "failure_type_override": "KafkaLag"})
-
-        assert final_state["decision"] == "escalate"
-        assert final_state.get("remediation_result") is None
-        assert final_state["servicenow_ticket"] == "INC0000001"
-        als_fail.assert_not_awaited()
 
     async def test_launch_failure_escalates_once(self, _patch_graph_nodes):
         failure_reason = "x" * LONG_FAILURE_PADDING + " retained-tail: template lookup failed"
@@ -492,7 +468,7 @@ class TestConditionalRouting:
 
 @pytest.mark.usefixtures("_patch_graph_nodes")
 class TestCli:
-    def test_default_confidence_routes_to_remediate(self):
+    def test_analyzed_known_failure_routes_to_remediate(self):
         runner = CliRunner()
         result = runner.invoke(main)
 
@@ -501,16 +477,18 @@ class TestCli:
         assert "rca:" in result.output
         assert "incident_id:" in result.output
 
-    def test_low_confidence_routes_to_escalate(self):
+    def test_low_confidence_routes_to_escalate(self, analyzed_rca):
+        analyzed_rca.confidence = 0.5
         runner = CliRunner()
-        result = runner.invoke(main, ["--confidence", "0.5"])
+        result = runner.invoke(main)
 
         assert result.exit_code == 0
         assert "next_action: escalate" in result.output
 
-    def test_generation_failure_type_without_selection_escalates(self):
+    def test_generation_failure_type_without_selection_escalates(self, analyzed_rca):
+        analyzed_rca.failure_type = "KafkaLag"
         runner = CliRunner()
-        result = runner.invoke(main, ["--failure-type", "KafkaLag"])
+        result = runner.invoke(main)
 
         assert result.exit_code == 0
         assert "next_action: escalate" in result.output

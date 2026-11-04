@@ -1,9 +1,7 @@
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -33,24 +31,9 @@ from agent_service.config import (
 from agent_service.fast_path import should_suppress_clf_feedback_loop
 from agent_service.graph import build_graph
 from agent_service.kafka.consumer import AlertConsumer, AlertMessage
-from agent_service.models import FailureType, IncidentState
+from agent_service.models import IncidentState
 from agent_service.nodes.lightspeed import drain_background_tasks
 from agent_service.utils import warm_tool_cache
-
-
-def _extract_overrides(raw_event: str) -> dict:
-    """Extract confidence/failure_type overrides embedded in the Kafka event JSON."""
-    try:
-        parsed = json.loads(raw_event)
-        overrides = parsed.get("_overrides") or {}
-        result: dict = {}
-        if "confidence_override" in overrides:
-            result["confidence_override"] = float(overrides["confidence_override"])
-        if "failure_type_override" in overrides:
-            result["failure_type_override"] = overrides["failure_type_override"]
-        return result
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return {}
 
 
 def _invoke_graph_for_alert(
@@ -67,7 +50,6 @@ def _invoke_graph_for_alert(
         "raw_event": alert.raw_event,
         "kafka_offset": alert.offset,
     }
-    input_state.update(_extract_overrides(alert.raw_event))
 
     async def _run_workflow():
         if await should_suppress_clf_feedback_loop(alert.raw_event):
@@ -134,9 +116,9 @@ app = FastAPI(title=os.environ.get("APP_TITLE", "agent-service"), lifespan=lifes
 
 
 class RemediateRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
     raw_event: str
-    confidence_override: Optional[float] = None
-    failure_type_override: Optional[FailureType] = None
 
 
 @app.get("/health")

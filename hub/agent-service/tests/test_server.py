@@ -96,21 +96,18 @@ class TestRemediateEndpoint:
         assert set(body.keys()) == INCIDENT_STATE_FIELDS
         assert body["decision"] != ""
 
-    def test_failure_type_override_without_selection_escalates(self, client):
-        response = client.post(
-            "/remediate",
-            json={"raw_event": "test event", "confidence_override": 0.9, "failure_type_override": "KafkaLag"},
-        )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["decision"] == "escalate"
-        assert body["remediation_result"] is None
+    def test_post_remediate_passes_event_to_graph(self, client):
+        state = IncidentState(raw_event="test event", decision="escalate")
+        graph = MagicMock(ainvoke=AsyncMock(return_value=state.model_dump()))
+        client.app.state.graph = graph
 
-    def test_post_remediate_rejects_invalid_failure_type_override(self, client):
-        response = client.post(
-            "/remediate",
-            json={"raw_event": "test event", "failure_type_override": "FooBar"},
-        )
+        response = client.post("/remediate", json={"raw_event": state.raw_event})
+
+        assert response.status_code == 200
+        graph.ainvoke.assert_awaited_once_with({"raw_event": state.raw_event})
+
+    def test_post_remediate_rejects_unknown_fields(self, client):
+        response = client.post("/remediate", json={"raw_event": "test event", "unexpected": True})
         assert response.status_code == 422
 
     def test_post_remediate_rejects_missing_raw_event(self, client):

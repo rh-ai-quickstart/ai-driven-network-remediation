@@ -158,8 +158,6 @@ class IncidentState(BaseModel):
     log_event: Optional[LogEvent] = None
     incident_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     incident_start_ms: float = Field(default_factory=lambda: time.time() * 1000)
-    confidence_override: Optional[float] = None
-    failure_type_override: Optional[FailureType] = None
     context_snippets: list[str] = []
     rag_query_used: str = ""
     root_cause_analysis: Optional[RootCauseAnalysis] = None
