@@ -151,7 +151,8 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
     else:
         message = scenarios.get(
             normalized,
-            "CrashLoopBackOff: nginx worker stalled after a transient failure; restart required",
+            "CrashLoopBackOff: nginx worker stalled after a transient failure; restart required. "
+            "Configuration validation succeeded; memory and disk usage are within limits.",
         )
         if normalized not in scenarios:
             normalized = "crashloop"
