@@ -1,4 +1,4 @@
-"""Unit tests for mcp_servicenow tools (ServiceNow + Slack HTTP is always mocked)."""
+"""Unit tests for mcp_servicenow tools (ServiceNow HTTP is always mocked)."""
 
 import json
 from pathlib import Path
@@ -75,19 +75,17 @@ class TestSnowClient:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@patch("mcp_servicenow.tools._notify_slack_ticket_created")
 @patch("mcp_servicenow.tools._snow_client")
 class TestCreateIncident:
     """Tests for create_incident."""
 
-    def test_success_resolves_caller(self, mock_client, mock_slack):
+    def test_success_resolves_caller(self, mock_client):
         caller_data = {"result": [{"sys_id": "caller-001", "name": "NOC Agent", "user_name": "noc.agent"}]}
         snow_data = {"result": {"number": "INC0010001", "sys_id": "real-123"}}
         ctx = _make_ctx()
         ctx.get.return_value = _mock_response(json_data=caller_data)
         ctx.post.return_value = _mock_response(json_data=snow_data)
         mock_client.return_value = ctx
-        mock_slack.return_value = {"sent": True, "ts": "123"}
 
         result = create_incident(
             short_description="Pod crash",
@@ -98,13 +96,14 @@ class TestCreateIncident:
         assert result["ticket_number"] == "INC0010001"
         assert result["sys_id"] == "real-123"
         assert result["priority"] == 2
-        assert result["slack_notification"]["sent"] is True
+        assert "slack_notification" not in result
+        ctx.post.assert_called_once()
 
         posted_body = ctx.post.call_args.kwargs.get("json", ctx.post.call_args[1].get("json", {}))
         assert "record" not in posted_body
         assert posted_body["caller_id"] == "caller-001"
 
-    def test_creates_caller_when_not_found(self, mock_client, mock_slack):
+    def test_creates_caller_when_not_found(self, mock_client):
         empty_search = {"result": []}
         created_user = {"result": {"sys_id": "new-caller-001"}}
         snow_data = {"result": {"number": "INC0010002", "sys_id": "real-456"}}
@@ -115,27 +114,25 @@ class TestCreateIncident:
             _mock_response(json_data=snow_data),
         ]
         mock_client.return_value = ctx
-        mock_slack.return_value = {"sent": False, "reason": "missing_token"}
 
         result = create_incident(short_description="New caller test", description="details")
         assert result["success"] is True
         assert ctx.post.call_count == 2
 
-    def test_truncates_short_description(self, mock_client, mock_slack):
+    def test_truncates_short_description(self, mock_client):
         caller_data = {"result": [{"sys_id": "caller-001"}]}
         snow_data = {"result": {"number": "INC0000002", "sys_id": "def456"}}
         ctx = _make_ctx()
         ctx.get.return_value = _mock_response(json_data=caller_data)
         ctx.post.return_value = _mock_response(json_data=snow_data)
         mock_client.return_value = ctx
-        mock_slack.return_value = {"sent": False, "reason": "missing_token"}
 
         long_desc = "x" * 200
         result = create_incident(short_description=long_desc, description="details")
         assert result["success"] is True
         assert len(result["short_description"]) == 160
 
-    def test_api_error(self, mock_client, mock_slack):
+    def test_api_error(self, mock_client):
         caller_data = {"result": [{"sys_id": "caller-001"}]}
         ctx = _make_ctx()
         ctx.get.return_value = _mock_response(json_data=caller_data)
@@ -146,7 +143,7 @@ class TestCreateIncident:
         assert result["success"] is False
         assert "500" in result["error"]
 
-    def test_connection_error(self, mock_client, mock_slack):
+    def test_connection_error(self, mock_client):
         ctx = _make_ctx()
         ctx.get.side_effect = httpx.ConnectError("Connection refused")
         mock_client.return_value = ctx
@@ -431,61 +428,3 @@ class TestResolveIncident:
         result = resolve_incident(ticket_number="INC0000001", resolution_notes="x")
         assert result["success"] is False
         assert "connection error" in result["error"].lower()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Slack notification
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class TestNotifySlackTicketCreated:
-    """Tests for the _notify_slack_ticket_created helper."""
-
-    @patch("mcp_servicenow.tools.SLACK_BOT_TOKEN", "")
-    def test_missing_token_returns_not_sent(self):
-        from mcp_servicenow.tools import _notify_slack_ticket_created
-
-        result = _notify_slack_ticket_created({"ticket_number": "INC0000001"})
-        assert result["sent"] is False
-        assert result["reason"] == "missing_token"
-
-    @patch("mcp_servicenow.tools.SLACK_BOT_TOKEN", "xoxb-test-token")
-    @patch("mcp_servicenow.tools.httpx.Client")
-    def test_success(self, mock_client_cls):
-        from mcp_servicenow.tools import _notify_slack_ticket_created
-
-        ctx = _make_ctx()
-        ctx.post.return_value = _mock_response(json_data={"ok": True, "ts": "1234.5678"})
-        mock_client_cls.return_value = ctx
-
-        result = _notify_slack_ticket_created(
-            {"ticket_number": "INC0000001", "priority": 2, "short_description": "test"}
-        )
-        assert result["sent"] is True
-        assert result["ts"] == "1234.5678"
-
-    @patch("mcp_servicenow.tools.SLACK_BOT_TOKEN", "xoxb-test-token")
-    @patch("mcp_servicenow.tools.httpx.Client")
-    def test_slack_api_error(self, mock_client_cls):
-        from mcp_servicenow.tools import _notify_slack_ticket_created
-
-        ctx = _make_ctx()
-        ctx.post.return_value = _mock_response(json_data={"ok": False, "error": "channel_not_found"})
-        mock_client_cls.return_value = ctx
-
-        result = _notify_slack_ticket_created({"ticket_number": "INC0000001"})
-        assert result["sent"] is False
-        assert result["reason"] == "channel_not_found"
-
-    @patch("mcp_servicenow.tools.SLACK_BOT_TOKEN", "xoxb-test-token")
-    @patch("mcp_servicenow.tools.httpx.Client")
-    def test_connection_error(self, mock_client_cls):
-        from mcp_servicenow.tools import _notify_slack_ticket_created
-
-        ctx = _make_ctx()
-        ctx.post.side_effect = httpx.ConnectError("Connection refused")
-        mock_client_cls.return_value = ctx
-
-        result = _notify_slack_ticket_created({"ticket_number": "INC0000001"})
-        assert result["sent"] is False
-        assert "Connection refused" in result["reason"]

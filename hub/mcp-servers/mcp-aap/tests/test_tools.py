@@ -275,6 +275,11 @@ class TestLaunchJob:
 class TestUpsertJobTemplate:
     """Tests for the upsert_job_template tool."""
 
+    @pytest.fixture(autouse=True)
+    def execution_environment(self):
+        with patch("mcp_aap.tools.resolve_execution_environment", return_value={"id": 2, "image": "ee@sha256:test"}):
+            yield
+
     def test_update_existing(self, mock_client, mock_ctx):
         existing_data = {"results": [{"id": 5, "name": "my-template"}]}
         patched_data = {"id": 5, "name": "my-template", "playbook": "fix.yml"}
@@ -287,6 +292,7 @@ class TestUpsertJobTemplate:
         assert result["created"] is False
         assert result["template_id"] == 5
         assert result["playbook"] == "fix.yml"
+        assert _posted_json(mock_ctx)["execution_environment"] == 2
 
     def test_ask_credential_on_launch_in_patch(self, mock_client, mock_ctx):
         existing_data = {"results": [{"id": 5, "name": "my-template"}]}
@@ -327,7 +333,7 @@ class TestUpsertJobTemplate:
 
     def test_patch_failure_idempotent(self, mock_client, mock_ctx):
         existing_data = {"results": [{"id": 5, "name": "my-template"}]}
-        current_data = {"id": 5, "name": "my-template", "playbook": "fix.yml"}
+        current_data = {"id": 5, "name": "my-template", "playbook": "fix.yml", "execution_environment": 2}
         mock_ctx.get.side_effect = [
             _mock_response(json_data=existing_data),
             _mock_response(json_data=current_data),
@@ -358,6 +364,16 @@ class TestUpsertJobTemplate:
         result = upsert_job_template(template_name="my-template", playbook="fix.yml")
         assert result["success"] is False
         assert "patch failed" in result["error"]
+
+    def test_patch_failure_does_not_accept_wrong_execution_environment(self, mock_client, mock_ctx):
+        mock_ctx.get.side_effect = [
+            _mock_response(json_data={"results": [{"id": 5}]}),
+            _mock_response(json_data={"id": 5, "playbook": "fix.yml", "execution_environment": 3}),
+        ]
+        mock_ctx.patch.return_value = _mock_response(status_code=403)
+        mock_client.return_value = mock_ctx
+        outcome = upsert_job_template(template_name="my-template", playbook="fix.yml")
+        assert outcome["success"] is False
 
     def test_project_not_found(self, mock_client, mock_ctx):
         existing_data = {"results": [{"id": 5, "name": "my-template"}]}

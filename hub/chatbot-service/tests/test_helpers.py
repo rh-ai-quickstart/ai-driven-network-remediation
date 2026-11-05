@@ -138,6 +138,13 @@ class TestBuildIncidentMovie:
 
 
 class TestBuildDemoEvent:
+    @pytest.mark.parametrize("scenario", ["crashloop", "oom", "lightspeed", "escalation", "cpu-misconfiguration"])
+    def test_event_contains_observations_and_identity(self, scenario):
+        event = build_demo_event(scenario, "edge-site-01", "test-event")
+
+        assert set(event) == {"@timestamp", "incident_id", "message", "level", "kubernetes", "labels"}
+        assert event["message"]
+
     def test_crashloop(self):
         event = build_demo_event("crashloop", "edge-site-01", "test-id-1")
         assert event["labels"]["dark_noc_scenario"] == "crashloop"
@@ -145,24 +152,23 @@ class TestBuildDemoEvent:
         assert event["kubernetes"]["namespace_name"] == "dark-noc-edge"
         assert event["labels"]["edge_site_id"] == "edge-site-01"
         assert event["incident_id"] == "test-id-1"
-        assert event["_overrides"] == {"confidence_override": 0.95, "failure_type_override": "CrashLoopBackOff"}
 
     def test_oom(self):
         event = build_demo_event("oom", "edge-02", "test-id-2")
         assert event["labels"]["dark_noc_scenario"] == "oom"
         assert "OOMKilled" in event["message"]
         assert event["labels"]["edge_site_id"] == "edge-02"
-        assert event["_overrides"] == {"confidence_override": 0.95, "failure_type_override": "OOMKilled"}
 
     def test_lightspeed(self):
         event = build_demo_event("lightspeed", "edge-site-01", "test-id-3")
         assert event["labels"]["dark_noc_scenario"] == "lightspeed"
-        assert "playbook" in event["message"].lower()
+        assert "DNS queries time out" in event["message"]
+        assert "direct connections to the upstream service IP succeed" in event["message"]
 
     def test_escalation(self):
         event = build_demo_event("escalation", "edge-site-01", "test-id-4")
         assert event["labels"]["dark_noc_scenario"] == "escalation"
-        assert "escalation" in event["message"].lower()
+        assert "safe corrective change are unknown" in event["message"]
 
     def test_unknown_scenario_defaults_to_crashloop(self):
         event = build_demo_event("unknown-thing", "edge-site-01", "test-id-5")
@@ -196,7 +202,6 @@ class TestBuildDemoEvent:
         assert "only mutation" in event["message"]
         assert "CPU limit to 250m" in event["message"]
         assert "Do not change CPU requests, memory, replicas, autoscaling" in event["message"]
-        assert "_overrides" not in event
 
     def test_cpu_misconfiguration_distinct_sites(self, monkeypatch):
         import chatbot_service.kafka as demo_kafka

@@ -25,6 +25,7 @@ jobs_db: dict[int, dict[str, Any]] = {}
 job_events_db: dict[int, list[dict[str, Any]]] = {}
 projects_db: dict[int, dict[str, Any]] = {}
 project_updates_db: dict[int, dict[str, Any]] = {}
+EXECUTION_ENVIRONMENT = {"id": 1, "image": "quay.io/ansible/awx-ee:latest"}
 _next_template_id = 1
 _next_job_id = 1
 _next_event_id = 1
@@ -113,6 +114,7 @@ def _seed() -> None:
             "job_type": "run",
             "inventory": 1,
             "project": 1,
+            "execution_environment": EXECUTION_ENVIRONMENT["id"],
             "playbook": playbook,
             "ask_variables_on_launch": True,
             "created": _now(),
@@ -158,6 +160,13 @@ def list_templates(
         "previous": None,
         "results": templates[start:end],
     }
+
+
+@router.get("/execution_environments/{environment_id}/")
+def get_execution_environment(environment_id: int):
+    if environment_id != EXECUTION_ENVIRONMENT["id"]:
+        raise HTTPException(404, "Execution environment not found")
+    return EXECUTION_ENVIRONMENT
 
 
 @router.get("/job_templates/{template_id}/")
@@ -301,7 +310,10 @@ def patch_template(template_id: int, body: dict[str, Any]):
         if body["mock_outcome"] not in ("successful", "launch_error", "timeout", "failed"):
             raise HTTPException(422, "Invalid mock outcome")
         tmpl["mock_outcome"] = body["mock_outcome"]
-    for key in ("name", "playbook", "description", "ask_variables_on_launch", "ask_credential_on_launch", "project"):
+    for key in (
+        "name", "playbook", "description", "ask_variables_on_launch", "ask_credential_on_launch", "project",
+        "execution_environment",
+    ):
         if key in body:
             tmpl[key] = body[key]
     tmpl["modified"] = _now()

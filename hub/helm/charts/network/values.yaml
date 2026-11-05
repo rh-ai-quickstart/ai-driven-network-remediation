@@ -157,6 +157,7 @@ agentService:
     tokenSecretName: ""
     tokenSecretKey: "api_key"
     verifySSL: "false"
+    timeoutSeconds: 180
     namespace: "aap"
     # Existing source template to copy; the original is never modified.
     baseTemplateName: "lightspeed-runner"
@@ -291,6 +292,7 @@ mcp-servers:
     noc-aap:
       enabled: true
       deploymentMode: deployment
+      serviceAccountName: mcp-noc-aap
       image:
         repository: quay.io/rh-ai-quickstart/noc-mcp-aap
         tag: "0.1.0"

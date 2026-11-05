@@ -17,6 +17,7 @@ from .config import (
     get_gitea_token,
     mcp,
 )
+from .validation import resolve_execution_environment, validate_in_execution_environment
 
 
 def _aap_client() -> httpx.Client:
@@ -30,6 +31,17 @@ def _aap_client() -> httpx.Client:
         verify=verify,
         timeout=30,
     )
+
+
+@mcp.tool()
+def validate_playbook(playbook_content: str, base_template_name: str, extra_vars: dict) -> dict:
+    """Syntax-check raw YAML in the base template's EE without running remediation tasks."""
+    try:
+        with _aap_client() as client:
+            environment = resolve_execution_environment(client, base_template_name)
+        return validate_in_execution_environment(environment["image"], playbook_content, extra_vars)
+    except (httpx.HTTPError, OSError, ValueError, KeyError, TimeoutError) as exc:
+        return {"success": False, "error": f"Playbook validation unavailable: {exc}"}
 
 
 def _paginate_aap_results(client: httpx.Client, path: str) -> list[dict]:
@@ -174,6 +186,7 @@ def upsert_job_template(
     """
     try:
         with _aap_client() as client:
+            environment = resolve_execution_environment(client, base_template_name)
             existing_resp = client.get(f"/job_templates/?name={template_name}")
             existing_resp.raise_for_status()
             existing = existing_resp.json().get("results", [])
@@ -199,6 +212,7 @@ def upsert_job_template(
                 "playbook": playbook,
                 "ask_variables_on_launch": True,
                 "ask_credential_on_launch": True,
+                "execution_environment": environment["id"],
             }
             if project_name:
                 proj_resp = client.get(
@@ -222,7 +236,10 @@ def upsert_job_template(
                 current_resp = client.get(f"/job_templates/{template_id}/")
                 current_resp.raise_for_status()
                 current = current_resp.json()
-                if str(current.get("playbook", "")) == playbook:
+                if (
+                    str(current.get("playbook", "")) == playbook
+                    and current.get("execution_environment") == environment["id"]
+                ):
                     return {
                         "success": True,
                         "created": created,
@@ -239,6 +256,8 @@ def upsert_job_template(
                 }
 
             jt = patch_resp.json()
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": f"Cannot resolve execution environment: {e}"}
     except httpx.HTTPStatusError as e:
         return {"success": False, "error": f"AAP API error: {e.response.status_code}"}
     except httpx.HTTPError as e:

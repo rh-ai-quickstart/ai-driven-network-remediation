@@ -1,0 +1,54 @@
+{{- $servers := index .Values "mcp-servers" }}
+{{- $aap := index $servers "mcp-servers" "noc-aap" }}
+{{- if and $servers.enabled $aap.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $aap.serviceAccountName }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-aap-validator
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mcp-aap-validation
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mcp-aap-validation
+subjects:
+  - kind: ServiceAccount
+    name: {{ $aap.serviceAccountName }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mcp-aap-validation
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: playbook-validation-isolation
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: playbook-validation
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress: []
+{{- end }}

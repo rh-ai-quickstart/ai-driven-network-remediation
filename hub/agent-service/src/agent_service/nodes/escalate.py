@@ -59,6 +59,8 @@ async def escalate_node(state) -> dict:
     )
 
     description = _build_description(log_event, rca, state.remediation_result)
+    if state.error_message:
+        description += f"\n--- Workflow Error ---\n{state.error_message}\n"
     priority = _PRIORITY_MAP.get(rca.estimated_severity, _DEFAULT_PRIORITY)
 
     logger.info(f"Creating ServiceNow incident: {short_description}")

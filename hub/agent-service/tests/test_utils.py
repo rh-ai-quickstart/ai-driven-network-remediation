@@ -9,7 +9,6 @@ from agent_service.utils import (
     build_launch_extra_vars,
     derive_deployment_name,
     invoke_tool,
-    normalize_component_name,
     warm_tool_cache,
 )
 
@@ -33,6 +32,13 @@ async def test_success_json_string(_mock_client):
     _mock_client.post.return_value = _response({"content": json.dumps({"success": True, "job_id": 1})})
     result = await invoke_tool("launch_job", {"template": "x"})
     assert result == {"success": True, "job_id": 1}
+    assert "timeout" not in _mock_client.post.call_args.kwargs
+
+
+async def test_explicit_tool_timeout_overrides_client_default(_mock_client):
+    _mock_client.post.return_value = _response({"content": '{"success": true, "valid": true}'})
+    await invoke_tool("validate_playbook", {"playbook_content": "example"}, timeout_seconds=90)
+    assert _mock_client.post.call_args.kwargs["timeout"] == 90
 
 
 async def test_success_content_block(_mock_client):
@@ -83,64 +89,6 @@ def _log_event(ns="prod", pod="nginx-abc", container="web", site="site-1"):
     return SimpleNamespace(namespace=ns, pod_name=pod, container=container, edge_site_id=site)
 
 
-class TestBuildLaunchExtraVarsGrounding:
-    def test_short_component_does_not_match_substring(self):
-        result = build_launch_extra_vars(
-            _log_event(),
-            {"affected_component": "app"},
-            "checking apps/v1 deployments in application namespace",
-        )
-        assert result["deployment_name"] == "nginx-abc"
-
-    def test_exact_word_component_matches(self):
-        result = build_launch_extra_vars(
-            _log_event(),
-            {"affected_component": "nginx"},
-            "pod nginx is crashlooping with OOMKilled",
-        )
-        assert result["deployment_name"] == "nginx"
-
-    def test_site_id_does_not_match_substring(self):
-        result = build_launch_extra_vars(
-            _log_event(),
-            {"edge_site_id": "site"},
-            "multisite deployment reported errors on website cluster",
-        )
-        assert result["edge_site_id"] == "site-1"
-
-    def test_namespace_not_accepted_as_edge_site_id(self):
-        result = build_launch_extra_vars(
-            _log_event(ns="edge-site-01", site="local-cluster"),
-            {"edge_site_id": "edge-site-01"},
-            "namespace edge-site-01 has high CPU usage",
-        )
-        assert result["edge_site_id"] == "local-cluster"
-
-    def test_edge_site_id_overlaid_when_stamped_in_resource_specs(self):
-        result = build_launch_extra_vars(
-            _log_event(site="edge-site-01"),
-            {"edge_site_id": "edge-site-02"},
-            resource_specs="Edge site: edge-site-02\nPod: myapp\n  limits: cpu: 500m",
-        )
-        assert result["edge_site_id"] == "edge-site-02"
-
-    def test_edge_site_id_not_overlaid_when_absent_from_resource_specs(self):
-        result = build_launch_extra_vars(
-            _log_event(site="edge-site-01"),
-            {"edge_site_id": "edge-site-02"},
-            resource_specs="Pod: myapp\n  limits: cpu: 500m",
-        )
-        assert result["edge_site_id"] == "edge-site-01"
-
-    def test_edge_site_id_not_overlaid_from_log_text(self):
-        result = build_launch_extra_vars(
-            _log_event(site="edge-site-01"),
-            {"edge_site_id": "edge-site-02"},
-            evidence_text="Edge site: edge-site-02 is unreachable",
-        )
-        assert result["edge_site_id"] == "edge-site-01"
-
-
 class TestDeriveDeploymentName:
     @pytest.mark.parametrize(
         "pod_name, expected",
@@ -169,7 +117,6 @@ class TestBuildLaunchExtraVarsBareDeployment:
                 container="memory-hog",
                 site="edge-site-01",
             ),
-            None,
         )
         assert result["deployment_name"] == "memory-hog"
         assert result["deployment"] == "memory-hog"
@@ -186,7 +133,6 @@ class TestBuildLaunchExtraVarsBareDeployment:
                 container="nginx",
                 site="edge-01",
             ),
-            None,
         )
         assert result["deployment"] == "edge-nginx"
         assert result["deployment_name"] == "edge-nginx"
@@ -199,28 +145,8 @@ class TestBuildLaunchExtraVarsBareDeployment:
                 container="nginx",
                 site="edge-01",
             ),
-            None,
         )
         assert result["deployment"] == "edge-nginx"
         assert result["deployment_name"] == "edge-nginx"
         assert result["pod_name"] == "edge-nginx-6b7f8c9d4-x2k9z"
         assert result["edge_site_id"] == "edge-01"
-
-
-class TestNormalizeComponentName:
-    @pytest.mark.parametrize(
-        "component, expected",
-        [
-            ("deployment/orders-api (edge-site-02)", "orders-api"),
-            ("nginx", "nginx"),
-            ("Pod/My-App", "my-app"),
-            ("edge-nginx-8447d9687c-56twg/nginx", "edge-nginx-8447d9687c-56twg"),
-            ("pod/edge-nginx-8447d9687c-56twg/nginx", "edge-nginx-8447d9687c-56twg"),
-            ("edge-nginx/nginx (edge-site-01)", "edge-nginx"),
-            ("statefulset/orders-db", "orders-db"),
-            ("", ""),
-            ("web-frontend service (edge-site-01)", "web-frontend"),
-        ],
-    )
-    def test_normalize(self, component, expected):
-        assert normalize_component_name(component) == expected

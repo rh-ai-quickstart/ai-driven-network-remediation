@@ -1,0 +1,19 @@
+{{- if and .Values.gitea.enabled (not .Values.gitea.external) .Values.gitea.route.enabled .Values.global.routes.enabled }}
+# Hub default admin username: noc.
+# Default password: randomly generated; stored in noc-gitea-secret under GITEA_ADMIN_PASSWORD.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "gitea.fullname" . }}
+  labels:
+    {{- include "gitea.labels" . | nindent 4 }}
+spec:
+  to:
+    kind: Service
+    name: {{ include "gitea.fullname" . }}
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

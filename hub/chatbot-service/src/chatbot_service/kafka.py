@@ -33,11 +33,17 @@ def _cpu_misconfiguration_message(site_a: str, site_b: str) -> str:
     if site_a == site_b:
         topology_hint = f"Both services run on the same cluster ({site_a})."
         loki_hint = "Workload logs are unavailable from LokiStack for this demo."
-        pods_hint = f"Call get_pods for namespace {EDGE_NAMESPACE} on {site_a} to compare both workloads' placement and health."
+        pods_hint = (
+            f"Call get_pods for namespace {EDGE_NAMESPACE} on {site_a} to compare both workloads' placement and health."
+        )
         logs_hint = f"Use get_pod_logs with edge_site_id={site_a} for logs from each service."
     else:
-        topology_hint = f"microservice-b is on a different cluster ({site_b}), not on {site_a} where microservice-a runs."
-        loki_hint = "Spoke workload logs are not forwarded to the hub LokiStack, so the query is denied and returns nothing."
+        topology_hint = (
+            f"microservice-b is on a different cluster ({site_b}), not on {site_a} where microservice-a runs."
+        )
+        loki_hint = (
+            "Spoke workload logs are not forwarded to the hub LokiStack, so the query is denied and returns nothing."
+        )
         pods_hint = f"Call get_pods for namespace {EDGE_NAMESPACE} on both {site_a} and {site_b} to compare placement and health."
         logs_hint = f"Use get_pod_logs with edge_site_id={site_a} for microservice-a and edge_site_id={site_b} for microservice-b."
 
@@ -123,47 +129,37 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
     container_name = "nginx"
     level = "error"
 
-    scenarios: dict[str, dict[str, Any]] = {
-        "oom": {
-            "message": "OOMKilled: container exceeded memory limits",
-            "confidence_override": 0.95,
-            "failure_type_override": "OOMKilled",
-        },
-        "lightspeed": {
-            "message": "Ansible playbook generation requested for edge recovery",
-            "confidence_override": 0.95,
-            "failure_type_override": "DNSFailure",
-        },
-        "escalation": {
-            "message": "Kernel panic and persistent data corruption - requires human escalation",
-            "confidence_override": 0.3,
-            "failure_type_override": "Unknown",
-        },
+    scenarios: dict[str, str] = {
+        "oom": "OOMKilled: container exceeded memory limits; last exit code 137, restart count 6",
+        "lightspeed": (
+            "nginx upstream requests fail: host not found in upstream api.internal.svc.cluster.local; "
+            "DNS queries time out while direct connections to the upstream service IP succeed. "
+            "The failure persists across pod restarts; inspect resolver configuration and DNS service health."
+        ),
+        "escalation": (
+            "Intermittent request failures reported by clients; available logs end before the failures. "
+            "No failing dependency, resource condition or reproducible error has been identified. "
+            "The affected component and safe corrective change are unknown."
+        ),
     }
     if normalized == CPU_DEMO_SCENARIO:
         target_site = CPU_DEMO_SITE_A
         workload = CPU_DEMO_SOURCE_WORKLOAD
         container_name = CPU_DEMO_SOURCE_WORKLOAD
         level = "warn"
-        spec = {
-            "message": _cpu_misconfiguration_message(CPU_DEMO_SITE_A, CPU_DEMO_SITE_B),
-        }
+        message = _cpu_misconfiguration_message(CPU_DEMO_SITE_A, CPU_DEMO_SITE_B)
     else:
-        spec = scenarios.get(
+        message = scenarios.get(
             normalized,
-            {
-                "message": "CrashLoopBackOff: nginx worker stalled after a transient failure; restart required",
-                "confidence_override": 0.95,
-                "failure_type_override": "CrashLoopBackOff",
-            },
+            "CrashLoopBackOff: nginx worker stalled after a transient failure; restart required",
         )
         if normalized not in scenarios:
             normalized = "crashloop"
 
-    event: dict[str, Any] = {
+    return {
         "@timestamp": now,
         "incident_id": incident_id,
-        "message": spec["message"],
+        "message": message,
         "level": level,
         "kubernetes": {
             "namespace_name": EDGE_NAMESPACE,
@@ -176,12 +172,6 @@ def build_demo_event(scenario: str, site: str, incident_id: str) -> dict[str, An
             "dark_noc_scenario": normalized,
         },
     }
-    if "confidence_override" in spec:
-        event["_overrides"] = {
-            "confidence_override": spec["confidence_override"],
-            "failure_type_override": spec["failure_type_override"],
-        }
-    return event
 
 
 def publish_demo_event(event: dict[str, Any]) -> int:

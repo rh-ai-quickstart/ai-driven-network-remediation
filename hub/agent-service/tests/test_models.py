@@ -6,8 +6,85 @@ from agent_service.models import (
     IncidentState,
     LogEvent,
     RemediationResult,
+    RemediationTarget,
     RootCauseAnalysis,
+    SelectedAction,
 )
+
+
+class TestSelectedAction:
+    @pytest.mark.parametrize("namespace, expected", [("  ", ""), (" prod ", "prod")])
+    def test_normalizes_namespace_whitespace(self, namespace, expected):
+        target = RemediationTarget(edge_site_id="edge-1", kind="CustomResource", name="default", namespace=namespace)
+        assert target.namespace == expected
+
+    def test_cluster_scope_requires_an_explicit_declaration(self):
+        target = RemediationTarget(edge_site_id="edge-1", kind="CustomResource", name="default")
+        assert target.cluster_scoped is False
+        cluster_target = RemediationTarget(
+            edge_site_id="edge-1", kind="ClusterConfiguration", name="default", cluster_scoped=True
+        )
+        assert cluster_target.cluster_scoped is True
+
+    def test_accepts_arbitrary_resource_and_json_parameters(self):
+        selection = SelectedAction(
+            goal="Repair the observed cluster DNS configuration.",
+            target=RemediationTarget(edge_site_id="edge-1", kind="DNS", name="default"),
+            evidence=["Resolver points to an unavailable server"],
+            parameters={"upstreams": ["10.0.0.10"], "enabled": True, "retries": 3},
+            verification=["DNS queries resolve successfully"],
+        )
+        assert selection.target.namespace == ""
+        assert selection.parameters["enabled"] is True
+        assert selection.parameters["retries"] == 3
+        assert selection.parameters["upstreams"] == ["10.0.0.10"]
+
+    @pytest.mark.parametrize("field", ["goal", "evidence", "verification"])
+    @pytest.mark.parametrize("blank", ["", " "])
+    def test_rejects_blank_remediation_requirements(self, field, blank):
+        selection = {
+            "goal": "Increase the observed CPU limit.",
+            "target": {"edge_site_id": "edge-1", "kind": "Deployment", "name": "worker"},
+            "evidence": ["CPU throttling"],
+            "verification": ["CPU throttling subsides"],
+        }
+        selection[field] = blank if field == "goal" else [blank]
+        with pytest.raises(ValidationError):
+            SelectedAction(**selection)
+
+    def test_rejects_empty_evidence(self):
+        selection = {
+            "goal": "Increase the observed CPU limit.",
+            "target": {"edge_site_id": "edge-1", "kind": "Deployment", "name": "worker"},
+            "evidence": ["CPU throttling"],
+            "verification": ["CPU throttling subsides"],
+        }
+        selection["evidence"] = []
+        with pytest.raises(ValidationError):
+            SelectedAction(**selection)
+
+    @pytest.mark.parametrize("verification_fields", [{}, {"verification": []}])
+    def test_verification_can_be_omitted_or_empty(self, verification_fields):
+        selection = SelectedAction(
+            goal="Increase the observed CPU limit.",
+            target=RemediationTarget(edge_site_id="edge-1", kind="Deployment", name="worker"),
+            evidence=["CPU throttling"],
+            **verification_fields,
+        )
+        assert selection.verification == []
+
+    def test_schema_requires_evidence_but_not_verification(self):
+        schema = SelectedAction.model_json_schema()
+        assert "evidence" in schema["required"]
+        assert schema["properties"]["evidence"]["minItems"] == 1
+        assert "verification" not in schema["required"]
+
+    @pytest.mark.parametrize("field", ["edge_site_id", "kind", "name"])
+    def test_rejects_blank_target_identity(self, field):
+        target = {"edge_site_id": "edge-1", "kind": "CustomResource", "name": "worker"}
+        target[field] = " "
+        with pytest.raises(ValidationError):
+            RemediationTarget(**target)
 
 
 class TestRootCauseAnalysis:
@@ -96,7 +173,6 @@ class TestIncidentState:
         assert state.log_event is None
         assert state.incident_id != ""
         assert state.incident_start_ms > 0
-        assert state.confidence_override is None
 
     def test_rag_and_analysis_fields_have_defaults(self):
         state = IncidentState(raw_event="pod crashloop")

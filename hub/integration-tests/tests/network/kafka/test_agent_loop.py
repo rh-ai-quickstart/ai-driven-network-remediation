@@ -19,14 +19,14 @@ import pytest
 
 pytestmark = pytest.mark.network
 
-# Demo scenarios without _overrides invoke Granite LLM analysis and can exceed the
-# agent graph timeout in CI before audit_node runs. lightspeed embeds confidence overrides.
+# Exercise the DNS scenario through real investigation, analysis and routing.
 _DEMO_SCENARIO = "lightspeed"
-_DEMO_SITE = "edge-site-01"
+_DEMO_SITE = os.environ.get("EDGE_SITE_ID", "edge-site-01")
 
-# Buffer for Kafka consume lag; lightspeed path completes in seconds when overrides apply.
-_AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "120"))
+# Allow investigation, LLM analysis, generation retries, AAP execution and Kafka lag.
+_AUDIT_POLL_TIMEOUT_S = int(os.environ.get("KAFKA_E2E_TIMEOUT_SECONDS", "2400"))
 
+_GENERATED_PLAYBOOK_SUMMARY_PREFIX = "Generated playbook: "
 _COMPLETED_WORKFLOW_STAGES = frozenset({"Auto-Remediated", "Remediated", "Escalated"})
 
 
@@ -118,3 +118,10 @@ def test_kafka_agent_loop(chatbot_client):
     ), f"Workflow did not complete; stage={movie_entry.get('stage')!r}"
     assert _DEMO_SITE in movie_entry.get("title", "")
     assert movie_entry.get("summary")
+    artifacts = movie_entry["artifacts"]
+    if movie_entry["stage"] == "Escalated":
+        assert artifacts["servicenow_ticket"], movie_entry
+    else:
+        assert artifacts["aap_job_id"] or movie_entry["summary"].startswith(
+            _GENERATED_PLAYBOOK_SUMMARY_PREFIX
+        ), movie_entry

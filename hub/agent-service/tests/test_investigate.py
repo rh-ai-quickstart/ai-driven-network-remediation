@@ -51,11 +51,15 @@ _STUB_LOG_SEARCH = [{"timestamp": "2024-01-01", "message": "error found", "pod":
 @pytest.mark.parametrize(
     "enabled_servers,expected_tools,disabled_tools",
     [
-        ({"noc-openshift"}, {"get_pods", "get_events", "get_pod_logs", "get_pod_spec"}, {"search_logs", "find_error_patterns"}),
+        (
+            {"noc-openshift"},
+            {"get_pods", "get_events", "get_pod_logs", "get_pod_spec", "get_deployment"},
+            {"search_logs", "find_error_patterns"},
+        ),
         (
             {"noc-lokistack"},
             {"search_logs", "find_error_patterns"},
-            {"get_pods", "get_events", "get_pod_logs", "get_pod_spec"},
+            {"get_pods", "get_events", "get_pod_logs", "get_pod_spec", "get_deployment"},
         ),
     ],
 )
@@ -115,9 +119,7 @@ class TestInvestigateNode:
         ):
             await make_investigate_node(GraphConfig())(make_state())
 
-        mock_invoke.assert_awaited_once_with(
-            "get_pods", {"namespace": "prod", "edge_site_id": "edge-2"}
-        )
+        mock_invoke.assert_awaited_once_with("get_pods", {"namespace": "prod", "edge_site_id": "edge-2"})
 
     def test_pod_logs_keep_cluster_and_pod_provenance_per_line(self):
         evidence = {"pod_logs": ""}
@@ -276,8 +278,7 @@ class TestInvestigateNode:
         assert result["cluster_events"][0]["reason"] == "OOMKilled"
         assert result["recent_errors"] == _STUB_ERROR_PATTERNS
         assert result["pod_logs"].splitlines() == [
-            f"Edge site: edge-1 Pod: nginx-abc | {line}"
-            for line in _STUB_POD_LOGS.splitlines()
+            f"Edge site: edge-1 Pod: nginx-abc | {line}" for line in _STUB_POD_LOGS.splitlines()
         ]
         assert result["log_search_results"] == _STUB_LOG_SEARCH
 
@@ -551,6 +552,7 @@ def _empty_evidence():
         "pod_logs": "",
         "resource_specs": "",
         "log_search_results": [],
+        "deployment_observations": [],
     }
 
 
@@ -580,6 +582,7 @@ class TestMergeToolResult:
         assert evidence["resource_specs"] != ""
         assert "myapp" in evidence["resource_specs"]
         assert "500m" in evidence["resource_specs"]
+        assert "Namespace: prod" in evidence["resource_specs"]
 
     def test_get_pod_spec_error_leaves_evidence_unchanged(self):
         evidence = _empty_evidence()
@@ -629,3 +632,106 @@ class TestPodSpecStampsInvestigatedCluster:
         assert "edge-site-02" in result["resource_specs"]
         assert "myapp" in result["resource_specs"]
         assert "500m" in result["resource_specs"]
+
+
+class TestDeploymentObservations:
+    @pytest.mark.parametrize("requested_site", [None, "edge-site-02"])
+    async def test_exact_deployment_is_recorded_with_source_identity(self, requested_site):
+        tool_args = {"namespace": "prod", "deployment": "orders-api"}
+        if requested_site:
+            tool_args["edge_site_id"] = requested_site
+        resolved_site = requested_site or "edge-1"
+        lookup_args = {"namespace": "prod", "deployment": "orders-api", "edge_site_id": resolved_site}
+        observation = {**lookup_args, "uid": "original-uid"}
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.side_effect = [
+            _llm_with_tool_call(name="get_deployment", args=tool_args),
+            _llm_no_tool_call(),
+        ]
+        mock_invoke = AsyncMock(
+            return_value={
+                "success": True,
+                "namespace": "prod",
+                "deployment": "orders-api",
+                "uid": "original-uid",
+                "annotations": {"private": "must not enter observations"},
+            }
+        )
+        with (
+            patch("agent_service.nodes.investigate.get_llm", return_value=mock_llm),
+            patch("agent_service.nodes.investigate.invoke_tool", mock_invoke),
+        ):
+            investigation = await make_investigate_node(GraphConfig())(make_state())
+        mock_invoke.assert_awaited_once_with("get_deployment", lookup_args)
+        assert investigation["deployment_observations"] == [observation]
+
+    @pytest.mark.parametrize(
+        "response_overrides",
+        [
+            {"success": False},
+            {"success": None},
+            {"deployment": "orders-api-other"},
+            {"namespace": "other"},
+            {"deployment": None},
+            {"error": "not found"},
+        ],
+    )
+    def test_failed_or_mismatched_lookup_is_not_observation(self, response_overrides):
+        tool_args = {"namespace": "prod", "deployment": "orders-api"}
+        tool_response = {"success": True, "uid": "original-uid", **tool_args, **response_overrides}
+        evidence = _empty_evidence()
+        _merge_tool_result("get_deployment", tool_response, evidence, "edge-1", tool_args=tool_args)
+        assert evidence["deployment_observations"] == []
+
+    @pytest.mark.parametrize("uid_fields", [{}, {"uid": None}, {"uid": ""}, {"uid": " "}, {"uid": 42}])
+    def test_exact_identity_is_retained_without_usable_uid(self, uid_fields):
+        tool_args = {"namespace": "prod", "deployment": "orders-api"}
+        evidence = _empty_evidence()
+        _merge_tool_result(
+            "get_deployment",
+            {"success": True, **tool_args, **uid_fields},
+            evidence,
+            "edge-1",
+            tool_args=tool_args,
+        )
+        assert evidence["deployment_observations"] == [{"edge_site_id": "edge-1", **tool_args}]
+
+    @pytest.mark.parametrize(
+        "tool_args, site",
+        [
+            ({"namespace": "prod"}, "edge-1"),
+            ({"namespace": "prod", "deployment": "orders-api"}, ""),
+            ({"namespace": "", "deployment": "orders-api"}, "edge-1"),
+        ],
+    )
+    def test_incomplete_requested_identity_is_not_observation(self, tool_args, site):
+        evidence = _empty_evidence()
+        _merge_tool_result(
+            "get_deployment", {"success": True, "uid": "original-uid", **tool_args}, evidence, site, tool_args=tool_args
+        )
+        assert evidence["deployment_observations"] == []
+
+    def test_repeated_lookup_retains_one_observation(self):
+        tool_args = {"namespace": "prod", "deployment": "orders-api"}
+        observation = {"edge_site_id": "edge-1", "uid": "original-uid", **tool_args}
+        evidence = {**_empty_evidence(), "deployment_observations": [observation]}
+        _merge_tool_result(
+            "get_deployment",
+            {"success": True, "uid": "original-uid", **tool_args},
+            evidence,
+            "edge-1",
+            tool_args=tool_args,
+        )
+        assert evidence["deployment_observations"] == [observation]
+
+    def test_replacement_uid_preserves_both_observations_as_evidence(self):
+        tool_args = {"namespace": "prod", "deployment": "orders-api"}
+        evidence = _empty_evidence()
+        for uid in ("original-uid", "replacement-uid"):
+            _merge_tool_result(
+                "get_deployment", {"success": True, "uid": uid, **tool_args}, evidence, "edge-1", tool_args=tool_args
+            )
+        assert [observation["uid"] for observation in evidence["deployment_observations"]] == [
+            "original-uid",
+            "replacement-uid",
+        ]

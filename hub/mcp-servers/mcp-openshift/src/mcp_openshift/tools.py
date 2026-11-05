@@ -368,7 +368,7 @@ def get_deployment(
         edge_site_id: Alert site label (edge-NN). Selects spoke kubeconfig in hub-spoke mode.
 
     Returns:
-        Dict with deployment name, namespace, and annotations
+        Dict with deployment name, namespace, UID, and annotations
     """
     result = _run_oc(
         ["get", "deployment", deployment, "-n", namespace, "-o", "json"],
@@ -386,10 +386,41 @@ def get_deployment(
             "success": True,
             "deployment": deployment,
             "namespace": namespace,
+            "uid": data.get("metadata", {}).get("uid", ""),
             "annotations": {**tpl, **meta},
         }
     except json.JSONDecodeError as e:
         return {"success": False, "error": f"Failed to parse deployment output: {e}", "annotations": {}}
+
+
+@mcp.tool()
+def get_daemonset(daemonset_name: str, edge_site_id: str = "") -> dict:
+    """Find an exact DaemonSet name across namespaces on one selected cluster."""
+    oc_response = _run_oc(
+        ["get", "daemonsets", "-A", "--field-selector", f"metadata.name={daemonset_name}", "-o", "json"],
+        kubeconfig=_kubeconfig_for(edge_site_id),
+    )
+    if not oc_response["success"]:
+        return {"success": False, "error": oc_response["stderr"], "matches": []}
+
+    try:
+        daemonset_list = json.loads(oc_response["stdout"]).get("items", [])
+        matches = []
+        for daemonset_resource in daemonset_list:
+            metadata = daemonset_resource.get("metadata") or {}
+            if metadata.get("name") != daemonset_name:
+                continue
+            matches.append(
+                {
+                    "kind": daemonset_resource.get("kind"),
+                    "name": metadata.get("name"),
+                    "namespace": metadata.get("namespace"),
+                    "edge_site_id": edge_site_id,
+                }
+            )
+        return {"success": True, "matches": matches}
+    except json.JSONDecodeError as exc:
+        return {"success": False, "error": f"Failed to parse DaemonSet output: {exc}", "matches": []}
 
 
 @mcp.tool()

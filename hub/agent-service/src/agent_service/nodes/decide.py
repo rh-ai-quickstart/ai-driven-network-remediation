@@ -15,6 +15,13 @@ KNOWN_PLAYBOOK_TYPES = frozenset(
 )
 
 
+def _generated_remediation_decision(rca) -> dict:
+    if rca.selected_action is None:
+        logger.warning("No evidence-backed remediation selected; escalating before Lightspeed")
+        return {"decision": "escalate"}
+    return {"decision": "lightspeed"}
+
+
 def make_decide_node(config: GraphConfig):
     async def decide_node(state) -> dict:
         logger.info("Decide node invoked")
@@ -26,21 +33,12 @@ def make_decide_node(config: GraphConfig):
         if confidence < config.remediate_threshold:
             return {"decision": "escalate"}
         if rca.failure_type not in KNOWN_PLAYBOOK_TYPES:
-            return {"decision": "lightspeed"}
-
-        # Overrides force a synthetic failure_type/confidence for testing while
-        # summary/recommended_actions stay real; guarding that incoherent RCA
-        # with the LLM is meaningless, so skip it and trust the resolved template.
-        has_overrides = state.confidence_override is not None and state.failure_type_override is not None
+            return _generated_remediation_decision(rca)
 
         action = rca.recommended_actions[0] if rca.recommended_actions else None
         template = _resolve_template(action, rca.failure_type) if action else None
         if template:
-            verdict = (
-                await verify_playbook_match(rca, template)
-                if config.enable_match_guard and not has_overrides
-                else MatchVerdict.MATCH
-            )
+            verdict = await verify_playbook_match(rca, template) if config.enable_match_guard else MatchVerdict.MATCH
             if verdict == MatchVerdict.MATCH:
                 return {"decision": "remediate", "selected_template": template}
             if verdict == MatchVerdict.ERROR:
@@ -51,7 +49,7 @@ def make_decide_node(config: GraphConfig):
         # root cause but no prebuilt playbook fits. Generate a bespoke playbook
         # via lightspeed when confident enough, otherwise escalate to a human.
         if confidence >= config.lightspeed_threshold:
-            return {"decision": "lightspeed"}
+            return _generated_remediation_decision(rca)
         return {"decision": "escalate"}
 
     return decide_node

@@ -68,6 +68,9 @@ spec:
       - apiGroups: ["apps"]
         resources: ["deployments", "replicasets"]
         verbs: ["get", "list", "watch", "patch", "update"]
+      - apiGroups: ["apps"]
+        resources: ["daemonsets"]
+        verbs: ["list"]
   clusterRoleBinding:
     # cluster-proxy authenticates hub SAs as User
     # cluster:hub:system:serviceaccount:<ns>:<sa> (not a spoke ServiceAccount subject).

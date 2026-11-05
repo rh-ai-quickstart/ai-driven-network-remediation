@@ -40,7 +40,7 @@ def _format_pod_resources(tool_result: dict) -> str:
     """Format a pod's container limits/requests into readable text for evidence."""
     name = tool_result.get("name", "unknown")
     spec = tool_result.get("spec", {})
-    lines = [f"Pod: {name}"]
+    lines = [f"Namespace: {tool_result.get('namespace', 'unknown')}", f"Pod: {name}"]
     for container in spec.get("containers", []):
         lines.append(f"  Container: {container.get('name', '?')}")
         resources = container.get("resources", {})
@@ -61,12 +61,29 @@ def _stamp_pod_logs(logs: str, edge_site_id: str, pod_name: str) -> str:
     return "\n".join(f"{provenance} | {line}" for line in logs.splitlines())
 
 
+def _record_deployment(tool_result: dict, evidence: dict, tool_args: dict, edge_site_id: str) -> None:
+    if tool_result.get("success") is not True:
+        return
+    identity = {key: tool_args.get(key) for key in ("namespace", "deployment")}
+    if any(not isinstance(value, str) or not value for value in identity.values()) or not edge_site_id:
+        return
+    if any(tool_result.get(key) != value for key, value in identity.items()):
+        return
+    observation = {"edge_site_id": edge_site_id, **identity}
+    uid = tool_result.get("uid")
+    if isinstance(uid, str) and uid.strip():
+        observation["uid"] = uid
+    if observation not in evidence["deployment_observations"]:
+        evidence["deployment_observations"].append(observation)
+
+
 def _merge_tool_result(
     tool_name: str,
     tool_result: dict,
     evidence: dict,
     edge_site_id: str = "",
     pod_name: str = "",
+    tool_args: dict | None = None,
 ) -> None:
     if tool_result.get("error"):
         return
@@ -82,6 +99,8 @@ def _merge_tool_result(
             evidence["pod_logs"] = logs if not prev else prev + "\n" + logs
     elif tool_name == "search_logs":
         evidence["log_search_results"].extend(tool_result.get("logs", []))
+    elif tool_name == "get_deployment":
+        _record_deployment(tool_result, evidence, tool_args or {}, edge_site_id)
     elif tool_name == "get_pod_spec":
         formatted = _format_pod_resources(tool_result)
         if edge_site_id:
@@ -117,6 +136,7 @@ def make_investigate_node(config: GraphConfig):
             "pod_logs": state.pod_logs,
             "resource_specs": state.resource_specs,
             "log_search_results": list(state.log_search_results),
+            "deployment_observations": list(state.deployment_observations),
         }
         if not tools:
             logger.info("No investigation tools enabled, returning existing evidence")
@@ -160,6 +180,7 @@ def make_investigate_node(config: GraphConfig):
                             evidence,
                             args.get("edge_site_id", ""),
                             args.get("pod_name", ""),
+                            tool_args=args,
                         )
                         messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
 

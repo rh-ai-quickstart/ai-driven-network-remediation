@@ -113,6 +113,7 @@ ENABLE_AAP_MOCK        ?= true
 ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
+LIGHTSPEED_TIMEOUT_SECONDS ?= 180
 AUTO_INGEST_ON_STARTUP ?= true
 AAP_NAMESPACE          ?= aap
 AAP_URL                ?= $(if $(filter true,$(ENABLE_AAP_MOCK)),http://aap-mock.$(NAMESPACE).svc:8080,http://aap.aap.svc)
@@ -121,6 +122,7 @@ ENABLE_NETWORK_REMEDIATION ?= true
 ENABLE_TELCO_ORAN          ?= true
 ENABLE_MULTICLUSTER    ?= false
 ENABLE_GITEA           ?= $(if $(filter false,$(ENABLE_AAP_MOCK)),true,false)
+ENABLE_GITEA_UI        ?= false
 GITEA_EXTERNAL         ?= false
 GITEA_URL              ?=
 GITEA_REPO             ?=
@@ -299,6 +301,7 @@ helm_servicenow_real_args = \
 
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
+	--set gitea.gitea.route.enabled=$(ENABLE_GITEA_UI) \
 	$(if $(GITEA_ADMIN_USER),--set-string gitea.gitea.adminUser='$(GITEA_ADMIN_USER)' --set-string network.mcp-servers.mcp-servers.noc-aap.env.GITEA_OWNER='$(GITEA_ADMIN_USER)' --set-string network.gitea.adminUser='$(GITEA_ADMIN_USER)',) \
 	$(if $(GITEA_ADMIN_PASSWORD),--set-string gitea.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)' --set-string network.gitea.adminPassword='$(GITEA_ADMIN_PASSWORD)',) \
 	$(if $(GITEA_ADMIN_EMAIL),--set-string gitea.gitea.adminEmail='$(GITEA_ADMIN_EMAIL)',) \
@@ -330,7 +333,8 @@ endif
 helm_lightspeed_args = \
 	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.url='$(LIGHTSPEED_URL)',) \
 	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.token='$(LIGHTSPEED_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',)
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.verifySSL='$(LIGHTSPEED_VERIFY_SSL)',) \
+	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.timeoutSeconds='$(LIGHTSPEED_TIMEOUT_SECONDS)',)
 
 helm_slack_args = \
 	--set network.agentService.slack.enabled=$(ENABLE_SLACK) \

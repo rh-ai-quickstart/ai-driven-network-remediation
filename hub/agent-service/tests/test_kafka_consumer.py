@@ -71,6 +71,7 @@ class TestHandleMessage:
 
 
 class TestConsumerLifecycle:
+    @patch("agent_service.config.GRAPH_INVOKE_TIMEOUT_SECONDS", 960)
     @patch("agent_service.kafka.consumer.KafkaConsumer")
     def test_start_and_stop(self, mock_kafka_consumer_cls):
         mock_consumer = MagicMock()

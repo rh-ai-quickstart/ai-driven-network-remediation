@@ -1,7 +1,8 @@
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from helpers import make_state
+from helpers import make_log_event, make_state
 
 from agent_service.models import RootCauseAnalysis
 
@@ -27,6 +28,66 @@ def _make_llm_response(content=_VALID_RCA_JSON, input_tokens=100, output_tokens=
 
 
 class TestSuccessfulLlmCall:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "observations",
+        [[], [{"edge_site_id": "edge-site-01", "deployment": "microservice-b", "namespace": "edge-ofridman"}]],
+    )
+    async def test_preserves_unresolved_selection_without_making_routing_decision(self, observations):
+        diagnosis = json.loads(_VALID_RCA_JSON)
+        diagnosis["selected_action"] = {
+            "goal": "Increase microservice-b CPU limit to 250m only",
+            "target": {
+                "edge_site_id": "edge-site-01",
+                "namespace": "",
+                "kind": "Deployment",
+                "name": "microservice-b",
+                "container": "microservice-b",
+            },
+            "evidence": ["CPU limit is 25m"],
+            "parameters": {"cpu_limit": "250m"},
+            "verification": ["CPU limit equals 250m and CPU request remains 20m"],
+        }
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = _make_llm_response(json.dumps(diagnosis))
+        state = make_state(
+            log_event=make_log_event(namespace="symptom-namespace", pod_name="microservice-a"),
+            deployment_observations=observations,
+        )
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            outcome = await analyze_node(state)
+
+        assert outcome["root_cause_analysis"] == RootCauseAnalysis.model_validate(diagnosis)
+        assert "decision" not in outcome
+        assert "error_message" not in outcome
+
+    @pytest.mark.asyncio
+    async def test_preserves_cpu_remediation_goal_and_verification(self):
+        diagnosis = json.loads(_VALID_RCA_JSON)
+        diagnosis["selected_action"] = {
+            "goal": "Increase the worker CPU limit to resolve observed throttling.",
+            "target": {"edge_site_id": "edge-1", "namespace": "prod", "kind": "Deployment", "name": "worker"},
+            "evidence": ["CPU limit is 25m"],
+            "parameters": {"cpu_limit": "500m", "replicas": 2},
+            "verification": ["CPU limit equals 500m", "Worker is available"],
+        }
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = _make_llm_response(json.dumps(diagnosis))
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            outcome = await analyze_node(make_state())
+
+        selection = outcome["root_cause_analysis"].selected_action
+        assert selection.goal == diagnosis["selected_action"]["goal"]
+        assert selection.parameters["replicas"] == 2
+        assert selection.verification == diagnosis["selected_action"]["verification"]
+        schema = mock_llm.ainvoke.call_args.kwargs["response_format"]["json_schema"]["schema"]
+        assert "goal" in schema["$defs"]["SelectedAction"]["properties"]
+        assert "verification" in schema["$defs"]["SelectedAction"]["properties"]
+
     @pytest.mark.asyncio
     async def test_returns_valid_rca_from_llm_response(self):
         mock_llm = AsyncMock()
@@ -171,45 +232,3 @@ class TestEvidenceInPrompt:
         user_msg = messages[1].content
         assert "Investigation evidence:" not in user_msg
         assert user_msg.startswith("Log event:")
-
-
-class TestOverrideBypass:
-    @pytest.mark.asyncio
-    async def test_override_pins_type_and_confidence_on_llm_result(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(return_value=_make_llm_response())
-
-        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
-            from agent_service.nodes.analyze import analyze_node
-
-            state = make_state(
-                confidence_override=0.42,
-                failure_type_override="DNSFailure",
-            )
-            result = await analyze_node(state)
-
-        mock_llm.ainvoke.assert_called_once()
-        rca = result["root_cause_analysis"]
-        assert isinstance(rca, RootCauseAnalysis)
-        assert rca.confidence == 0.42
-        assert rca.failure_type == "DNSFailure"
-        assert rca.summary == "Container killed by OOM"
-
-    @pytest.mark.asyncio
-    async def test_override_fallback_when_llm_fails(self):
-        mock_llm = AsyncMock()
-        mock_llm.ainvoke = AsyncMock(side_effect=ConnectionError("unreachable"))
-
-        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
-            from agent_service.nodes.analyze import analyze_node
-
-            state = make_state(
-                confidence_override=0.42,
-                failure_type_override="DNSFailure",
-            )
-            result = await analyze_node(state)
-
-        rca = result["root_cause_analysis"]
-        assert rca.confidence == 0.42
-        assert rca.failure_type == "DNSFailure"
-        assert rca.estimated_severity == "medium"
