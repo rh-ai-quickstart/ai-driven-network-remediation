@@ -149,6 +149,9 @@ class TestBuildDemoEvent:
         event = build_demo_event("crashloop", "edge-site-01", "test-id-1")
         assert event["labels"]["dark_noc_scenario"] == "crashloop"
         assert "CrashLoopBackOff" in event["message"]
+        assert "worker stalled after a transient failure" in event["message"]
+        assert "Configuration validation succeeded" in event["message"]
+        assert "memory and disk usage are within limits" in event["message"]
         assert event["kubernetes"]["namespace_name"] == "dark-noc-edge"
         assert event["labels"]["edge_site_id"] == "edge-site-01"
         assert event["incident_id"] == "test-id-1"
