@@ -47,9 +47,15 @@ def resolve_execution_environment(client: httpx.Client, template_name: str) -> d
         raise ValueError("Validation requires one unambiguous AAP base template")
     template = templates[0]
     environment_id = template.get("execution_environment")
-    if not environment_id:
-        raise ValueError("Set an explicit execution environment on the AAP base template before validation")
-    environment = _get_json(client, f"/execution_environments/{int(environment_id)}/")
+    if environment_id:
+        environment = _get_json(client, f"/execution_environments/{int(environment_id)}/")
+    else:
+        detail = _get_json(client, f"/job_templates/{int(template['id'])}/")
+        summary = detail.get("summary_fields")
+        environment = summary.get("resolved_environment") if isinstance(summary, dict) else None
+        environment_id = environment.get("id") if isinstance(environment, dict) else None
+        if type(environment_id) is not int or environment_id <= 0:
+            raise ValueError("AAP base template has no resolved execution environment")
     if not isinstance(environment.get("image"), str) or not environment["image"].strip():
         raise ValueError("AAP execution environment has no image")
     return {"id": int(environment_id), "image": environment["image"]}

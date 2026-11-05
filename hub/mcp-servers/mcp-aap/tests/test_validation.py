@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 from mcp_aap import validation, validation_runner
-from mcp_aap.tools import validate_playbook
+from mcp_aap.tools import upsert_job_template, validate_playbook
 
 
 def _client(responses):
@@ -31,27 +31,57 @@ def test_execution_image_uses_template_assignment():
         }
 
 
-@pytest.mark.parametrize("relation", ["project", "organization"])
-def test_execution_image_requires_explicit_template_assignment(relation):
+def test_execution_image_uses_controller_resolved_inheritance():
     with _client(
         {
-            "/job_templates/": {"results": [{relation: 4}]},
-            f"/{relation}s/4/": {"default_environment": 2},
-            "/execution_environments/2/": {"image": "registry/ee"},
+            "/job_templates/": {"results": [{"id": 7, "execution_environment": None, "project": 4}]},
+            "/job_templates/7/": {
+                "summary_fields": {"resolved_environment": {"id": 2, "image": "registry/inherited@sha256:exact"}}
+            },
         }
     ) as client:
-        with pytest.raises(ValueError, match="explicit execution environment"):
+        assert validation.resolve_execution_environment(client, "base") == {
+            "id": 2,
+            "image": "registry/inherited@sha256:exact",
+        }
+
+
+@pytest.mark.parametrize(
+    "summary_fields",
+    [
+        None,
+        [],
+        {},
+        {"resolved_environment": None},
+        {"resolved_environment": []},
+        {"resolved_environment": {"image": "ee"}},
+        {"resolved_environment": {"id": True, "image": "ee"}},
+        {"resolved_environment": {"id": 0, "image": "ee"}},
+        {"resolved_environment": {"id": "invalid", "image": "ee"}},
+    ],
+)
+def test_execution_image_fails_closed_without_valid_controller_resolution(summary_fields):
+    with _client(
+        {
+            "/job_templates/": {"results": [{"id": 7}]},
+            "/job_templates/7/": {"summary_fields": summary_fields},
+        }
+    ) as client:
+        with pytest.raises(ValueError, match="no resolved execution environment"):
             validation.resolve_execution_environment(client, "base")
 
 
-def test_execution_image_does_not_guess_unexposed_controller_default():
+@pytest.mark.parametrize("image", [None, "", " ", 42])
+@pytest.mark.parametrize("explicit", [True, False])
+def test_execution_image_requires_nonempty_image(image, explicit):
     with _client(
         {
-            "/job_templates/": {"results": [{}]},
-            "/settings/all/": {"DEFAULT_EXECUTION_ENVIRONMENT": None},
+            "/job_templates/": {"results": [{"id": 7, "execution_environment": 2 if explicit else None}]},
+            "/execution_environments/2/": {"image": image},
+            "/job_templates/7/": {"summary_fields": {"resolved_environment": {"id": 2, "image": image}}},
         }
     ) as client:
-        with pytest.raises(ValueError, match="explicit execution environment"):
+        with pytest.raises(ValueError, match="has no image"):
             validation.resolve_execution_environment(client, "base")
 
 
@@ -59,6 +89,69 @@ def test_execution_image_requires_unique_template():
     with _client({"/job_templates/": {"results": [{}, {}]}}) as client:
         with pytest.raises(ValueError, match="unambiguous"):
             validation.resolve_execution_environment(client, "base")
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_validation_runs_native_check_in_inherited_environment(valid):
+    playbook = "- hosts: localhost\n  tasks: []\n"
+    extra_vars = {"namespace": "edge"}
+    client = _client(
+        {
+            "/job_templates/": {"results": [{"id": 7, "execution_environment": None}]},
+            "/job_templates/7/": {"summary_fields": {"resolved_environment": {"id": 2, "image": "registry/inherited"}}},
+        }
+    )
+    with (
+        patch("mcp_aap.tools._aap_client", return_value=client),
+        patch(
+            "mcp_aap.tools.validate_in_execution_environment", return_value={"success": True, "valid": valid}
+        ) as check,
+    ):
+        outcome = validate_playbook(playbook, "base", extra_vars)
+    assert outcome == {"success": True, "valid": valid}
+    check.assert_called_once_with("registry/inherited", playbook, extra_vars)
+
+
+def test_validation_reports_unavailable_when_resolved_environment_is_forbidden():
+    def respond(request):
+        if request.url.path == "/job_templates/":
+            return httpx.Response(200, json={"results": [{"id": 7, "execution_environment": None}]})
+        assert request.url.path == "/job_templates/7/"
+        return httpx.Response(403)
+
+    client = httpx.Client(base_url="https://aap.test", transport=httpx.MockTransport(respond))
+    with (
+        patch("mcp_aap.tools._aap_client", return_value=client),
+        patch("mcp_aap.tools.validate_in_execution_environment") as check,
+    ):
+        outcome = validate_playbook("- hosts: localhost", "base", {})
+    assert outcome["success"] is False
+    assert "valid" not in outcome
+    assert "Playbook validation unavailable" in outcome["error"]
+    assert "403" in outcome["error"]
+    check.assert_not_called()
+
+
+def test_generated_template_pins_controller_resolved_environment():
+    requests = []
+    responses = {
+        "/job_templates/?name=base": {"results": [{"id": 7, "execution_environment": None}]},
+        "/job_templates/7/": {"summary_fields": {"resolved_environment": {"id": 2, "image": "registry/inherited"}}},
+        "/job_templates/?name=generated": {"results": []},
+        "/job_templates/7/copy/": {"id": 9},
+        "/job_templates/9/": {"id": 9, "name": "generated", "playbook": "fix.yml"},
+    }
+
+    def respond(request):
+        requests.append(request)
+        return httpx.Response(200, json=responses[request.url.raw_path.decode()])
+
+    client = httpx.Client(base_url="https://aap.test", transport=httpx.MockTransport(respond))
+    with patch("mcp_aap.tools._aap_client", return_value=client):
+        outcome = upsert_job_template("generated", "fix.yml", base_template_name="base")
+    assert outcome["success"] is True and outcome["created"] is True
+    assert requests[-1].method == "PATCH"
+    assert json.loads(requests[-1].content)["execution_environment"] == 2
 
 
 def test_job_is_credential_free_and_preserves_literal_source():
