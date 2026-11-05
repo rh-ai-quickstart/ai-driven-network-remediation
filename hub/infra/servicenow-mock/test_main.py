@@ -10,14 +10,17 @@ import base64
 
 import pytest
 from fastapi.testclient import TestClient
-from main import app
+
+import main
 
 AUTH_HEADER = {"Authorization": "Basic " + base64.b64encode(b"admin:admin").decode()}
 
 
 @pytest.fixture
-def client():
-    return TestClient(app)
+def client(monkeypatch):
+    monkeypatch.setattr(main, "MOCK_USERNAME", "admin")
+    monkeypatch.setattr(main, "MOCK_PASSWORD", "admin")
+    return TestClient(main.app)
 
 
 class TestAuth:
