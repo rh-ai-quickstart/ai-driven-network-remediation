@@ -47,7 +47,7 @@ ranRcaService:
   image: ""
   replicaCount: 1
   env:
-    llamastackHost: "llamastack-service"
+    llamastackHost: "llamastack"
     llamastackPort: "8321"
     vectorStoreName: "telco_oran_docs"
     graniteModelName: ""
@@ -88,7 +88,7 @@ ranChatbotService:
     incidentStatusTopic: "ran-incident-status"
     remediationResultsTopic: "ran-remediation-results"
     demoMetricsTopic: "ran-combined-metrics"
-    modelApiUrl: "http://llamastack-service:8321/v1/chat/completions"
+    modelApiUrl: "http://llamastack:8321/v1/chat/completions"
     rcaReadyUrl: ""
     modelName: ""
     corsOrigins: "http://localhost:3000"
