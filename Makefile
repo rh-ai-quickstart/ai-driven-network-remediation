@@ -1110,7 +1110,7 @@ multi-cluster-template-tests: helm-depend
 network-integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
 	PF_INGESTION_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
+	oc port-forward -n $(NAMESPACE) svc/llamastack 8321:8321 & \
 	PF_LLAMASTACK_PID=$$!; \
 	PF_LOKISTACK_PID=""; \
 	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
@@ -1137,7 +1137,7 @@ network-integration-tests:
 telco-integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
 	PF_INGESTION_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
+	oc port-forward -n $(NAMESPACE) svc/llamastack 8321:8321 & \
 	PF_LLAMASTACK_PID=$$!; \
 	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
 	PF_RAN_CHATBOT_PID=$$!; \
@@ -1163,7 +1163,7 @@ telco-integration-tests:
 integration-tests:
 	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
 	PF_INGESTION_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
+	oc port-forward -n $(NAMESPACE) svc/llamastack 8321:8321 & \
 	PF_LLAMASTACK_PID=$$!; \
 	PF_LOKISTACK_PID=""; \
 	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
