@@ -371,8 +371,8 @@ lokistack:
       userKey: user
       passwordKey: password
     bucketJobImage:
-      repository: quay.io/minio/minio
-      tag: latest
+      repository: public.ecr.aws/aws-cli/aws-cli
+      tag: "2.39.6"
       pullPolicy: IfNotPresent
   lokistack:
     name: logging-loki
