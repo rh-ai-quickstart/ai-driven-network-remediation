@@ -17,27 +17,29 @@ spec:
     spec:
       restartPolicy: OnFailure
       initContainers:
-        - name: wait-for-minio
+        - name: wait-for-storage
           image: {{ .Values.minio.bucketJobImage.repository }}:{{ .Values.minio.bucketJobImage.tag }}
           imagePullPolicy: {{ .Values.minio.bucketJobImage.pullPolicy }}
           command: ["/bin/sh", "-c"]
           args:
             - |
-              until mc alias set minio {{ .Values.minio.endpoint }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" 2>/dev/null; do
-                echo "Waiting for MinIO to be ready..."
+              until aws s3 ls --endpoint-url {{ .Values.minio.endpoint }} >/dev/null 2>&1; do
+                echo "Waiting for object storage to be ready..."
                 sleep 5
               done
           env:
-            - name: MINIO_ROOT_USER
+            - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.minio.existingSecret.name }}
                   key: {{ .Values.minio.existingSecret.userKey }}
-            - name: MINIO_ROOT_PASSWORD
+            - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.minio.existingSecret.name }}
                   key: {{ .Values.minio.existingSecret.passwordKey }}
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
       containers:
         - name: create-bucket
           image: {{ .Values.minio.bucketJobImage.repository }}:{{ .Values.minio.bucketJobImage.tag }}
@@ -45,17 +47,20 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              mc alias set minio {{ .Values.minio.endpoint }} "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
-              mc mb --ignore-existing minio/{{ .Values.minio.bucketName }}
+              if ! aws s3api head-bucket --bucket "{{ .Values.minio.bucketName }}" --endpoint-url {{ .Values.minio.endpoint }}; then
+                aws s3api create-bucket --bucket "{{ .Values.minio.bucketName }}" --endpoint-url {{ .Values.minio.endpoint }}
+              fi
               echo "Bucket '{{ .Values.minio.bucketName }}' is ready"
           env:
-            - name: MINIO_ROOT_USER
+            - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.minio.existingSecret.name }}
                   key: {{ .Values.minio.existingSecret.userKey }}
-            - name: MINIO_ROOT_PASSWORD
+            - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.minio.existingSecret.name }}
                   key: {{ .Values.minio.existingSecret.passwordKey }}
+            - name: AWS_DEFAULT_REGION
+              value: us-east-1
