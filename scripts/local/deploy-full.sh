@@ -3,45 +3,33 @@ set -o errexit
 
 # Mirror the "Build (custom image from the codebase)" flow from docs/manual-deploy.md.
 # Assumes you are already logged in to both OpenShift and Quay.
-REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
-VERSION="${VERSION:-0.1.0}"
-NAMESPACE="${NAMESPACE:-hub}"
-EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
-
-echo "Using REGISTRY=${REGISTRY}"
-echo "Using VERSION=${VERSION}"
-echo "Using NAMESPACE=${NAMESPACE}"
-echo "Using EDGE_NAMESPACE=${EDGE_NAMESPACE}"
 
 echo "Cleaning up existing deployment"
-CLUSTER_COUNT=1 NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make teardown
+make teardown
 
 echo "Building images"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-all-images
+make build-all-images
 
 echo "Building AAP mock image"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-push-aap-mock
+make build-push-aap-mock
 
 echo "Building ServiceNow mock image"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" make build-push-servicenow-mock
+make build-push-servicenow-mock
 
 echo "Pushing images"
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" make push-all-images
+make push-all-images
 
 echo "Deploying"
 # Avoid racing the startup auto-ingest against the integration tests' own explicit sync/ingest
 # calls (see CI's kind action for the same override).
-REGISTRY="${REGISTRY}" VERSION="${VERSION}" NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" \
-	AUTO_INGEST_ON_STARTUP=false make helm-install
+AUTO_INGEST_ON_STARTUP=false make helm-install
 
-echo "Installing edge chart in namespace ${EDGE_NAMESPACE}"
-CLUSTER_COUNT=1 EDGE_GITOPS=helm \
-	REGISTRY="${REGISTRY}" VERSION="${VERSION}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" \
-	CLUSTER_LOG_FORWARDER_ENABLED=false make edge-deploy
+echo "Installing edge chart"
+EDGE_GITOPS=helm make edge-deploy
 
 echo "Running unit tests"
-NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make unit-tests
-NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make multi-cluster-template-tests
+make unit-tests
+make multi-cluster-template-tests
 
 echo "Running integration tests"
-NAMESPACE="${NAMESPACE}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" make integration-tests
+make integration-tests
