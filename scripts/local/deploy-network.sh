@@ -5,6 +5,7 @@ set -o errexit
 # local codebase.
 # Assumes you are already logged in to both OpenShift and Quay.
 REGISTRY="${REGISTRY:-quay.io/rh-ai-quickstart}"
+CPU_DEMO_REGISTRY="${CPU_DEMO_REGISTRY:-${REGISTRY}}"
 VERSION="${VERSION:-0.1.0}"
 NAMESPACE="${NAMESPACE:-hub}"
 EDGE_NAMESPACE="${EDGE_NAMESPACE:-dark-noc-edge}"
@@ -36,7 +37,7 @@ CLUSTER_COUNT=1 EDGE_GITOPS=helm \
 	CLUSTER_LOG_FORWARDER_ENABLED=false make edge-deploy
 
 echo "Installing enabled CPU demo workloads"
-CLUSTER_COUNT=1 REGISTRY="${REGISTRY}" VERSION="${VERSION}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" \
+CLUSTER_COUNT=1 CPU_DEMO_REGISTRY="${CPU_DEMO_REGISTRY}" VERSION="${VERSION}" EDGE_NAMESPACE="${EDGE_NAMESPACE}" \
 	ENABLE_NETWORK_REMEDIATION=true make cpu-demo-deploy-enabled
 
 echo "Running Network integration tests"
