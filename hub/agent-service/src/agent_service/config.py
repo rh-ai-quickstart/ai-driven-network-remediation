@@ -77,7 +77,8 @@ _LIGHTSPEED_AUTH_REQUIREMENTS = (
     if DEPLOYMENT_MODE == "single-cluster"
     else (
         "Target the spoke through the ACM cluster-proxy using the AAP variables hub_url, edge_site_id and token_acm. "
-        'Use "{{ hub_url }}/{{ edge_site_id }}" as the API base URL and Authorization: "Bearer {{ token_acm }}". '
+        "In Kubernetes modules set host: \"{{ hub_url }}/{{ edge_site_id }}\" and api_key: \"{{ token_acm }}\"; "
+        "the modules have no api_url or headers parameters. "
         "Never hardcode credentials or read tokens from files.\n"
     )
 )
