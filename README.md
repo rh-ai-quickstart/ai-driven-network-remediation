@@ -2,6 +2,8 @@
 
 Investigate infrastructure failures and radio anomalies, run remediation playbooks, and track incident outcomes in connected dashboards.
 
+**[Deploy on your own OpenShift cluster → Single-cluster deployment guide](docs/single-cluster-deploy.md)**
+
 [![Apache 2.0 license](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ## Description
