@@ -59,6 +59,26 @@ Complete the [integration setup guide](docs/integration-setup.md) to prepare the
 
 For multiple clusters, use the [multi-cluster guide](docs/multi-cluster-deploy.md), including its OpenShift AI 3.4, ACM 2.15+, GitOps, and edge logging prerequisites. Each edge cluster requires OpenShift 4.21+, 16+ GB RAM, and TLS-secured Kafka connectivity to the hub.
 
+### Required Operators
+
+Operator needs depend on the topology: single-cluster (`CLUSTER_COUNT=1`) or hub-spoke (`CLUSTER_COUNT>=2`).
+
+| Operator | Single-cluster | Multi-cluster hub | Multi-cluster spokes |
+| --- | --- | --- | --- |
+| OpenShift AI (Llama Stack) | Required | Required | - |
+| Ansible Automation Platform | Required | Required | - |
+| OpenShift GitOps | Recommended | Required | - |
+| Advanced Cluster Management (with multicluster-engine) | Not used | Required | - |
+| Cluster Logging | Optional | Required | Required |
+| Loki operator | Optional | Required | - |
+
+- **OpenShift AI:** enable the Llama Stack component in the `DataScienceCluster` (`llamastackoperator=Managed`) so `LlamaStackDistribution` is available.
+- **OpenShift GitOps:** single-cluster uses Argo CD for the edge chart and falls back to a Helm install when GitOps is missing; hub-spoke requires Application and ApplicationSet APIs for edge fan-out.
+- **Cluster Logging and Loki operator:** single-cluster leaves log forwarding and the hub LokiStack off by default (`CLUSTER_LOG_FORWARDER_ENABLED=false`, `ENABLE_LOKISTACK=false`); enable both settings to require these operators. Hub-spoke enables both by default: the hub aggregates logs in a LokiStack, and each spoke needs the Cluster Logging operator (stable-6.x channel) so its edge `ClusterLogForwarder` reconciles and ships logs to hub Kafka.
+- **Spokes:** no operators beyond Cluster Logging; edge workloads are delivered through ACM and GitOps.
+
+Install order and verification commands for the hub are in the [multi-cluster guide](docs/multi-cluster-deploy.md#hub-operators-install-before-deploy).
+
 ## Deploy
 
 The following steps install Network and RAN on one hub cluster, with edge workloads on that same cluster. Use dedicated namespaces for `NAMESPACE` and `EDGE_NAMESPACE`: cleanup deletes both namespaces and their data.
