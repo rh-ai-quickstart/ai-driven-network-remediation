@@ -25,7 +25,7 @@ CLUSTER_COUNT      ?= 1
 SPOKE_NAME_PREFIX  ?= edge-site
 ACM_HUB_CLUSTER    ?= local-cluster
 CLUSTER_CREATE     ?= false
-ENABLE_CPU_DEMO    ?= $(if $(and $(filter true,$(ENABLE_LIGHTSPEED)),$(filter true,$(ENABLE_NETWORK_REMEDIATION))),true,false)
+ENABLE_CPU_DEMO    ?= $(ENABLE_NETWORK_REMEDIATION)
 ifeq ($(CLUSTER_COUNT),1)
   CPU_DEMO_SITE_A ?= $(EDGE_SITE_ID)
   CPU_DEMO_SITE_B ?= $(CPU_DEMO_SITE_A)
