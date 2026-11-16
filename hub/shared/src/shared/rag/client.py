@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import time
-
 from llama_stack_client import AsyncLlamaStackClient
 from loguru import logger
 
-_NEGATIVE_CACHE_TTL_SECONDS = 300.0
-
 
 class RagClient:
-    """Query a LlamaStack vector store by name, with lazy resolution and negative caching."""
+    """Query a LlamaStack vector store by name, with lazy resolution."""
 
     def __init__(self, *, host: str, port: int, vector_store_name: str) -> None:
         self._client = AsyncLlamaStackClient(base_url=f"http://{host}:{port}")
         self._vector_store_name = vector_store_name
         self._vector_store_id: str | None = None
-        self._negative_cache_until: float = 0.0
 
     async def search(
         self,
@@ -71,19 +66,21 @@ class RagClient:
         if self._vector_store_id is not None:
             return self._vector_store_id
 
-        if time.monotonic() < self._negative_cache_until:
-            return None
+        page = await self._client.vector_stores.list(limit=100)
+        match_id: str | None = None
+        while True:
+            for vs in page.data:
+                if vs.name == self._vector_store_name:
+                    if match_id is not None:
+                        raise ValueError(f"Multiple vector stores named '{self._vector_store_name}'")
+                    match_id = vs.id
+            if not page.has_next_page():
+                break
+            page = await page.get_next_page()
 
-        result = await self._client.vector_stores.list(limit=100)
-        for vs in result.data:
-            if vs.name == self._vector_store_name:
-                self._vector_store_id = vs.id
-                return self._vector_store_id
+        if match_id is not None:
+            self._vector_store_id = match_id
+            return match_id
 
-        logger.warning(
-            "Vector store '{}' not found, retrying in {}s",
-            self._vector_store_name,
-            int(_NEGATIVE_CACHE_TTL_SECONDS),
-        )
-        self._negative_cache_until = time.monotonic() + _NEGATIVE_CACHE_TTL_SECONDS
+        logger.warning("Vector store '{}' not found", self._vector_store_name)
         return None

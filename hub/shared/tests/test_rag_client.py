@@ -8,10 +8,17 @@ import pytest
 from shared.rag import RagClient
 
 
+def store_page(stores, next_page=None):
+    page = MagicMock(data=stores)
+    page.has_next_page.return_value = next_page is not None
+    page.get_next_page = AsyncMock(return_value=next_page)
+    return page
+
+
 @pytest.fixture
 def mock_llamastack():
     mock = MagicMock()
-    mock.vector_stores.list = AsyncMock(return_value=MagicMock(data=[]))
+    mock.vector_stores.list = AsyncMock(return_value=store_page([]))
     mock.vector_stores.search = AsyncMock(return_value=MagicMock(data=[]))
     return mock
 
@@ -62,7 +69,7 @@ class TestVectorStoreResolution:
         mock_vs = MagicMock()
         mock_vs.id = "vs-found"
         mock_vs.name = "test_docs"
-        mock_llamastack.vector_stores.list = AsyncMock(return_value=MagicMock(data=[mock_vs]))
+        mock_llamastack.vector_stores.list = AsyncMock(return_value=store_page([mock_vs]))
 
         await rag_client.search("test query")
 
@@ -74,13 +81,45 @@ class TestVectorStoreResolution:
         mock_vs = MagicMock()
         mock_vs.id = "vs-found"
         mock_vs.name = "test_docs"
-        mock_llamastack.vector_stores.list = AsyncMock(return_value=MagicMock(data=[mock_vs]))
+        mock_llamastack.vector_stores.list = AsyncMock(return_value=store_page([mock_vs]))
 
         await rag_client.search("query 1")
         await rag_client.search("query 2")
 
         mock_llamastack.vector_stores.list.assert_awaited_once()
         assert mock_llamastack.vector_stores.search.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_finds_exact_name_beyond_first_page(self, rag_client, mock_llamastack):
+        unrelated = MagicMock()
+        unrelated.id = "vs-other"
+        unrelated.name = "test_docs_old"
+        target = MagicMock()
+        target.id = "vs-target"
+        target.name = "test_docs"
+        second_page = store_page([target])
+        first_page = store_page([unrelated] * 100, second_page)
+        mock_llamastack.vector_stores.list.return_value = first_page
+
+        await rag_client.search("test query")
+
+        first_page.get_next_page.assert_awaited_once()
+        assert mock_llamastack.vector_stores.search.call_args.args[0] == "vs-target"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_names_across_pages_raise_error(self, rag_client, mock_llamastack):
+        first = MagicMock()
+        first.id = "vs-first"
+        first.name = "test_docs"
+        second = MagicMock()
+        second.id = "vs-second"
+        second.name = "test_docs"
+        mock_llamastack.vector_stores.list.return_value = store_page([first], store_page([second]))
+
+        with pytest.raises(ValueError, match="Multiple vector stores named 'test_docs'"):
+            await rag_client.search("test query")
+
+        mock_llamastack.vector_stores.search.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_not_found_returns_empty(self, rag_client, mock_llamastack):
@@ -90,14 +129,36 @@ class TestVectorStoreResolution:
         mock_llamastack.vector_stores.search.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_negative_cache_prevents_repeated_lookups(self, rag_client, mock_llamastack):
+    async def test_search_finds_store_created_after_previous_miss(self, rag_client, mock_llamastack):
         await rag_client.search("query 1")
+        mock_vs = MagicMock()
+        mock_vs.id = "vs-new"
+        mock_vs.name = "test_docs"
+        mock_llamastack.vector_stores.list.return_value = store_page([mock_vs])
         await rag_client.search("query 2")
 
-        mock_llamastack.vector_stores.list.assert_awaited_once()
+        assert mock_llamastack.vector_stores.list.await_count == 2
+        mock_llamastack.vector_stores.search.assert_awaited_once()
+        assert mock_llamastack.vector_stores.search.call_args.args[0] == "vs-new"
 
 
 class TestUploadFile:
+    @pytest.mark.asyncio
+    async def test_upload_finds_store_created_after_previous_miss(self, rag_client, mock_llamastack):
+        await rag_client.upload_file("first.md", b"content")
+        mock_vs = MagicMock()
+        mock_vs.id = "vs-new"
+        mock_vs.name = "test_docs"
+        mock_llamastack.vector_stores.list.return_value = store_page([mock_vs])
+        mock_llamastack.files.create = AsyncMock(return_value=MagicMock(id="file-new"))
+        mock_llamastack.vector_stores.files.create = AsyncMock()
+
+        await rag_client.upload_file("second.md", b"content")
+
+        assert mock_llamastack.vector_stores.list.await_count == 2
+        mock_llamastack.vector_stores.files.create.assert_awaited_once()
+        assert mock_llamastack.vector_stores.files.create.call_args.args[0] == "vs-new"
+
     @pytest.mark.asyncio
     async def test_uploads_and_attaches_file(self, rag_client, mock_llamastack):
         rag_client._vector_store_id = "vs-123"
