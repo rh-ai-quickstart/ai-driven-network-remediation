@@ -1,3 +1,7 @@
+import os
+import time
+from uuid import uuid4
+
 import pytest
 
 pytestmark = pytest.mark.telco
@@ -16,7 +20,37 @@ _SYNC_TIMEOUT_SECONDS = 300.0
 _INGEST_TIMEOUT_SECONDS = 1200.0
 
 
-def test_telco_docs_sync_ingest_and_content_flow(ingestion_client):
+def _attachments(llamastack_client, store_id):
+    attachments = []
+    after = None
+    while True:
+        params = {"limit": 100}
+        if after:
+            params["after"] = after
+        response = llamastack_client.get(f"/v1/vector_stores/{store_id}/files", params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        attachments.extend(page["data"])
+        if not page.get("has_more"):
+            return attachments
+        after = page["last_id"]
+
+
+def _search(llamastack_client, store_id, query):
+    response = llamastack_client.post(f"/v1/vector_stores/{store_id}/search", json={"query": query})
+    assert response.status_code == 200, response.text
+    return response.json()["data"]
+
+
+def _search_contains(llamastack_client, store_id, query, text):
+    return any(
+        text in part.get("text", "")
+        for result in _search(llamastack_client, store_id, query)
+        for part in result.get("content", [])
+    )
+
+
+def test_telco_docs_sync_ingest_and_content_flow(ingestion_client, llamastack_client):
     # sync
     sync_response = ingestion_client.post("/telco-docs/sync", timeout=_SYNC_TIMEOUT_SECONDS)
     assert sync_response.status_code == 200
@@ -39,8 +73,55 @@ def test_telco_docs_sync_ingest_and_content_flow(ingestion_client):
         assert obj["vector_store_id"]
         assert obj["attributes"]["source_type"] == "vendor_doc"
 
+    store_id = ingest_data["objects"][0]["vector_store_id"]
+    store_response = llamastack_client.get(f"/v1/vector_stores/{store_id}")
+    assert store_response.status_code == 200, store_response.text
+    assert store_response.json()["name"] == os.environ.get("EXPECTED_TELCO_VECTOR_STORE_NAME", "telco_oran_docs")
+    first_attachments = _attachments(llamastack_client, store_id)
+    first_ids = {item["id"] for item in first_attachments}
+    assert len(first_attachments) == _EXPECTED_INGESTED_FILES
+
+    marker = f"obsolete-vendor-{uuid4().hex}"
+    uploaded = llamastack_client.post(
+        "/v1/files",
+        data={"purpose": "assistants"},
+        files={"file": ("obsolete-vendor.md", f"# {marker}\n{marker}".encode(), "text/markdown")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    old_file_id = uploaded.json()["id"]
+    attached = llamastack_client.post(
+        f"/v1/vector_stores/{store_id}/files",
+        json={"file_id": old_file_id, "attributes": {"source_type": "vendor_doc"}},
+    )
+    assert attached.status_code == 200, attached.text
+    deadline = time.monotonic() + 120
+    while not _search_contains(llamastack_client, store_id, marker, marker):
+        assert time.monotonic() < deadline, "Obsolete vendor content never became searchable"
+        time.sleep(2)
+    assert len(_attachments(llamastack_client, store_id)) == _EXPECTED_INGESTED_FILES + 1
+
+    # The second API ingestion must clear the first corpus across both attachment pages.
+    second_response = ingestion_client.post("/telco-docs/ingest", timeout=_INGEST_TIMEOUT_SECONDS)
+    assert second_response.status_code == 200, second_response.text
+    second_data = second_response.json()
+    assert second_data["failed_count"] == 0, second_data["failed"]
+    assert second_data["ingested_count"] == _EXPECTED_INGESTED_FILES
+    assert len(second_data["objects"]) == _EXPECTED_INGESTED_FILES
+    assert {item["vector_store_id"] for item in second_data["objects"]} == {store_id}
+    assert {item["attributes"]["source_name"] for item in second_data["objects"]} == _EXPECTED_SOURCES
+
+    attachments = _attachments(llamastack_client, store_id)
+    assert len(attachments) == _EXPECTED_INGESTED_FILES
+    assert not ({item["id"] for item in attachments} & (first_ids | {old_file_id}))
+    assert {item["id"] for item in attachments} == {item["id"] for item in second_data["objects"]}
+    assert not _search_contains(llamastack_client, store_id, marker, marker)
+    assert _search(llamastack_client, store_id, "gNodeB")
+    final_store = llamastack_client.get(f"/v1/vector_stores/{store_id}")
+    assert final_store.status_code == 200, final_store.text
+    assert final_store.json()["file_counts"]["total"] == _EXPECTED_INGESTED_FILES
+
     # verify content retrieval
-    first_obj = ingest_data["objects"][0]
+    first_obj = second_data["objects"][0]
     content_response = ingestion_client.get(
         f"/vector-store/files/{first_obj['id']}/content",
         params={"vector_store_id": first_obj["vector_store_id"]},
