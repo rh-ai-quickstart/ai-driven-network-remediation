@@ -28,8 +28,15 @@ def _wait_for_health(base_url: str, path: str, name: str) -> None:
 
 
 def pytest_collection_modifyitems(items):
-    """Run kafka tests first. Agent consumer handles one alert at a time."""
-    items.sort(key=lambda item: 0 if "/kafka/" in str(item.fspath) else 1)
+    """Prepare runbooks before the agent loop; run the agent loop before other demo events."""
+    def priority(item):
+        if item.name in {"test_runbooks_sync_ingest_and_content_flow", "test_runbook_reingestion_replaces_attachments"}:
+            return 0
+        if "/kafka/" in str(item.fspath):
+            return 1
+        return 2
+
+    items.sort(key=priority)
 
 
 @pytest.fixture(scope="session")

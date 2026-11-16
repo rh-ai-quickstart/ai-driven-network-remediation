@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 from ogx_client import OgxClient
 
 logger = logging.getLogger(__name__)
+
+
+class DuplicateVectorStoreNameError(ValueError):
+    """The configured name cannot identify a single vector store."""
 
 
 @dataclass(frozen=True)
@@ -118,6 +123,14 @@ class LlamaStackVectorStoreClient:
             file_counts=created.file_counts.model_dump(),
         )
 
+    def clear_vector_store_files(self, vector_store_id: str) -> None:
+        """Remove every attachment present when clearing starts, including generated files."""
+        file_ids = [file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))]
+        for file_id in file_ids:
+            response = self._client.vector_stores.files.delete(file_id, vector_store_id=vector_store_id)
+            if not response.deleted:
+                raise RuntimeError(f"Failed to detach file '{file_id}' from vector store '{vector_store_id}'")
+
     def ingest_text_batch(
         self,
         *,
@@ -199,10 +212,18 @@ class LlamaStackVectorStoreClient:
         )
 
     def _find_vector_store_by_name(self, name: str) -> Any | None:
-        for vector_store in self._iter_items(self._client.vector_stores.list(limit=100)):
-            if vector_store.name == name:
-                return vector_store
-        return None
+        matches = [store for store in self._iter_pages(self._client.vector_stores.list(limit=100)) if store.name == name]
+        if len(matches) > 1:
+            raise DuplicateVectorStoreNameError(f"Multiple vector stores named '{name}'")
+        return matches[0] if matches else None
+
+    @classmethod
+    def _iter_pages(cls, page: Any) -> Iterable[Any]:
+        while True:
+            yield from cls._iter_items(page)
+            if not page.has_next_page():
+                break
+            page = page.get_next_page()
 
     def _wait_for_file_ready(
         self,

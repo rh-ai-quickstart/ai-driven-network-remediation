@@ -37,6 +37,10 @@ class IngestionAlreadyInProgressError(Exception):
         super().__init__(f"{corpus} ingestion is already in progress")
 
 
+class EmptyRunbookCorpusError(ValueError):
+    """There are no source runbooks to replace the current corpus."""
+
+
 def _runbook_object_name(filename: str) -> str:
     prefix = settings.minio_runbook_prefix.strip("/")
     if not prefix:
@@ -124,10 +128,7 @@ class IngestionPipelineService:
         return result
 
     def ingest(self) -> dict[str, Any]:
-        """Ingest every synced runbook from MinIO into the vector store.
-
-        Deletes and recreates the vector store to guarantee idempotency.
-        """
+        """Replace the runbook attachments in the existing vector store."""
         if self._ingesting:
             raise IngestionAlreadyInProgressError("Runbook")
         self._ingesting = True
@@ -135,10 +136,6 @@ class IngestionPipelineService:
             objects = self._minio_client.load_prefix_text_objects(settings.minio_runbook_prefix)
             ingested: list[dict[str, Any]] = []
             failed: list[dict[str, str]] = []
-
-            self._vector_client.delete_vector_store()
-            vector_store = self._vector_client.ensure_vector_store()
-
             items = [
                 IngestItem(
                     filename=Path(obj.object_name).name,
@@ -147,6 +144,11 @@ class IngestionPipelineService:
                 )
                 for obj in objects
             ]
+            if not items:
+                raise EmptyRunbookCorpusError("No runbooks found for ingestion; existing attachments were preserved")
+
+            vector_store = self._vector_client.ensure_vector_store()
+            self._vector_client.clear_vector_store_files(vector_store.id)
             batch_result = self._vector_client.ingest_text_batch(
                 vector_store_id=vector_store.id,
                 items=items,

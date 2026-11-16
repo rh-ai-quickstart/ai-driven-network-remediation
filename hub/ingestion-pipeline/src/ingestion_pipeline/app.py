@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+
 from ingestion_pipeline.clients.llamastack import (
+    DuplicateVectorStoreNameError,
     VectorStoreFileContentSummary,
     VectorStoreSummary,
 )
 from ingestion_pipeline.config import settings
-from ingestion_pipeline.service import IngestionPipelineService
+from ingestion_pipeline.service import EmptyRunbookCorpusError, IngestionPipelineService
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
@@ -21,7 +23,7 @@ service = IngestionPipelineService()
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(application: FastAPI) -> AsyncGenerator[None]:
     if _AUTO_INGEST:
         import threading
 
@@ -104,7 +106,12 @@ def sync_runbooks() -> dict[str, Any]:
 
 @app.post("/runbooks/ingest")
 def ingest_runbooks() -> dict[str, Any]:
-    return _get_service().ingest()
+    try:
+        return _get_service().ingest()
+    except EmptyRunbookCorpusError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DuplicateVectorStoreNameError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/telco-docs/sync")
