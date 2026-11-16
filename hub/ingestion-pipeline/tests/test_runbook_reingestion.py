@@ -60,7 +60,8 @@ def test_clear_removes_every_attachment_from_all_pages():
     client.clear_vector_store_files("target")
 
     assert [call.args[0] for call in client._client.vector_stores.files.delete.call_args_list] == [
-        "generated", "runbook"
+        "generated",
+        "runbook",
     ]
 
 
@@ -73,8 +74,7 @@ def test_failed_detach_stops_before_replacement():
 
 
 def test_empty_source_preserves_existing_attachments():
-    service = object.__new__(IngestionPipelineService)
-    service._ingesting = False
+    service = IngestionPipelineService()
     service._minio_client = SimpleNamespace(load_prefix_text_objects=Mock(return_value=[]))
     service._vector_client = SimpleNamespace(ensure_vector_store=Mock(), clear_vector_store_files=Mock())
 
@@ -83,7 +83,7 @@ def test_empty_source_preserves_existing_attachments():
 
     service._vector_client.ensure_vector_store.assert_not_called()
     service._vector_client.clear_vector_store_files.assert_not_called()
-    assert service._ingesting is False
+    assert service._ingest_lock.locked() is False
 
 
 class AttachmentBackend:
@@ -139,8 +139,7 @@ def runbook_api(monkeypatch):
     vector_client._client.vector_stores.files = SimpleNamespace(
         list=backend.list, delete=backend.delete, create=backend.attach
     )
-    service = object.__new__(IngestionPipelineService)
-    service._ingesting = False
+    service = IngestionPipelineService()
     service._minio_client = SimpleNamespace(
         load_prefix_text_objects=Mock(
             return_value=[SimpleNamespace(object_name="runbooks/example.md", content="example")]

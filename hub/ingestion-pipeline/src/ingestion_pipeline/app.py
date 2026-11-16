@@ -16,6 +16,7 @@ from ingestion_pipeline.config import settings
 from ingestion_pipeline.service import (
     EmptyRunbookCorpusError,
     EmptyTelcoCorpusError,
+    IngestionAlreadyInProgressError,
     IngestionBatchFailedError,
     IngestionPipelineService,
 )
@@ -114,6 +115,8 @@ def sync_runbooks() -> dict[str, Any]:
 def ingest_runbooks() -> dict[str, Any]:
     try:
         return _get_service().ingest()
+    except IngestionAlreadyInProgressError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except EmptyRunbookCorpusError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DuplicateVectorStoreNameError as exc:
@@ -133,6 +136,8 @@ def sync_telco_docs() -> dict[str, Any]:
 def ingest_telco_docs() -> dict[str, Any]:
     try:
         return _get_service().ingest_telco_docs()
+    except IngestionAlreadyInProgressError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except EmptyTelcoCorpusError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DuplicateVectorStoreNameError as exc:

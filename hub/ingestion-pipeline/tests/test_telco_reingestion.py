@@ -15,8 +15,7 @@ from ingestion_pipeline.service import IngestionPipelineService
 
 @pytest.fixture
 def telco_api(monkeypatch):
-    service = object.__new__(IngestionPipelineService)
-    service._ingesting_telco = False
+    service = IngestionPipelineService()
     service._minio_client = SimpleNamespace(
         load_prefix_text_objects=Mock(
             return_value=[SimpleNamespace(object_name="telco-docs/vendor.pdf.md", content="# Section\n\nContent")]
@@ -60,7 +59,7 @@ def test_zero_units_preserve_existing_store(telco_api, content):
     assert "existing attachments were preserved" in response.json()["detail"]
     vector_client.ensure_vector_store.assert_not_called()
     vector_client.clear_vector_store_files.assert_not_called()
-    assert service._ingesting_telco is False
+    assert service._telco_ingest_lock.locked() is False
 
 
 def test_split_failure_preserves_existing_store(telco_api, monkeypatch):

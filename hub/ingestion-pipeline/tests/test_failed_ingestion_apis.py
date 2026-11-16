@@ -78,9 +78,7 @@ def ingestion_api(request, monkeypatch):
             files=SimpleNamespace(list=backend.list, delete=backend.delete, create=backend.attach),
         ),
     )
-    service = object.__new__(IngestionPipelineService)
-    service._ingesting = False
-    service._ingesting_telco = False
+    service = IngestionPipelineService()
     if corpus == "runbooks":
         objects = [
             SimpleNamespace(object_name="runbooks/first.md", content="first"),

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from ingestion_pipeline.clients.llamastack import (
@@ -92,8 +93,8 @@ class IngestionPipelineService:
             chunk_size_tokens=settings.chunk_size_tokens,
             chunk_overlap_tokens=settings.chunk_overlap_tokens,
         )
-        self._ingesting = False
-        self._ingesting_telco = False
+        self._ingest_lock = Lock()
+        self._telco_ingest_lock = Lock()
 
     # -- runbooks --
 
@@ -141,9 +142,8 @@ class IngestionPipelineService:
 
     def ingest(self) -> dict[str, Any]:
         """Replace the runbook attachments in the existing vector store."""
-        if self._ingesting:
+        if not self._ingest_lock.acquire(blocking=False):
             raise IngestionAlreadyInProgressError("Runbook")
-        self._ingesting = True
         try:
             objects = self._minio_client.load_prefix_text_objects(settings.minio_runbook_prefix)
             ingested: list[dict[str, Any]] = []
@@ -196,7 +196,7 @@ class IngestionPipelineService:
                 raise IngestionBatchFailedError(result)
             return result
         finally:
-            self._ingesting = False
+            self._ingest_lock.release()
 
     # -- telco vendor docs --
 
@@ -247,9 +247,8 @@ class IngestionPipelineService:
 
     def ingest_telco_docs(self) -> dict[str, Any]:
         """Replace vendor-document units in the existing telco vector store."""
-        if self._ingesting_telco:
+        if not self._telco_ingest_lock.acquire(blocking=False):
             raise IngestionAlreadyInProgressError("Telco")
-        self._ingesting_telco = True
         try:
             objects = self._minio_client.load_prefix_text_objects(settings.minio_telco_docs_prefix)
             ingested: list[dict[str, Any]] = []
@@ -313,7 +312,7 @@ class IngestionPipelineService:
                 raise IngestionBatchFailedError(result)
             return result
         finally:
-            self._ingesting_telco = False
+            self._telco_ingest_lock.release()
 
     # -- read-only inspection (backed by the runbook vector store) --
 
