@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
+from llama_stack_client import BadRequestError
 from shared.rag import RagClient
 
 
@@ -13,6 +15,12 @@ def store_page(stores, next_page=None):
     page.has_next_page.return_value = next_page is not None
     page.get_next_page = AsyncMock(return_value=next_page)
     return page
+
+
+def missing_store_error(store_id: str, message: str) -> BadRequestError:
+    request = httpx.Request("POST", f"http://llamastack:8321/v1/vector_stores/{store_id}/search")
+    response = httpx.Response(400, request=request, json={"error": {"message": message}})
+    return BadRequestError(message, response=response, body=response.json())
 
 
 @pytest.fixture
@@ -31,6 +39,59 @@ def rag_client(mock_llamastack):
 
 
 class TestSearch:
+    @pytest.mark.asyncio
+    async def test_stale_cached_store_id_resolves_once_and_retries_search(self, rag_client, mock_llamastack):
+        rag_client._vector_store_id = "vs-deleted"
+        replacement = MagicMock(id="vs-repaired", name="test_docs")
+        replacement.name = "test_docs"
+        mock_llamastack.vector_stores.list.return_value = store_page([replacement])
+        mock_llamastack.vector_stores.search.side_effect = [
+            missing_store_error("vs-deleted", "Vector_store 'vs-deleted' not found"),
+            MagicMock(data=[MagicMock(content=[MagicMock(text="repaired context")])]),
+            MagicMock(data=[]),
+        ]
+
+        assert await rag_client.search("antenna", max_num_results=3, score_threshold=0.4) == ["repaired context"]
+        assert [call.args[0] for call in mock_llamastack.vector_stores.search.await_args_list] == [
+            "vs-deleted", "vs-repaired"
+        ]
+        assert all(call.kwargs["max_num_results"] == 3 for call in mock_llamastack.vector_stores.search.await_args_list)
+        mock_llamastack.vector_stores.list.assert_awaited_once()
+
+        await rag_client.search("again")
+        mock_llamastack.vector_stores.list.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_unrelated_search_error_does_not_refresh_cached_id(self, rag_client, mock_llamastack):
+        rag_client._vector_store_id = "vs-live"
+        error = missing_store_error("vs-live", "Search route not found")
+        mock_llamastack.vector_stores.search.side_effect = error
+
+        with pytest.raises(BadRequestError) as raised:
+            await rag_client.search("antenna")
+
+        assert raised.value is error
+        mock_llamastack.vector_stores.list.assert_not_awaited()
+        mock_llamastack.vector_stores.search.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_retry_failure_propagates_without_another_lookup(self, rag_client, mock_llamastack):
+        rag_client._vector_store_id = "vs-deleted"
+        replacement = MagicMock(id="vs-repaired")
+        replacement.name = "test_docs"
+        mock_llamastack.vector_stores.list.return_value = store_page([replacement])
+        error = missing_store_error("vs-repaired", "Vector_store 'vs-repaired' not found")
+        mock_llamastack.vector_stores.search.side_effect = [
+            missing_store_error("vs-deleted", "Vector_store 'vs-deleted' not found"), error
+        ]
+
+        with pytest.raises(BadRequestError) as raised:
+            await rag_client.search("antenna")
+
+        assert raised.value is error
+        mock_llamastack.vector_stores.list.assert_awaited_once()
+        assert mock_llamastack.vector_stores.search.await_count == 2
+
     @pytest.mark.asyncio
     async def test_returns_snippets_from_search_results(self, rag_client, mock_llamastack):
         rag_client._vector_store_id = "vs-123"
@@ -143,6 +204,25 @@ class TestVectorStoreResolution:
 
 
 class TestUploadFile:
+    @pytest.mark.asyncio
+    async def test_upload_reattaches_to_repaired_store_after_precise_stale_id_error(self, rag_client, mock_llamastack):
+        rag_client._vector_store_id = "vs-deleted"
+        replacement = MagicMock(id="vs-repaired")
+        replacement.name = "test_docs"
+        mock_llamastack.vector_stores.list.return_value = store_page([replacement])
+        mock_llamastack.files.create = AsyncMock(return_value=MagicMock(id="file-new"))
+        mock_llamastack.vector_stores.files.create = AsyncMock(
+            side_effect=[missing_store_error("vs-deleted", "Vector_store 'vs-deleted' not found"), None]
+        )
+
+        await rag_client.upload_file("playbook.md", b"content")
+
+        assert [call.args[0] for call in mock_llamastack.vector_stores.files.create.await_args_list] == [
+            "vs-deleted", "vs-repaired"
+        ]
+        mock_llamastack.files.create.assert_awaited_once()
+        mock_llamastack.vector_stores.list.assert_awaited_once()
+
     @pytest.mark.asyncio
     async def test_upload_finds_store_created_after_previous_miss(self, rag_client, mock_llamastack):
         await rag_client.upload_file("first.md", b"content")

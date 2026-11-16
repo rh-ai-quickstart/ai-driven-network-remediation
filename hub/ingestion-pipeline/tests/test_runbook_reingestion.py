@@ -94,11 +94,14 @@ class AttachmentBackend:
         self.fail_once = False
         self.retain_on_delete = False
         self.add_during_clear = False
+        self.list_error = False
         self._next_file = 0
 
     def list(self, vector_store_id, limit):
         assert vector_store_id == "store-1"
         assert limit == 100
+        if self.list_error:
+            raise RuntimeError("unreadable attachment metadata")
         ids = list(self.attachments)
         return Page([SimpleNamespace(id=ids[0])], Page([SimpleNamespace(id=id) for id in ids[1:]])) if ids else Page([])
 
@@ -186,3 +189,17 @@ def test_attachment_added_during_clear_does_not_fail_verification(runbook_api):
 
     assert response.status_code == 200
     assert backend.attachments == ["concurrent-playbook", "new-1"]
+
+
+def test_attachment_list_error_fails_clearly_without_recreating_store(runbook_api):
+    api, backend = runbook_api
+    backend.list_error = True
+
+    response = api.post("/runbooks/ingest")
+
+    assert response.status_code == 502
+    assert "Could not list attachments in vector store 'store-1'" in response.json()["detail"]
+    assert "unreadable attachment metadata" in response.json()["detail"]
+    assert backend.attachments == ["old-a", "old-b"]
+    assert backend.deleted == []
+    assert backend.created == []

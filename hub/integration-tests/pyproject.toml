@@ -8,7 +8,11 @@ dependencies = [
     "jsonschema>=4.0",
     "pytest>=8.0",
     "pytest-order>=1.5.0",
+    "shared[rag]",
 ]
+
+[tool.uv.sources]
+shared = { path = "../shared" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

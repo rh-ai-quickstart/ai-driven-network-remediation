@@ -15,6 +15,10 @@ class DuplicateVectorStoreNameError(ValueError):
     """The configured name cannot identify a single vector store."""
 
 
+class AttachmentListError(RuntimeError):
+    """The provider could not enumerate a store's attachments."""
+
+
 @dataclass(frozen=True)
 class VectorStoreSummary:
     id: str
@@ -125,20 +129,26 @@ class LlamaStackVectorStoreClient:
 
     def clear_vector_store_files(self, vector_store_id: str) -> None:
         """Remove every attachment present when clearing starts, including generated files."""
-        file_ids = [
-            file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
-        ]
+        file_ids = self._list_attachment_ids(vector_store_id)
         for file_id in file_ids:
             response = self._client.vector_stores.files.delete(file_id, vector_store_id=vector_store_id)
             if not response.deleted:
                 raise RuntimeError(f"Failed to detach file '{file_id}' from vector store '{vector_store_id}'")
-        remaining_ids = {
-            file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
-        }
+        remaining_ids = set(self._list_attachment_ids(vector_store_id))
         if originals_remaining := set(file_ids) & remaining_ids:
             raise RuntimeError(
                 f"Attachments remain in vector store '{vector_store_id}' after clearing: {sorted(originals_remaining)}"
             )
+
+    def _list_attachment_ids(self, vector_store_id: str) -> list[str]:
+        try:
+            return [
+                file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
+            ]
+        except Exception as exc:
+            raise AttachmentListError(
+                f"Could not list attachments in vector store '{vector_store_id}': {exc}"
+            ) from exc
 
     def ingest_text_batch(
         self,

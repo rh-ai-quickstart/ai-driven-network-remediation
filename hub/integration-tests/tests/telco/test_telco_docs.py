@@ -50,7 +50,7 @@ def _search_contains(llamastack_client, store_id, query, text):
     )
 
 
-def test_telco_docs_sync_ingest_and_content_flow(ingestion_client, llamastack_client):
+def test_telco_docs_sync_ingest_and_content_flow(ingestion_client, llamastack_client, rag_reader):
     # sync
     sync_response = ingestion_client.post("/telco-docs/sync", timeout=_SYNC_TIMEOUT_SECONDS)
     assert sync_response.status_code == 200
@@ -77,6 +77,7 @@ def test_telco_docs_sync_ingest_and_content_flow(ingestion_client, llamastack_cl
     store_response = llamastack_client.get(f"/v1/vector_stores/{store_id}")
     assert store_response.status_code == 200, store_response.text
     assert store_response.json()["name"] == os.environ.get("EXPECTED_TELCO_VECTOR_STORE_NAME", "telco_oran_docs")
+    store_name = store_response.json()["name"]
     first_attachments = _attachments(llamastack_client, store_id)
     first_ids = {item["id"] for item in first_attachments}
     assert len(first_attachments) == _EXPECTED_INGESTED_FILES
@@ -98,30 +99,43 @@ def test_telco_docs_sync_ingest_and_content_flow(ingestion_client, llamastack_cl
     while not _search_contains(llamastack_client, store_id, marker, marker):
         assert time.monotonic() < deadline, "Obsolete vendor content never became searchable"
         time.sleep(2)
+    assert any(marker in snippet for snippet in rag_reader(store_name, marker))
     assert len(_attachments(llamastack_client, store_id)) == _EXPECTED_INGESTED_FILES + 1
 
-    # The second API ingestion must clear the first corpus across both attachment pages.
-    second_response = ingestion_client.post("/telco-docs/ingest", timeout=_INGEST_TIMEOUT_SECONDS)
-    assert second_response.status_code == 200, second_response.text
-    second_data = second_response.json()
-    assert second_data["failed_count"] == 0, second_data["failed"]
-    assert second_data["ingested_count"] == _EXPECTED_INGESTED_FILES
-    assert len(second_data["objects"]) == _EXPECTED_INGESTED_FILES
-    assert {item["vector_store_id"] for item in second_data["objects"]} == {store_id}
-    assert {item["attributes"]["source_name"] for item in second_data["objects"]} == _EXPECTED_SOURCES
+    # Each replacement must clear every attachment page and keep the original store ID.
+    previous_ids = first_ids | {old_file_id}
+    for _ in range(2):
+        response = ingestion_client.post("/telco-docs/ingest", timeout=_INGEST_TIMEOUT_SECONDS)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["failed_count"] == 0, data["failed"]
+        assert data["ingested_count"] == _EXPECTED_INGESTED_FILES
+        assert len(data["objects"]) == _EXPECTED_INGESTED_FILES
+        assert {item["vector_store_id"] for item in data["objects"]} == {store_id}
+        assert {item["attributes"]["source_name"] for item in data["objects"]} == _EXPECTED_SOURCES
 
-    attachments = _attachments(llamastack_client, store_id)
-    assert len(attachments) == _EXPECTED_INGESTED_FILES
-    assert not ({item["id"] for item in attachments} & (first_ids | {old_file_id}))
-    assert {item["id"] for item in attachments} == {item["id"] for item in second_data["objects"]}
-    assert not _search_contains(llamastack_client, store_id, marker, marker)
-    assert _search(llamastack_client, store_id, "gNodeB")
+        attachments = _attachments(llamastack_client, store_id)
+        attachment_ids = {item["id"] for item in attachments}
+        assert len(attachments) == _EXPECTED_INGESTED_FILES
+        assert not (attachment_ids & previous_ids)
+        assert attachment_ids == {item["id"] for item in data["objects"]}
+        deadline = time.monotonic() + 120
+        while _search_contains(llamastack_client, store_id, marker, marker):
+            assert time.monotonic() < deadline, "Obsolete vendor content remained searchable"
+            time.sleep(2)
+        while not _search(llamastack_client, store_id, "gNodeB"):
+            assert time.monotonic() < deadline, "Replacement vendor documents never became searchable"
+            time.sleep(2)
+        snippets = rag_reader(store_name, "gNodeB")
+        assert snippets
+        previous_ids = attachment_ids
+
     final_store = llamastack_client.get(f"/v1/vector_stores/{store_id}")
     assert final_store.status_code == 200, final_store.text
     assert final_store.json()["file_counts"]["total"] == _EXPECTED_INGESTED_FILES
 
     # verify content retrieval
-    first_obj = second_data["objects"][0]
+    first_obj = data["objects"][0]
     content_response = ingestion_client.get(
         f"/vector-store/files/{first_obj['id']}/content",
         params={"vector_store_id": first_obj["vector_store_id"]},

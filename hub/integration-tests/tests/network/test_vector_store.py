@@ -45,12 +45,13 @@ def test_vector_store_uses_expected_runbook_store(ingestion_client):
     assert data["file_counts"]["total"] >= 0
 
 
-def test_runbook_reingestion_replaces_attachments(ingestion_client, llamastack_client):
+def test_runbook_reingestion_replaces_attachments(ingestion_client, llamastack_client, rag_reader):
     """Two API ingestions keep the store ID and remove all earlier attachments."""
     assert ingestion_client.post("/runbooks/sync").status_code == 200
     store_response = ingestion_client.get("/vector-store")
     assert store_response.status_code == 200
     store_id = store_response.json()["id"]
+    store_name = store_response.json()["name"]
 
     marker = f"obsolete-runbook-{uuid4().hex}"
     uploaded = llamastack_client.post(
@@ -70,6 +71,7 @@ def test_runbook_reingestion_replaces_attachments(ingestion_client, llamastack_c
     while not _search_contains(llamastack_client, store_id, marker, marker):
         assert time.monotonic() < deadline, "Generated playbook never became searchable"
         time.sleep(2)
+    assert any(marker in snippet for snippet in rag_reader(store_name, marker))
 
     previous_ids = {item["id"] for item in _attachments(llamastack_client, store_id)}
     expected_source_names = None
@@ -108,4 +110,5 @@ def test_runbook_reingestion_replaces_attachments(ingestion_client, llamastack_c
             (item["file_id"], tuple(part["text"] for part in item["content"])) for item in results
         ]
         assert len(result_content) == len(set(result_content))
+        assert rag_reader(store_name, "nginx crashloop")
         previous_ids = attachment_ids

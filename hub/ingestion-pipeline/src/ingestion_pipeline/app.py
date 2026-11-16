@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 
 from ingestion_pipeline.clients.llamastack import (
+    AttachmentListError,
     DuplicateVectorStoreNameError,
     VectorStoreFileContentSummary,
     VectorStoreSummary,
@@ -117,6 +118,8 @@ def ingest_runbooks() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DuplicateVectorStoreNameError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AttachmentListError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except IngestionBatchFailedError as exc:
         raise HTTPException(status_code=502, detail=exc.result) from exc
 
@@ -134,6 +137,8 @@ def ingest_telco_docs() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DuplicateVectorStoreNameError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except AttachmentListError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     except IngestionBatchFailedError as exc:
         raise HTTPException(status_code=502, detail=exc.result) from exc
 

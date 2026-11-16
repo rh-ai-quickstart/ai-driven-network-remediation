@@ -1,8 +1,11 @@
+import asyncio
 import os
 import time
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
+from shared.rag import RagClient
 
 _SERVICE_READY_TIMEOUT = int(os.environ.get("SERVICE_READY_TIMEOUT", "90"))
 
@@ -65,3 +68,22 @@ def llamastack_client():
     _wait_for_health(base_url, "/v1/health", "llamastack")
     with httpx.Client(base_url=base_url, timeout=30.0) as client:
         yield client
+
+
+@pytest.fixture
+def rag_reader(llamastack_client):
+    """Search with one long-lived reader for the duration of an integration test."""
+    url = urlsplit(str(llamastack_client.base_url))
+    runner = asyncio.Runner()
+    reader = None
+
+    def search(store_name, query):
+        nonlocal reader
+        if reader is None:
+            reader = RagClient(host=url.hostname or "localhost", port=url.port or 8321, vector_store_name=store_name)
+        return runner.run(reader.search(query, score_threshold=0.0))
+
+    yield search
+    if reader is not None:
+        runner.run(reader._client.close())
+    runner.close()

@@ -4,7 +4,12 @@ from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
-from ingestion_pipeline.clients.llamastack import DuplicateVectorStoreNameError, FailedIngestItem, IngestBatchResult
+from ingestion_pipeline.clients.llamastack import (
+    AttachmentListError,
+    DuplicateVectorStoreNameError,
+    FailedIngestItem,
+    IngestBatchResult,
+)
 from ingestion_pipeline.service import IngestionPipelineService
 
 
@@ -120,6 +125,19 @@ def test_partial_clear_can_be_retried(telco_api):
     vector_client.ingest_text_batch.assert_not_called()
     assert api.post("/telco-docs/ingest").status_code == 200
     assert vector_client.clear_vector_store_files.call_count == 2
+
+
+def test_attachment_list_error_is_reported_without_upload(telco_api):
+    api, _, vector_client = telco_api
+    vector_client.clear_vector_store_files.side_effect = AttachmentListError(
+        "Could not list attachments in vector store 'stable-store': unreadable attachment metadata"
+    )
+
+    response = api.post("/telco-docs/ingest")
+
+    assert response.status_code == 502
+    assert "unreadable attachment metadata" in response.json()["detail"]
+    vector_client.ingest_text_batch.assert_not_called()
 
 
 def test_partial_upload_can_be_retried(telco_api):
