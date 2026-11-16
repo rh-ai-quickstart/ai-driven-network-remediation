@@ -125,7 +125,9 @@ class LlamaStackVectorStoreClient:
 
     def clear_vector_store_files(self, vector_store_id: str) -> None:
         """Remove every attachment present when clearing starts, including generated files."""
-        file_ids = [file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))]
+        file_ids = [
+            file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
+        ]
         for file_id in file_ids:
             response = self._client.vector_stores.files.delete(file_id, vector_store_id=vector_store_id)
             if not response.deleted:
@@ -171,6 +173,11 @@ class LlamaStackVectorStoreClient:
                     attributes=item.attributes,
                     chunking_strategy=chunking_strategy,
                 )
+                if attached_file.status in {"failed", "cancelled"}:
+                    last_error = getattr(attached_file, "last_error", None)
+                    reason = getattr(last_error, "message", None) or f"Attachment status: {attached_file.status}"
+                    failed.append(FailedIngestItem(item=item, reason=reason))
+                    continue
                 succeeded.append(
                     VectorStoreFileSummary(
                         id=attached_file.id,
@@ -219,7 +226,9 @@ class LlamaStackVectorStoreClient:
         )
 
     def _find_vector_store_by_name(self, name: str) -> Any | None:
-        matches = [store for store in self._iter_pages(self._client.vector_stores.list(limit=100)) if store.name == name]
+        matches = [
+            store for store in self._iter_pages(self._client.vector_stores.list(limit=100)) if store.name == name
+        ]
         if len(matches) > 1:
             raise DuplicateVectorStoreNameError(f"Multiple vector stores named '{name}'")
         return matches[0] if matches else None

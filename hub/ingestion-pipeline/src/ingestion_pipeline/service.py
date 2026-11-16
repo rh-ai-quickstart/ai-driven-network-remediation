@@ -45,6 +45,14 @@ class EmptyTelcoCorpusError(ValueError):
     """No document units were prepared to replace the current corpus."""
 
 
+class IngestionBatchFailedError(Exception):
+    """Some replacement attachments failed after the existing corpus was cleared."""
+
+    def __init__(self, result: dict[str, Any]) -> None:
+        self.result = result
+        super().__init__(f"{result['failed_count']} attachment(s) failed")
+
+
 def _runbook_object_name(filename: str) -> str:
     prefix = settings.minio_runbook_prefix.strip("/")
     if not prefix:
@@ -185,6 +193,7 @@ class IngestionPipelineService:
             )
             if failed:
                 logger.warning("Runbook ingest failures: %s", failed)
+                raise IngestionBatchFailedError(result)
             return result
         finally:
             self._ingesting = False
@@ -301,6 +310,7 @@ class IngestionPipelineService:
             )
             if failed:
                 logger.warning("Telco doc ingest failures: %s", failed)
+                raise IngestionBatchFailedError(result)
             return result
         finally:
             self._ingesting_telco = False

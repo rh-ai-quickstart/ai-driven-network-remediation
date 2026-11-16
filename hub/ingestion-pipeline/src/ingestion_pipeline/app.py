@@ -12,7 +12,12 @@ from ingestion_pipeline.clients.llamastack import (
     VectorStoreSummary,
 )
 from ingestion_pipeline.config import settings
-from ingestion_pipeline.service import EmptyRunbookCorpusError, EmptyTelcoCorpusError, IngestionPipelineService
+from ingestion_pipeline.service import (
+    EmptyRunbookCorpusError,
+    EmptyTelcoCorpusError,
+    IngestionBatchFailedError,
+    IngestionPipelineService,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
@@ -112,6 +117,8 @@ def ingest_runbooks() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DuplicateVectorStoreNameError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IngestionBatchFailedError as exc:
+        raise HTTPException(status_code=502, detail=exc.result) from exc
 
 
 @app.post("/telco-docs/sync")
@@ -127,6 +134,8 @@ def ingest_telco_docs() -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except DuplicateVectorStoreNameError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except IngestionBatchFailedError as exc:
+        raise HTTPException(status_code=502, detail=exc.result) from exc
 
 
 @app.get("/vector-store/files/{file_id}/content")

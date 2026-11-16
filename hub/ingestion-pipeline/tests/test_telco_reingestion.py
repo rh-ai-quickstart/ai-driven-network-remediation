@@ -132,8 +132,8 @@ def test_partial_upload_can_be_retried(telco_api):
     ]
 
     partial = api.post("/telco-docs/ingest")
-    assert partial.status_code == 200
-    assert partial.json()["failed_count"] == 1
+    assert partial.status_code == 502
+    assert partial.json()["detail"]["failed"] == [{"object_name": "vendor#001.md", "reason": "upload failed"}]
     assert api.post("/telco-docs/ingest").json()["ingested_count"] == 1
     assert vector_client.clear_vector_store_files.call_count == 2
     assert all(call.args == ("stable-store",) for call in vector_client.clear_vector_store_files.call_args_list)
