@@ -130,6 +130,13 @@ class LlamaStackVectorStoreClient:
             response = self._client.vector_stores.files.delete(file_id, vector_store_id=vector_store_id)
             if not response.deleted:
                 raise RuntimeError(f"Failed to detach file '{file_id}' from vector store '{vector_store_id}'")
+        remaining_ids = {
+            file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
+        }
+        if originals_remaining := set(file_ids) & remaining_ids:
+            raise RuntimeError(
+                f"Attachments remain in vector store '{vector_store_id}' after clearing: {sorted(originals_remaining)}"
+            )
 
     def ingest_text_batch(
         self,
