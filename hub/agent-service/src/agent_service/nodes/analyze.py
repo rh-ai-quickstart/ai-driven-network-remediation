@@ -3,6 +3,7 @@ import time
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
+from pydantic import ValidationError
 
 from agent_service.config import ANALYZE_SYSTEM_PROMPT, get_llm
 from agent_service.evidence import build_evidence_prompt
@@ -41,7 +42,21 @@ async def analyze_node(state: dict) -> dict:
         )
         latency_ms = (time.monotonic() - t0) * 1000
 
-        rca = RootCauseAnalysis.model_validate(json.loads(response.content))
+        diagnosis = json.loads(response.content)
+        try:
+            rca = RootCauseAnalysis.model_validate(diagnosis)
+        except ValidationError as exc:
+            # An invalid proposed action cannot be executed, but the rest of a
+            # valid diagnosis can still guide a safe escalation.
+            if not (
+                isinstance(diagnosis, dict)
+                and diagnosis.get("selected_action") is not None
+                and all(error["loc"] and error["loc"][0] == "selected_action" for error in exc.errors())
+            ):
+                raise
+            logger.warning("Discarding invalid selected_action from LLM diagnosis: {}", exc)
+            diagnosis["selected_action"] = None
+            rca = RootCauseAnalysis.model_validate(diagnosis)
 
         logger.debug("Root cause analysis: {}", rca.model_dump_json())
 
