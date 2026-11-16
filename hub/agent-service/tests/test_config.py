@@ -77,7 +77,10 @@ def test_lightspeed_auth_matches_topology(monkeypatch, mode):
             importlib.reload(config)
             prompt = config.LIGHTSPEED_PROMPT_TEMPLATE
             assert ("K8S_AUTH_HOST" in prompt) == (mode == "single-cluster")
-            assert ("{{ hub_url }}/{{ edge_site_id }}" in prompt) == (mode == "hub-spoke")
+            assert ('host: "{{ hub_url }}/{{ edge_site_id }}"' in prompt) == (mode == "hub-spoke")
+            assert ('api_key: "{{ token_acm }}"' in prompt) == (mode == "hub-spoke")
+            assert "api_url:" not in prompt
+            assert "headers:" not in prompt
         finally:
             environment.undo()
             importlib.reload(config)
