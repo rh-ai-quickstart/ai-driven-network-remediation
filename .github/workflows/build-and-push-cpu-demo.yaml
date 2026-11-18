@@ -1,0 +1,138 @@
+name: Build and push CPU demo images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'e2e-showcase/**'
+      - 'Makefile'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ${{ vars.QUAY_REPOSITORY }}
+
+jobs:
+  build-and-push-cpu-demo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate QUAY_USER variable
+        shell: bash
+        env:
+          QUAY_USER: ${{ vars.QUAY_USER }}
+        run: |
+          if [ -z "${QUAY_USER}" ]; then
+            echo "QUAY_USER variable is missing or empty. Set it in repository or organization variables."
+            exit 1
+          fi
+
+      - name: Validate QUAY_REPOSITORY variable
+        shell: bash
+        env:
+          QUAY_REPOSITORY: ${{ vars.QUAY_REPOSITORY }}
+        run: |
+          if [ -z "${QUAY_REPOSITORY}" ]; then
+            echo "QUAY_REPOSITORY variable is missing or empty. Set it in repository or organization variables."
+            exit 1
+          fi
+
+      - name: Validate QUAY_TOKEN secret
+        shell: bash
+        env:
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+        run: |
+          if [ -z "${QUAY_TOKEN}" ]; then
+            echo "QUAY_TOKEN secret is missing or empty. Set it in repository or organization secrets."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Build when e2e-showcase changed, when the Makefile VERSION was bumped
+      # (upgrades only: a revert must not overwrite the older tag), or on
+      # manual dispatch. Other Makefile-only changes skip the build.
+      - name: Check whether images should be built
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          build=false
+          reason="no triggering change"
+
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            build=true
+            reason="manual dispatch"
+          fi
+
+          BASE_SHA="${{ github.event.before }}"
+          if [ -n "${BASE_SHA}" ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            if git diff --name-only "${BASE_SHA}"..HEAD -- e2e-showcase | grep -q .; then
+              build=true
+              reason="e2e-showcase changed"
+            fi
+
+            prev_version=$(git show "${BASE_SHA}:Makefile" | sed -n 's/^VERSION[[:space:]]*?=[[:space:]]*//p' | head -1)
+            curr_version=$(sed -n 's/^VERSION[[:space:]]*?=[[:space:]]*//p' Makefile | head -1)
+            if [ -n "${prev_version}" ] && [ -n "${curr_version}" ] && [ "${prev_version}" != "${curr_version}" ]; then
+              highest=$(printf '%s\n' "${prev_version}" "${curr_version}" | sort -V | tail -1)
+              if [ "${highest}" = "${curr_version}" ]; then
+                build=true
+                reason="version bump ${prev_version} -> ${curr_version}"
+              else
+                echo "Version moved backwards (${prev_version} -> ${curr_version}); not rebuilding"
+              fi
+            fi
+          else
+            build=true
+            reason="previous state unavailable"
+          fi
+
+          echo "build=${build}" >> "$GITHUB_OUTPUT"
+          echo "Building CPU demo images: ${build} (${reason})"
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Quay.io
+        if: steps.check.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ vars.QUAY_USER }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Extract version from Makefile
+        if: steps.check.outputs.build == 'true'
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(make version)
+          if [ -z "${VERSION}" ]; then
+            echo "Unable to determine VERSION from Makefile"
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Using version: ${VERSION}"
+          echo "Using repository: ${REGISTRY}"
+
+      - name: Build CPU demo images
+        if: steps.check.outputs.build == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: make cpu-demo-build-images
+
+      - name: Push CPU demo images
+        if: steps.check.outputs.build == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: make cpu-demo-push-images

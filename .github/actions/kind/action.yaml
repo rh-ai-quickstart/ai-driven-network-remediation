@@ -50,6 +50,15 @@ runs:
       run: make push-all-images REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
       shell: bash
 
+    # CPU demo images are not part of build-all-images; build them explicitly
+    # for the local registry when the demo deploys with network remediation.
+    - name: Build and push CPU demo images to the local registry
+      if: env.ENABLE_NETWORK_REMEDIATION != 'false'
+      run: |
+        make cpu-demo-build-images REGISTRY=localhost:5001
+        make cpu-demo-push-images REGISTRY=localhost:5001 PUSH_EXTRA_ARGS="--tls-verify=false"
+      shell: bash
+
     - name: Install edge chart (nginx + healer, CLF off)
       run: |
         # Kind has no OpenShift GitOps / Logging. Use the same edge/helm chart as
