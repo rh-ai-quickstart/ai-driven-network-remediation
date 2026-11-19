@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jsonschema
 import pytest
 from helpers import CONTRACTS_DIR, SAMPLE_ANOMALY, make_llm_response
+from loguru import logger
 from ran_rca_service.graph import build_graph
 
 
@@ -126,11 +127,24 @@ class TestFullGraph:
         assert result["llm_error_reason"] == "LLM unavailable"
 
     @pytest.mark.asyncio
-    async def test_rag_failure_raises(self):
+    async def test_rag_failure_is_logged_and_graph_completes_analysis(self):
         mock_rag = MagicMock()
         mock_rag.search = AsyncMock(side_effect=ConnectionError("vector store down"))
 
-        with _mock_classifier(), patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag):
-            graph = build_graph()
-            with pytest.raises(ConnectionError):
-                await graph.ainvoke(SAMPLE_ANOMALY)
+        errors = []
+        sink = logger.add(errors.append, level="ERROR", format="{message}")
+        try:
+            with (
+                _mock_classifier(),
+                _mock_llm(),
+                patch("ran_rca_service.nodes.rag_retrieval._rag_client", mock_rag),
+            ):
+                result = await build_graph().ainvoke(SAMPLE_ANOMALY)
+        finally:
+            logger.remove(sink)
+
+        assert result["context_snippets"] == []
+        assert result["root_cause_category"] == "Antenna Failure"
+        assert result["root_cause"]
+        assert result["recommended_fix"]
+        assert any("vector store down" in error for error in errors)
