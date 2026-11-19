@@ -20,7 +20,7 @@ Network remediation runbooks and RAN/ORAN vendor PDFs/DOCX are committed directl
 
 ## Repair unreadable vector-store attachments
 
-Normal `/runbooks/ingest` and `/telco-docs/ingest` requests keep the store ID and leave the previous corpus searchable until all replacement attachments are ready. A failed upload triggers rollback of the new attachments. If rollback cannot remove or verify an attachment, the service logs its ID. A failed deletion of an older attachment leaves the complete replacement searchable, and a rerun can remove any leftovers.
+Normal `/runbooks/ingest` and `/telco-docs/ingest` requests keep the store ID, clear the previous attachments, and upload the replacement corpus. Search can return partial or empty results during ingestion. If clearing fails, ingestion stops before uploading any replacements. A failed upload triggers rollback of the new attachments. If rollback cannot remove or verify an attachment, the service logs its ID. Retry ingestion to rebuild the corpus after resolving the reported failure.
 
 In the rare case where a provider failure interrupts an individual attachment deletion, attachment metadata can become unreadable. The attachment-list request then fails, so an ordinary rerun may fail again. The ingestion service does not delete a store automatically in response to this error.
 

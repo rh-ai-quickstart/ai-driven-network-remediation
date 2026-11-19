@@ -183,11 +183,22 @@ class LlamaStackVectorStoreClient:
         vector_store_id: str,
         items: list[IngestItem],
     ) -> IngestBatchResult:
-        """Attach a replacement corpus before removing the previous attachments."""
+        """Clear the previous attachments and rebuild the corpus in the same store."""
         if not items:
             raise ValueError("A replacement corpus must contain at least one item")
 
+        # OGX 0.6.1 reuses chunk IDs for identical content across files. Detaching
+        # an old file after attaching its replacement would delete shared chunks.
         original_ids = self._list_attachment_ids(vector_store_id)
+        if original_ids:
+            for file_id in original_ids:
+                self._detach_file(vector_store_id, file_id)
+            remaining_ids = set(self._list_attachment_ids(vector_store_id))
+            if originals_remaining := remaining_ids.intersection(original_ids):
+                raise AttachmentDetachError(
+                    f"Previous attachments remain in vector store '{vector_store_id}': {sorted(originals_remaining)}"
+                )
+
         chunking_strategy: ChunkingStrategy = {
             "type": "static",
             "static": {
@@ -233,17 +244,7 @@ class LlamaStackVectorStoreClient:
                 logger.exception("Failed to ingest '%s'", item.filename)
                 failed.append(FailedIngestItem(item=item, reason=str(exc)))
 
-        rollback_errors = []
-        if failed:
-            rollback_errors = self._rollback_attachments(vector_store_id, attempted_ids)
-        elif original_ids:
-            for file_id in original_ids:
-                self._detach_file(vector_store_id, file_id)
-            remaining_ids = set(self._list_attachment_ids(vector_store_id))
-            if originals_remaining := remaining_ids.intersection(original_ids):
-                raise AttachmentDetachError(
-                    f"Previous attachments remain in vector store '{vector_store_id}': {sorted(originals_remaining)}"
-                )
+        rollback_errors = self._rollback_attachments(vector_store_id, attempted_ids) if failed else []
         return IngestBatchResult(succeeded=succeeded, failed=failed, rollback_errors=rollback_errors)
 
     def get_file_content(

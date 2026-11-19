@@ -68,9 +68,9 @@ def test_empty_source_preserves_existing_attachments():
 class AttachmentBackend:
     def __init__(self):
         self.attachments = ["old-a", "old-b"]
-        self.searchable_states = []
+        self.uploaded_contents = {}
+        self.chunk_owners = {}
         self.deleted = []
-        self.created = []
         self.fail_once = False
         self.retain_on_delete = False
         self.add_during_upload = False
@@ -93,7 +93,8 @@ class AttachmentBackend:
             return SimpleNamespace(deleted=False)
         if not self.retain_on_delete:
             self.attachments.remove(file_id)
-        self.searchable_states.append(set(self.attachments))
+            if content := self.uploaded_contents.get(file_id):
+                self.chunk_owners.pop(content, None)
         return SimpleNamespace(deleted=True)
 
     def upload(self, *, file, purpose):
@@ -101,13 +102,15 @@ class AttachmentBackend:
         if self.add_during_upload:
             self.attachments.append("concurrent-playbook")
         self._next_file += 1
-        return SimpleNamespace(id=f"new-{self._next_file}")
+        file_id = f"new-{self._next_file}"
+        self.uploaded_contents[file_id] = file[1]
+        return SimpleNamespace(id=file_id)
 
     def attach(self, vector_store_id, *, file_id, attributes, chunking_strategy):
         assert vector_store_id == "store-1"
         self.attachments.append(file_id)
-        self.searchable_states.append(set(self.attachments))
-        self.created.append(file_id)
+        # Model one content-keyed chunk per file, as in OGX 0.6.1.
+        self.chunk_owners[self.uploaded_contents[file_id]] = file_id
         return SimpleNamespace(id=file_id, vector_store_id=vector_store_id, status="completed", attributes=attributes)
 
 
@@ -133,22 +136,25 @@ def runbook_api(monkeypatch):
     return TestClient(app_module.app, raise_server_exceptions=False), backend
 
 
-def test_reingestion_keeps_a_complete_corpus_searchable(runbook_api):
+def test_reingestion_keeps_identical_replacement_searchable(runbook_api):
     api, backend = runbook_api
-    # Include a generated playbook alongside the prior runbook, on another page.
-    backend.attachments = ["old-a", "generated-playbook"]
+    first = api.post("/runbooks/ingest")
+    assert first.status_code == 200
+    original_id = first.json()["objects"][0]["id"]
+    assert backend.chunk_owners == {b"example": original_id}
+    backend.attachments.append("generated-playbook")
 
     response = api.post("/runbooks/ingest")
 
     assert response.status_code == 200
-    original = {"old-a", "generated-playbook"}
-    replacement = {response.json()["objects"][0]["id"]}
-    assert [file["vector_store_id"] for file in response.json()["objects"]] == ["store-1"]
-    assert all(original <= state or replacement <= state for state in backend.searchable_states)
-    assert backend.searchable_states[-1] == replacement
+    replacement = response.json()["objects"][0]
+    assert replacement["id"] != original_id
+    assert replacement["vector_store_id"] == "store-1"
+    assert backend.attachments == [replacement["id"]]
+    assert backend.chunk_owners == {b"example": replacement["id"]}
 
 
-def test_failed_deletion_leaves_complete_replacement_and_rerun_removes_old_files(runbook_api):
+def test_failed_deletion_stops_before_upload_and_rerun_removes_old_files(runbook_api):
     api, backend = runbook_api
     backend.fail_once = True
 
@@ -159,13 +165,14 @@ def test_failed_deletion_leaves_complete_replacement_and_rerun_removes_old_files
         "Failed to detach file 'old-b' from vector store 'store-1': provider did not confirm deletion"
     )
     assert backend.deleted == ["old-a", "old-b"]
-    assert backend.attachments == ["old-b", "new-1"]
+    assert backend.attachments == ["old-b"]
+    assert not backend.uploaded_contents
 
     succeeded = api.post("/runbooks/ingest")
 
     assert succeeded.status_code == 200
     assert succeeded.json()["objects"][0]["vector_store_id"] == "store-1"
-    assert backend.attachments == ["new-2"]
+    assert backend.attachments == ["new-1"]
 
 
 def test_reingestion_fails_if_original_attachments_remain(runbook_api):
@@ -176,7 +183,8 @@ def test_reingestion_fails_if_original_attachments_remain(runbook_api):
 
     assert response.status_code == 502
     assert response.json()["detail"] == "Previous attachments remain in vector store 'store-1': ['old-a', 'old-b']"
-    assert backend.attachments == ["old-a", "old-b", "new-1"]
+    assert backend.attachments == ["old-a", "old-b"]
+    assert not backend.uploaded_contents
 
 
 def test_playbook_added_during_upload_stays_attached(runbook_api):
@@ -200,4 +208,4 @@ def test_attachment_list_error_fails_clearly_without_recreating_store(runbook_ap
     assert "unreadable attachment metadata" in response.json()["detail"]
     assert backend.attachments == ["old-a", "old-b"]
     assert backend.deleted == []
-    assert backend.created == []
+    assert not backend.uploaded_contents
