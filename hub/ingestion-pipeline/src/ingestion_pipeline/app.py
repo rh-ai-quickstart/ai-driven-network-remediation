@@ -1,16 +1,26 @@
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+
 from ingestion_pipeline.clients.llamastack import (
+    AttachmentDetachError,
+    AttachmentListError,
+    DuplicateVectorStoreNameError,
     VectorStoreFileContentSummary,
     VectorStoreSummary,
 )
 from ingestion_pipeline.config import settings
-from ingestion_pipeline.service import IngestionPipelineService
+from ingestion_pipeline.service import (
+    EmptyRunbookCorpusError,
+    EmptyTelcoCorpusError,
+    IngestionAlreadyInProgressError,
+    IngestionBatchFailedError,
+    IngestionPipelineService,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
@@ -21,7 +31,7 @@ service = IngestionPipelineService()
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(application: FastAPI) -> AsyncGenerator[None]:
     if _AUTO_INGEST:
         import threading
 
@@ -76,6 +86,22 @@ def _get_service() -> IngestionPipelineService:
     return service
 
 
+def _run_ingestion(ingest: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    try:
+        return ingest()
+    except (EmptyRunbookCorpusError, EmptyTelcoCorpusError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (IngestionAlreadyInProgressError, DuplicateVectorStoreNameError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (AttachmentListError, AttachmentDetachError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except IngestionBatchFailedError as exc:
+        raise HTTPException(status_code=502, detail=exc.result) from exc
+    except Exception as exc:
+        logger.exception("Unexpected ingestion failure")
+        raise HTTPException(status_code=500, detail="Unexpected ingestion failure") from exc
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -104,7 +130,7 @@ def sync_runbooks() -> dict[str, Any]:
 
 @app.post("/runbooks/ingest")
 def ingest_runbooks() -> dict[str, Any]:
-    return _get_service().ingest()
+    return _run_ingestion(_get_service().ingest)
 
 
 @app.post("/telco-docs/sync")
@@ -114,7 +140,7 @@ def sync_telco_docs() -> dict[str, Any]:
 
 @app.post("/telco-docs/ingest")
 def ingest_telco_docs() -> dict[str, Any]:
-    return _get_service().ingest_telco_docs()
+    return _run_ingestion(_get_service().ingest_telco_docs)
 
 
 @app.get("/vector-store/files/{file_id}/content")

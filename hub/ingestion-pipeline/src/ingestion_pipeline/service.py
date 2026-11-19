@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from ingestion_pipeline.clients.llamastack import (
@@ -35,6 +36,22 @@ logger = logging.getLogger(__name__)
 class IngestionAlreadyInProgressError(Exception):
     def __init__(self, corpus: str) -> None:
         super().__init__(f"{corpus} ingestion is already in progress")
+
+
+class EmptyRunbookCorpusError(ValueError):
+    """There are no source runbooks to replace the current corpus."""
+
+
+class EmptyTelcoCorpusError(ValueError):
+    """No document units were prepared to replace the current corpus."""
+
+
+class IngestionBatchFailedError(Exception):
+    """Some replacement attachments failed while the existing corpus was still active."""
+
+    def __init__(self, result: dict[str, Any], *, rollback_errors: list[str]) -> None:
+        self.result = {**result, "rollback_errors": rollback_errors} if rollback_errors else result
+        super().__init__(f"{result['failed_count']} attachment(s) failed")
 
 
 def _runbook_object_name(filename: str) -> str:
@@ -76,8 +93,8 @@ class IngestionPipelineService:
             chunk_size_tokens=settings.chunk_size_tokens,
             chunk_overlap_tokens=settings.chunk_overlap_tokens,
         )
-        self._ingesting = False
-        self._ingesting_telco = False
+        self._ingest_lock = Lock()
+        self._telco_ingest_lock = Lock()
 
     # -- runbooks --
 
@@ -124,21 +141,13 @@ class IngestionPipelineService:
         return result
 
     def ingest(self) -> dict[str, Any]:
-        """Ingest every synced runbook from MinIO into the vector store.
-
-        Deletes and recreates the vector store to guarantee idempotency.
-        """
-        if self._ingesting:
+        """Replace the runbook attachments in the existing vector store."""
+        if not self._ingest_lock.acquire(blocking=False):
             raise IngestionAlreadyInProgressError("Runbook")
-        self._ingesting = True
         try:
             objects = self._minio_client.load_prefix_text_objects(settings.minio_runbook_prefix)
             ingested: list[dict[str, Any]] = []
             failed: list[dict[str, str]] = []
-
-            self._vector_client.delete_vector_store()
-            vector_store = self._vector_client.ensure_vector_store()
-
             items = [
                 IngestItem(
                     filename=Path(obj.object_name).name,
@@ -147,7 +156,11 @@ class IngestionPipelineService:
                 )
                 for obj in objects
             ]
-            batch_result = self._vector_client.ingest_text_batch(
+            if not items:
+                raise EmptyRunbookCorpusError("No runbooks found for ingestion; existing attachments were preserved")
+
+            vector_store = self._vector_client.ensure_vector_store()
+            batch_result = self._vector_client.replace_text_batch(
                 vector_store_id=vector_store.id,
                 items=items,
             )
@@ -179,9 +192,10 @@ class IngestionPipelineService:
             )
             if failed:
                 logger.warning("Runbook ingest failures: %s", failed)
+                raise IngestionBatchFailedError(result, rollback_errors=batch_result.rollback_errors)
             return result
         finally:
-            self._ingesting = False
+            self._ingest_lock.release()
 
     # -- telco vendor docs --
 
@@ -231,20 +245,13 @@ class IngestionPipelineService:
         return result
 
     def ingest_telco_docs(self) -> dict[str, Any]:
-        """Ingest every synced vendor doc from MinIO into the telco vector store.
-
-        Deletes and recreates the vector store to guarantee idempotency.
-        """
-        if self._ingesting_telco:
+        """Replace vendor-document units in the existing telco vector store."""
+        if not self._telco_ingest_lock.acquire(blocking=False):
             raise IngestionAlreadyInProgressError("Telco")
-        self._ingesting_telco = True
         try:
             objects = self._minio_client.load_prefix_text_objects(settings.minio_telco_docs_prefix)
             ingested: list[dict[str, Any]] = []
             failed: list[dict[str, str]] = []
-
-            self._telco_vector_client.delete_vector_store()
-            vector_store = self._telco_vector_client.ensure_vector_store()
 
             items: list[IngestItem] = []
             for obj in objects:
@@ -262,7 +269,13 @@ class IngestionPipelineService:
                         )
                     )
 
-            batch_result = self._telco_vector_client.ingest_text_batch(
+            if not items:
+                raise EmptyTelcoCorpusError(
+                    "No Telco document units found for ingestion; existing attachments were preserved"
+                )
+
+            vector_store = self._telco_vector_client.ensure_vector_store()
+            batch_result = self._telco_vector_client.replace_text_batch(
                 vector_store_id=vector_store.id,
                 items=items,
             )
@@ -294,9 +307,10 @@ class IngestionPipelineService:
             )
             if failed:
                 logger.warning("Telco doc ingest failures: %s", failed)
+                raise IngestionBatchFailedError(result, rollback_errors=batch_result.rollback_errors)
             return result
         finally:
-            self._ingesting_telco = False
+            self._telco_ingest_lock.release()
 
     # -- read-only inspection (backed by the runbook vector store) --
 

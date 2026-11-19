@@ -29,6 +29,31 @@ def _make_llm_response(content=_VALID_RCA_JSON, input_tokens=100, output_tokens=
 
 class TestSuccessfulLlmCall:
     @pytest.mark.asyncio
+    async def test_invalid_selected_action_preserves_diagnosis_for_escalation(self):
+        diagnosis = json.loads(_VALID_RCA_JSON)
+        diagnosis["failure_type"] = "Unknown"
+        diagnosis["confidence"] = 0.5
+        diagnosis["summary"] = "The cause of the intermittent failures is unknown"
+        diagnosis["selected_action"] = {
+            "goal": "",
+            "target": {"edge_site_id": "", "kind": "", "name": ""},
+            "evidence": [""],
+        }
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = _make_llm_response(json.dumps(diagnosis))
+
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            outcome = await analyze_node(make_state())
+
+        rca = outcome["root_cause_analysis"]
+        assert rca.summary == diagnosis["summary"]
+        assert rca.confidence == 0.5
+        assert rca.selected_action is None
+        assert outcome["analysis_tokens_used"] == 150
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "observations",
         [[], [{"edge_site_id": "edge-site-01", "deployment": "microservice-b", "namespace": "edge-ofridman"}]],
@@ -144,6 +169,21 @@ class TestTokenAndLatencyTracking:
 
 
 class TestLlmErrorFallback:
+    @pytest.mark.asyncio
+    async def test_invalid_diagnosis_still_returns_fallback(self):
+        diagnosis = json.loads(_VALID_RCA_JSON)
+        del diagnosis["summary"]
+        diagnosis["selected_action"] = {"goal": ""}
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = _make_llm_response(json.dumps(diagnosis))
+
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            from agent_service.nodes.analyze import analyze_node
+
+            result = await analyze_node(make_state())
+
+        assert result["root_cause_analysis"].summary == "Analysis failed, escalate for manual review"
+
     @pytest.mark.asyncio
     async def test_llm_error_returns_fallback_rca(self):
         mock_llm = AsyncMock()
