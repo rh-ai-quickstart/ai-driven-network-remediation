@@ -99,13 +99,15 @@ def test_failed_ingestion_allows_later_request(ingestion_api, corpus):
     )
     load = Mock(
         side_effect=[
-            RuntimeError("storage unavailable"),
+            RuntimeError("unexpected storage client failure"),
             [SimpleNamespace(object_name=object_name, content=content)],
         ]
     )
     service._minio_client = SimpleNamespace(load_prefix_text_objects=load)
 
-    assert api.post(f"/{corpus}/ingest").status_code == 500
+    failed = api.post(f"/{corpus}/ingest")
+    assert failed.status_code == 500
+    assert failed.json() == {"detail": "Unexpected ingestion failure"}
     retry = api.post(f"/{corpus}/ingest")
     assert retry.status_code == 200
     assert retry.json()["ingested_count"] == 0

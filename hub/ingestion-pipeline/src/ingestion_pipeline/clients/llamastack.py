@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ogx_client import OgxClient
@@ -50,6 +50,7 @@ class FailedIngestItem:
 class IngestBatchResult:
     succeeded: list[VectorStoreFileSummary]
     failed: list[FailedIngestItem]
+    rollback_errors: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -139,8 +140,8 @@ class LlamaStackVectorStoreClient:
             response = self._client.vector_stores.files.delete(file_id, vector_store_id=vector_store_id)
         except Exception as exc:
             raise AttachmentDetachError(f"{message}: {exc}") from exc
-        if not response.deleted:
-            raise AttachmentDetachError(message)
+        if getattr(response, "deleted", None) is not True:
+            raise AttachmentDetachError(f"{message}: provider did not confirm deletion")
 
     def _list_attachment_ids(self, vector_store_id: str) -> list[str]:
         try:
@@ -150,29 +151,31 @@ class LlamaStackVectorStoreClient:
         except Exception as exc:
             raise AttachmentListError(f"Could not list attachments in vector store '{vector_store_id}': {exc}") from exc
 
-    def _rollback_attachments(self, vector_store_id: str, attempted_ids: list[str]) -> None:
+    def _rollback_attachments(self, vector_store_id: str, attempted_ids: list[str]) -> list[str]:
         if not attempted_ids:
-            return
+            return []
 
+        errors: list[str] = []
         for file_id in attempted_ids:
             try:
                 self._detach_file(vector_store_id, file_id)
             except AttachmentDetachError as exc:
                 # Llama Stack can index chunks before persisting attachment metadata.
-                logger.warning("Rollback could not confirm detach: %s", exc)
+                message = f"Rollback could not confirm detach: {exc}"
+                logger.warning("%s", message)
+                errors.append(message)
 
         try:
             remaining_ids = set(self._list_attachment_ids(vector_store_id)).intersection(attempted_ids)
         except AttachmentListError as exc:
-            logger.error(
-                "Rollback in vector store '%s' could not verify removal of %s: %s",
-                vector_store_id,
-                attempted_ids,
-                exc,
-            )
-            return
+            message = f"Rollback in vector store '{vector_store_id}' could not verify removal of {attempted_ids}: {exc}"
+            logger.error("%s", message)
+            return [*errors, message]
         if remaining_ids:
-            logger.error("Rollback in vector store '%s' could not remove %s", vector_store_id, sorted(remaining_ids))
+            message = f"Rollback in vector store '{vector_store_id}' could not remove {sorted(remaining_ids)}"
+            logger.error("%s", message)
+            errors.append(message)
+        return errors
 
     def replace_text_batch(
         self,
@@ -230,8 +233,9 @@ class LlamaStackVectorStoreClient:
                 logger.exception("Failed to ingest '%s'", item.filename)
                 failed.append(FailedIngestItem(item=item, reason=str(exc)))
 
+        rollback_errors = []
         if failed:
-            self._rollback_attachments(vector_store_id, attempted_ids)
+            rollback_errors = self._rollback_attachments(vector_store_id, attempted_ids)
         elif original_ids:
             for file_id in original_ids:
                 self._detach_file(vector_store_id, file_id)
@@ -240,7 +244,7 @@ class LlamaStackVectorStoreClient:
                 raise AttachmentDetachError(
                     f"Previous attachments remain in vector store '{vector_store_id}': {sorted(originals_remaining)}"
                 )
-        return IngestBatchResult(succeeded=succeeded, failed=failed)
+        return IngestBatchResult(succeeded=succeeded, failed=failed, rollback_errors=rollback_errors)
 
     def get_file_content(
         self,

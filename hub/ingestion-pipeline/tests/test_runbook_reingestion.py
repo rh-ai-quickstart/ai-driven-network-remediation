@@ -154,7 +154,10 @@ def test_failed_deletion_leaves_complete_replacement_and_rerun_removes_old_files
 
     failed = api.post("/runbooks/ingest")
 
-    assert failed.status_code >= 400
+    assert failed.status_code == 502
+    assert failed.json()["detail"] == (
+        "Failed to detach file 'old-b' from vector store 'store-1': provider did not confirm deletion"
+    )
     assert backend.deleted == ["old-a", "old-b"]
     assert backend.attachments == ["old-b", "new-1"]
 
@@ -171,7 +174,8 @@ def test_reingestion_fails_if_original_attachments_remain(runbook_api):
 
     response = api.post("/runbooks/ingest")
 
-    assert response.status_code >= 400
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Previous attachments remain in vector store 'store-1': ['old-a', 'old-b']"
     assert backend.attachments == ["old-a", "old-b", "new-1"]
 
 

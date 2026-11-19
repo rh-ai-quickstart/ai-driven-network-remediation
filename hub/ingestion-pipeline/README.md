@@ -6,6 +6,18 @@ Syncs packaged runbooks and RAN/ORAN vendor documentation to MinIO and ingests t
 
 Network remediation runbooks and RAN/ORAN vendor PDFs/DOCX are committed directly to the repository under `runbooks/` and `telco-docs/` respectively. This is an explicit simplification for the quickstart. In a production environment, consider external storage (e.g., S3, Git LFS) to keep the repository lightweight.
 
+## Ingestion API responses
+
+`POST /runbooks/ingest` (Network) and `POST /telco-docs/ingest` (Telco) return the same status codes. Error responses have a JSON `detail` field.
+
+| Status | Meaning | Caller action |
+| --- | --- | --- |
+| `200 OK` | Replacement completed. The response summarizes the ingested attachments. | |
+| `400 Bad Request` | MinIO is incompletely configured or the source corpus is empty. | Check the MinIO settings or populate the source with the matching sync endpoint, then retry. |
+| `409 Conflict` | The same corpus is already being ingested, or multiple stores match the configured name. | Read `detail`. Wait for the active run to finish before retrying, or resolve the duplicate store name before retrying. |
+| `502 Bad Gateway` | Llama Stack could not list, attach, or detach files, or attachments remained after cleanup. `detail` gives the reason and identifies affected attachments where available. A failed attachment batch returns its `failed` items and their reasons. If rollback could not remove or verify any attachments, the summary also includes `rollback_errors` with their IDs. | Investigate the reported provider failure before retrying. See the repair procedure below if attachment metadata is unreadable. |
+| `500 Internal Server Error` | An unexpected ingestion exception occurred. | Check the ingestion service logs for the traceback. |
+
 ## Repair unreadable vector-store attachments
 
 Normal `/runbooks/ingest` and `/telco-docs/ingest` requests keep the store ID and leave the previous corpus searchable until all replacement attachments are ready. A failed upload triggers rollback of the new attachments. If rollback cannot remove or verify an attachment, the service logs its ID. A failed deletion of an older attachment leaves the complete replacement searchable, and a rerun can remove any leftovers.

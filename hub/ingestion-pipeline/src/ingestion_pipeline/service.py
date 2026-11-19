@@ -49,8 +49,8 @@ class EmptyTelcoCorpusError(ValueError):
 class IngestionBatchFailedError(Exception):
     """Some replacement attachments failed while the existing corpus was still active."""
 
-    def __init__(self, result: dict[str, Any]) -> None:
-        self.result = result
+    def __init__(self, result: dict[str, Any], *, rollback_errors: list[str]) -> None:
+        self.result = {**result, "rollback_errors": rollback_errors} if rollback_errors else result
         super().__init__(f"{result['failed_count']} attachment(s) failed")
 
 
@@ -192,7 +192,7 @@ class IngestionPipelineService:
             )
             if failed:
                 logger.warning("Runbook ingest failures: %s", failed)
-                raise IngestionBatchFailedError(result)
+                raise IngestionBatchFailedError(result, rollback_errors=batch_result.rollback_errors)
             return result
         finally:
             self._ingest_lock.release()
@@ -307,7 +307,7 @@ class IngestionPipelineService:
             )
             if failed:
                 logger.warning("Telco doc ingest failures: %s", failed)
-                raise IngestionBatchFailedError(result)
+                raise IngestionBatchFailedError(result, rollback_errors=batch_result.rollback_errors)
             return result
         finally:
             self._telco_ingest_lock.release()

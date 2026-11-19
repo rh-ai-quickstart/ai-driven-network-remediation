@@ -14,6 +14,7 @@ class AttachmentBackend:
         self.uploaded_names = {}
         self.next_id = 0
         self.failure = None
+        self.detach_errors = {}
         self.retain_on_delete = set()
         self.unlisted_files = set()
         self.pending_name = None
@@ -24,6 +25,8 @@ class AttachmentBackend:
         return page([SimpleNamespace(id=file_id) for file_id in self.attachments])
 
     def delete(self, file_id, *, vector_store_id):
+        if file_id in self.detach_errors:
+            raise RuntimeError(self.detach_errors[file_id])
         if file_id not in self.retain_on_delete:
             self.attachments.remove(file_id)
         return SimpleNamespace(deleted=True)
@@ -136,6 +139,19 @@ def test_previous_corpus_remains_searchable_until_replacement_is_ready(ingestion
     assert backend.attachments == ["file-1", "file-2"]
 
 
+def test_provider_detach_failure_reports_reason(ingestion_api):
+    api, backend, corpus, _ = ingestion_api
+    backend.attachments = ["old-doc"]
+    backend.detach_errors["old-doc"] = "provider rejected deletion"
+
+    response = api.post(f"/{corpus}/ingest")
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == (
+        "Failed to detach file 'old-doc' from vector store 'stable-store': provider rejected deletion"
+    )
+
+
 @pytest.mark.parametrize(
     "failure_kind,reason",
     [
@@ -175,7 +191,7 @@ def test_failed_attachment_preserves_previous_corpus_and_allows_retry(ingestion_
     )
 
 
-def test_failed_rollback_logs_the_leftover_and_cleans_up_other_attachments(ingestion_api, caplog):
+def test_failed_rollback_reports_the_leftover_and_cleans_up_other_attachments(ingestion_api, caplog):
     api, backend, corpus, failed_name = ingestion_api
     backend.attachments = ["old-doc"]
     backend.failure = (failed_name, "failed_status")
@@ -184,18 +200,28 @@ def test_failed_rollback_logs_the_leftover_and_cleans_up_other_attachments(inges
     response = api.post(f"/{corpus}/ingest")
 
     assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert detail["failed"] == [{"object_name": failed_name, "reason": "embedding failed"}]
+    assert detail["rollback_errors"] == ["Rollback in vector store 'stable-store' could not remove ['file-1']"]
     assert backend.attachments == ["old-doc", "file-1"]
     assert any("Rollback" in record.message and "file-1" in record.message for record in caplog.records)
 
 
-def test_rollback_logs_a_failed_detach_even_when_the_file_is_unlisted(ingestion_api, caplog):
+def test_rollback_reports_a_failed_detach_even_when_the_file_is_unlisted(ingestion_api, caplog):
     api, backend, corpus, failed_name = ingestion_api
     backend.attachments = ["old-doc"]
     backend.failure = (failed_name, "lost_metadata")
+    backend.detach_errors["file-2"] = "attachment metadata not found"
 
     response = api.post(f"/{corpus}/ingest")
 
     assert response.status_code == 502
+    assert response.json()["detail"]["rollback_errors"] == [
+        (
+            "Rollback could not confirm detach: Failed to detach file 'file-2' from vector store 'stable-store': "
+            "attachment metadata not found"
+        )
+    ]
     assert backend.attachments == ["old-doc"]
     assert backend.unlisted_files == {"file-2"}
     assert any("Rollback" in record.message and "file-2" in record.message for record in caplog.records)
