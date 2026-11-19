@@ -14,6 +14,12 @@ ENABLE_TELCO_ORAN=false ENABLE_NETWORK_REMEDIATION=true make build-all-images
 echo "Pushing images"
 ENABLE_TELCO_ORAN=false ENABLE_NETWORK_REMEDIATION=true make push-all-images
 
+echo "Building CPU demo images"
+make cpu-demo-build-images
+
+echo "Pushing CPU demo images"
+make cpu-demo-push-images
+
 echo "Deploying (Network only)"
 ENABLE_TELCO_ORAN=false \
 	ENABLE_NETWORK_REMEDIATION=true \
