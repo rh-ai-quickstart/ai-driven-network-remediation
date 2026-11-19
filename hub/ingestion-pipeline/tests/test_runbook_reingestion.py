@@ -20,14 +20,14 @@ class Page:
         return self._next_page
 
 
-def _client(stores_page, files_page=None):
+def _client(stores_page):
     client = object.__new__(LlamaStackVectorStoreClient)
     client._vector_store_name = "noc_runbooks"
     client._client = SimpleNamespace(
         vector_stores=SimpleNamespace(
             list=Mock(return_value=stores_page),
             create=Mock(),
-            files=SimpleNamespace(list=Mock(return_value=files_page), delete=Mock()),
+            files=SimpleNamespace(delete=Mock()),
         )
     )
     return client
@@ -52,48 +52,28 @@ def test_duplicate_store_names_fail_before_any_attachment_is_removed():
     client._client.vector_stores.files.delete.assert_not_called()
 
 
-def test_clear_removes_every_attachment_from_all_pages():
-    files = Page([SimpleNamespace(id="generated")], Page([SimpleNamespace(id="runbook")]))
-    client = _client(Page([_store("target")]), files)
-    client._client.vector_stores.files.list.side_effect = [files, Page([])]
-
-    client.clear_vector_store_files("target")
-
-    assert [call.args[0] for call in client._client.vector_stores.files.delete.call_args_list] == [
-        "generated",
-        "runbook",
-    ]
-
-
-def test_failed_detach_stops_before_replacement():
-    client = _client(Page([_store("target")]), Page([SimpleNamespace(id="generated")]))
-    client._client.vector_stores.files.delete.return_value = SimpleNamespace(deleted=False)
-
-    with pytest.raises(RuntimeError, match="Failed to detach file 'generated'"):
-        client.clear_vector_store_files("target")
-
-
 def test_empty_source_preserves_existing_attachments():
     service = IngestionPipelineService()
     service._minio_client = SimpleNamespace(load_prefix_text_objects=Mock(return_value=[]))
-    service._vector_client = SimpleNamespace(ensure_vector_store=Mock(), clear_vector_store_files=Mock())
+    service._vector_client = SimpleNamespace(ensure_vector_store=Mock(), replace_text_batch=Mock())
 
     with pytest.raises(EmptyRunbookCorpusError, match="No runbooks found"):
         service.ingest()
 
     service._vector_client.ensure_vector_store.assert_not_called()
-    service._vector_client.clear_vector_store_files.assert_not_called()
+    service._vector_client.replace_text_batch.assert_not_called()
     assert service._ingest_lock.locked() is False
 
 
 class AttachmentBackend:
     def __init__(self):
         self.attachments = ["old-a", "old-b"]
+        self.searchable_states = []
         self.deleted = []
         self.created = []
         self.fail_once = False
         self.retain_on_delete = False
-        self.add_during_clear = False
+        self.add_during_upload = False
         self.list_error = False
         self._next_file = 0
 
@@ -108,23 +88,25 @@ class AttachmentBackend:
     def delete(self, file_id, *, vector_store_id):
         assert vector_store_id == "store-1"
         self.deleted.append(file_id)
-        if self.add_during_clear and file_id == "old-a":
-            self.attachments.append("concurrent-playbook")
         if self.fail_once and file_id == "old-b":
             self.fail_once = False
             return SimpleNamespace(deleted=False)
         if not self.retain_on_delete:
             self.attachments.remove(file_id)
+        self.searchable_states.append(set(self.attachments))
         return SimpleNamespace(deleted=True)
 
     def upload(self, *, file, purpose):
         assert purpose == "assistants"
+        if self.add_during_upload:
+            self.attachments.append("concurrent-playbook")
         self._next_file += 1
         return SimpleNamespace(id=f"new-{self._next_file}")
 
     def attach(self, vector_store_id, *, file_id, attributes, chunking_strategy):
         assert vector_store_id == "store-1"
         self.attachments.append(file_id)
+        self.searchable_states.append(set(self.attachments))
         self.created.append(file_id)
         return SimpleNamespace(id=file_id, vector_store_id=vector_store_id, status="completed", attributes=attributes)
 
@@ -151,7 +133,22 @@ def runbook_api(monkeypatch):
     return TestClient(app_module.app, raise_server_exceptions=False), backend
 
 
-def test_failed_deletion_stops_upload_and_rerun_rebuilds_corpus(runbook_api):
+def test_reingestion_keeps_a_complete_corpus_searchable(runbook_api):
+    api, backend = runbook_api
+    # Include a generated playbook alongside the prior runbook, on another page.
+    backend.attachments = ["old-a", "generated-playbook"]
+
+    response = api.post("/runbooks/ingest")
+
+    assert response.status_code == 200
+    original = {"old-a", "generated-playbook"}
+    replacement = {response.json()["objects"][0]["id"]}
+    assert [file["vector_store_id"] for file in response.json()["objects"]] == ["store-1"]
+    assert all(original <= state or replacement <= state for state in backend.searchable_states)
+    assert backend.searchable_states[-1] == replacement
+
+
+def test_failed_deletion_leaves_complete_replacement_and_rerun_removes_old_files(runbook_api):
     api, backend = runbook_api
     backend.fail_once = True
 
@@ -159,30 +156,28 @@ def test_failed_deletion_stops_upload_and_rerun_rebuilds_corpus(runbook_api):
 
     assert failed.status_code >= 400
     assert backend.deleted == ["old-a", "old-b"]
-    assert backend.created == []
-    assert backend.attachments == ["old-b"]
+    assert backend.attachments == ["old-b", "new-1"]
 
     succeeded = api.post("/runbooks/ingest")
 
     assert succeeded.status_code == 200
     assert succeeded.json()["objects"][0]["vector_store_id"] == "store-1"
-    assert backend.attachments == ["new-1"]
+    assert backend.attachments == ["new-2"]
 
 
-def test_clear_verifies_original_attachments_are_gone_before_upload(runbook_api):
+def test_reingestion_fails_if_original_attachments_remain(runbook_api):
     api, backend = runbook_api
     backend.retain_on_delete = True
 
     response = api.post("/runbooks/ingest")
 
     assert response.status_code >= 400
-    assert backend.created == []
-    assert backend.attachments == ["old-a", "old-b"]
+    assert backend.attachments == ["old-a", "old-b", "new-1"]
 
 
-def test_attachment_added_during_clear_does_not_fail_verification(runbook_api):
+def test_playbook_added_during_upload_stays_attached(runbook_api):
     api, backend = runbook_api
-    backend.add_during_clear = True
+    backend.add_during_upload = True
 
     response = api.post("/runbooks/ingest")
 

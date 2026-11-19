@@ -24,8 +24,7 @@ def ingestion_api(monkeypatch):
 def _vector_client():
     return SimpleNamespace(
         ensure_vector_store=Mock(return_value=SimpleNamespace(id="store")),
-        clear_vector_store_files=Mock(),
-        ingest_text_batch=Mock(return_value=SimpleNamespace(succeeded=[], failed=[])),
+        replace_text_batch=Mock(return_value=SimpleNamespace(succeeded=[], failed=[])),
     )
 
 

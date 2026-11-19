@@ -47,7 +47,7 @@ class EmptyTelcoCorpusError(ValueError):
 
 
 class IngestionBatchFailedError(Exception):
-    """Some replacement attachments failed after the existing corpus was cleared."""
+    """Some replacement attachments failed while the existing corpus was still active."""
 
     def __init__(self, result: dict[str, Any]) -> None:
         self.result = result
@@ -160,8 +160,7 @@ class IngestionPipelineService:
                 raise EmptyRunbookCorpusError("No runbooks found for ingestion; existing attachments were preserved")
 
             vector_store = self._vector_client.ensure_vector_store()
-            self._vector_client.clear_vector_store_files(vector_store.id)
-            batch_result = self._vector_client.ingest_text_batch(
+            batch_result = self._vector_client.replace_text_batch(
                 vector_store_id=vector_store.id,
                 items=items,
             )
@@ -276,8 +275,7 @@ class IngestionPipelineService:
                 )
 
             vector_store = self._telco_vector_client.ensure_vector_store()
-            self._telco_vector_client.clear_vector_store_files(vector_store.id)
-            batch_result = self._telco_vector_client.ingest_text_batch(
+            batch_result = self._telco_vector_client.replace_text_batch(
                 vector_store_id=vector_store.id,
                 items=items,
             )

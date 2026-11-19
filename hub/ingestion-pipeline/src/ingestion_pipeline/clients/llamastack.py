@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ogx_client import OgxClient
+from ogx_client.types.vector_stores import VectorStoreFile
+from ogx_client.types.vector_stores.file_create_params import ChunkingStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,10 @@ class DuplicateVectorStoreNameError(ValueError):
 
 class AttachmentListError(RuntimeError):
     """The provider could not enumerate a store's attachments."""
+
+
+class AttachmentDetachError(RuntimeError):
+    """The provider could not remove a store's attachments."""
 
 
 @dataclass(frozen=True)
@@ -127,18 +133,14 @@ class LlamaStackVectorStoreClient:
             file_counts=created.file_counts.model_dump(),
         )
 
-    def clear_vector_store_files(self, vector_store_id: str) -> None:
-        """Remove every attachment present when clearing starts, including generated files."""
-        file_ids = self._list_attachment_ids(vector_store_id)
-        for file_id in file_ids:
+    def _detach_file(self, vector_store_id: str, file_id: str) -> None:
+        message = f"Failed to detach file '{file_id}' from vector store '{vector_store_id}'"
+        try:
             response = self._client.vector_stores.files.delete(file_id, vector_store_id=vector_store_id)
-            if not response.deleted:
-                raise RuntimeError(f"Failed to detach file '{file_id}' from vector store '{vector_store_id}'")
-        remaining_ids = set(self._list_attachment_ids(vector_store_id))
-        if originals_remaining := set(file_ids) & remaining_ids:
-            raise RuntimeError(
-                f"Attachments remain in vector store '{vector_store_id}' after clearing: {sorted(originals_remaining)}"
-            )
+        except Exception as exc:
+            raise AttachmentDetachError(f"{message}: {exc}") from exc
+        if not response.deleted:
+            raise AttachmentDetachError(message)
 
     def _list_attachment_ids(self, vector_store_id: str) -> list[str]:
         try:
@@ -146,29 +148,53 @@ class LlamaStackVectorStoreClient:
                 file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
             ]
         except Exception as exc:
-            raise AttachmentListError(
-                f"Could not list attachments in vector store '{vector_store_id}': {exc}"
-            ) from exc
+            raise AttachmentListError(f"Could not list attachments in vector store '{vector_store_id}': {exc}") from exc
 
-    def ingest_text_batch(
+    def _rollback_attachments(self, vector_store_id: str, attempted_ids: list[str]) -> None:
+        if not attempted_ids:
+            return
+
+        for file_id in attempted_ids:
+            try:
+                self._detach_file(vector_store_id, file_id)
+            except AttachmentDetachError as exc:
+                # Llama Stack can index chunks before persisting attachment metadata.
+                logger.warning("Rollback could not confirm detach: %s", exc)
+
+        try:
+            remaining_ids = set(self._list_attachment_ids(vector_store_id)).intersection(attempted_ids)
+        except AttachmentListError as exc:
+            logger.error(
+                "Rollback in vector store '%s' could not verify removal of %s: %s",
+                vector_store_id,
+                attempted_ids,
+                exc,
+            )
+            return
+        if remaining_ids:
+            logger.error("Rollback in vector store '%s' could not remove %s", vector_store_id, sorted(remaining_ids))
+
+    def replace_text_batch(
         self,
         *,
         vector_store_id: str,
         items: list[IngestItem],
-        chunk_size_tokens: int | None = None,
-        chunk_overlap_tokens: int | None = None,
     ) -> IngestBatchResult:
-        chunk_size_tokens = chunk_size_tokens if chunk_size_tokens is not None else self._chunk_size_tokens
-        chunk_overlap_tokens = chunk_overlap_tokens if chunk_overlap_tokens is not None else self._chunk_overlap_tokens
-        chunking_strategy = {
+        """Attach a replacement corpus before removing the previous attachments."""
+        if not items:
+            raise ValueError("A replacement corpus must contain at least one item")
+
+        original_ids = self._list_attachment_ids(vector_store_id)
+        chunking_strategy: ChunkingStrategy = {
             "type": "static",
             "static": {
-                "max_chunk_size_tokens": chunk_size_tokens,
-                "chunk_overlap_tokens": chunk_overlap_tokens,
+                "max_chunk_size_tokens": self._chunk_size_tokens,
+                "chunk_overlap_tokens": self._chunk_overlap_tokens,
             },
         }
 
         logger.info("Ingesting %d files into vector store %s", len(items), vector_store_id)
+        attempted_ids: list[str] = []
         succeeded: list[VectorStoreFileSummary] = []
         failed: list[FailedIngestItem] = []
         for item in items:
@@ -177,13 +203,17 @@ class LlamaStackVectorStoreClient:
                     file=(item.filename, item.content.encode("utf-8"), "text/markdown"),
                     purpose="assistants",
                 )
+                # The provider may attach the file even if the create response is lost.
+                attempted_ids.append(created_file.id)
                 attached_file = self._client.vector_stores.files.create(
                     vector_store_id,
                     file_id=created_file.id,
                     attributes=item.attributes,
                     chunking_strategy=chunking_strategy,
                 )
-                if attached_file.status in {"failed", "cancelled"}:
+                if attached_file.status == "in_progress":
+                    attached_file = self._wait_for_file_ready(file_id=attached_file.id, vector_store_id=vector_store_id)
+                if attached_file.status != "completed":
                     last_error = getattr(attached_file, "last_error", None)
                     reason = getattr(last_error, "message", None) or f"Attachment status: {attached_file.status}"
                     failed.append(FailedIngestItem(item=item, reason=reason))
@@ -199,6 +229,17 @@ class LlamaStackVectorStoreClient:
             except Exception as exc:
                 logger.exception("Failed to ingest '%s'", item.filename)
                 failed.append(FailedIngestItem(item=item, reason=str(exc)))
+
+        if failed:
+            self._rollback_attachments(vector_store_id, attempted_ids)
+        elif original_ids:
+            for file_id in original_ids:
+                self._detach_file(vector_store_id, file_id)
+            remaining_ids = set(self._list_attachment_ids(vector_store_id))
+            if originals_remaining := remaining_ids.intersection(original_ids):
+                raise AttachmentDetachError(
+                    f"Previous attachments remain in vector store '{vector_store_id}': {sorted(originals_remaining)}"
+                )
         return IngestBatchResult(succeeded=succeeded, failed=failed)
 
     def get_file_content(
@@ -256,9 +297,9 @@ class LlamaStackVectorStoreClient:
         *,
         file_id: str,
         vector_store_id: str,
-        wait_timeout_seconds: float,
-        poll_interval_seconds: float,
-    ) -> Any:
+        wait_timeout_seconds: float = 300,
+        poll_interval_seconds: float = 1,
+    ) -> VectorStoreFile:
         deadline = time.monotonic() + wait_timeout_seconds
         while True:
             vector_file = self._client.vector_stores.files.retrieve(file_id, vector_store_id=vector_store_id)

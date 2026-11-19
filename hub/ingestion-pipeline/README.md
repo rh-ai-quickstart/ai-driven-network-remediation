@@ -8,7 +8,9 @@ Network remediation runbooks and RAN/ORAN vendor PDFs/DOCX are committed directl
 
 ## Repair unreadable vector-store attachments
 
-Normal `/runbooks/ingest` and `/telco-docs/ingest` requests replace attachments in the existing store and keep its ID. An ordinary rerun repairs a partial clear or upload. In the rare case where a provider failure interrupts an individual attachment deletion, attachment metadata can become unreadable. The attachment-list request then fails, so an ordinary rerun may fail again. The ingestion service does not delete a store automatically in response to this error.
+Normal `/runbooks/ingest` and `/telco-docs/ingest` requests keep the store ID and leave the previous corpus searchable until all replacement attachments are ready. A failed upload triggers rollback of the new attachments. If rollback cannot remove or verify an attachment, the service logs its ID. A failed deletion of an older attachment leaves the complete replacement searchable, and a rerun can remove any leftovers.
+
+In the rare case where a provider failure interrupts an individual attachment deletion, attachment metadata can become unreadable. The attachment-list request then fails, so an ordinary rerun may fail again. The ingestion service does not delete a store automatically in response to this error.
 
 1. Port-forward the ingestion service and Llama Stack (see [REST commands](../../docs/rest/rest-commands.md)). Set `INGEST_URL=http://localhost:8000` and `LLAMASTACK_URL=http://localhost:8321` in your shell.
 2. Identify the affected store by exact name (`noc_runbooks` for Network or `telco_oran_docs` for RAN). List stores with `curl -fsS "$LLAMASTACK_URL/v1/vector_stores?limit=100"`, following `has_more`/`last_id` if needed, and record its ID. Check `GET /v1/vector_stores/<ID>/files?limit=100`. A failing attachment-list response, together with an ingestion error naming that store, identifies this exceptional case. Check the Llama Stack logs for the provider error before deleting anything.

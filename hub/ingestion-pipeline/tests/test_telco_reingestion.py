@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 from ingestion_pipeline.clients.llamastack import (
     AttachmentListError,
     DuplicateVectorStoreNameError,
-    FailedIngestItem,
     IngestBatchResult,
 )
 from ingestion_pipeline.service import IngestionPipelineService
@@ -23,8 +22,7 @@ def telco_api(monkeypatch):
     )
     vector_client = SimpleNamespace(
         ensure_vector_store=Mock(return_value=SimpleNamespace(id="stable-store")),
-        clear_vector_store_files=Mock(),
-        ingest_text_batch=Mock(
+        replace_text_batch=Mock(
             return_value=IngestBatchResult(
                 succeeded=[
                     SimpleNamespace(
@@ -58,7 +56,7 @@ def test_zero_units_preserve_existing_store(telco_api, content):
     assert response.status_code == 400
     assert "existing attachments were preserved" in response.json()["detail"]
     vector_client.ensure_vector_store.assert_not_called()
-    vector_client.clear_vector_store_files.assert_not_called()
+    vector_client.replace_text_batch.assert_not_called()
     assert service._telco_ingest_lock.locked() is False
 
 
@@ -69,10 +67,10 @@ def test_split_failure_preserves_existing_store(telco_api, monkeypatch):
 
     assert api.post("/telco-docs/ingest").status_code >= 400
     vector_client.ensure_vector_store.assert_not_called()
-    vector_client.clear_vector_store_files.assert_not_called()
+    vector_client.replace_text_batch.assert_not_called()
 
 
-def test_duplicate_name_fails_before_clear(telco_api):
+def test_duplicate_name_fails_before_replacement(telco_api):
     api, _, vector_client = telco_api
     vector_client.ensure_vector_store.side_effect = DuplicateVectorStoreNameError(
         "Multiple vector stores named 'telco_oran_docs'"
@@ -82,10 +80,10 @@ def test_duplicate_name_fails_before_clear(telco_api):
 
     assert response.status_code == 409
     assert "Multiple vector stores" in response.json()["detail"]
-    vector_client.clear_vector_store_files.assert_not_called()
+    vector_client.replace_text_batch.assert_not_called()
 
 
-def test_clear_happens_after_units_are_prepared_and_keeps_response_shape(telco_api):
+def test_ingest_keeps_prepared_unit_and_response_shape(telco_api):
     api, _, vector_client = telco_api
 
     response = api.post("/telco-docs/ingest")
@@ -110,25 +108,14 @@ def test_clear_happens_after_units_are_prepared_and_keeps_response_shape(telco_a
         ],
         "failed": [],
     }
-    items = vector_client.ingest_text_batch.call_args.kwargs["items"]
+    items = vector_client.replace_text_batch.call_args.kwargs["items"]
     assert [(item.filename, item.content) for item in items] == [("vendor#001.md", "Content")]
-    assert vector_client.clear_vector_store_files.call_args.args == ("stable-store",)
-    assert vector_client.ensure_vector_store.call_count == 1
+    assert vector_client.replace_text_batch.call_args.kwargs["vector_store_id"] == "stable-store"
 
 
-def test_partial_clear_can_be_retried(telco_api):
+def test_attachment_list_error_is_reported(telco_api):
     api, _, vector_client = telco_api
-    vector_client.clear_vector_store_files.side_effect = [RuntimeError("partial clear"), None]
-
-    assert api.post("/telco-docs/ingest").status_code >= 400
-    vector_client.ingest_text_batch.assert_not_called()
-    assert api.post("/telco-docs/ingest").status_code == 200
-    assert vector_client.clear_vector_store_files.call_count == 2
-
-
-def test_attachment_list_error_is_reported_without_upload(telco_api):
-    api, _, vector_client = telco_api
-    vector_client.clear_vector_store_files.side_effect = AttachmentListError(
+    vector_client.replace_text_batch.side_effect = AttachmentListError(
         "Could not list attachments in vector store 'stable-store': unreadable attachment metadata"
     )
 
@@ -136,24 +123,6 @@ def test_attachment_list_error_is_reported_without_upload(telco_api):
 
     assert response.status_code == 502
     assert "unreadable attachment metadata" in response.json()["detail"]
-    vector_client.ingest_text_batch.assert_not_called()
-
-
-def test_partial_upload_can_be_retried(telco_api):
-    api, _, vector_client = telco_api
-    prepared_item = SimpleNamespace(filename="vendor#001.md")
-    success = vector_client.ingest_text_batch.return_value
-    vector_client.ingest_text_batch.side_effect = [
-        IngestBatchResult(succeeded=[], failed=[FailedIngestItem(item=prepared_item, reason="upload failed")]),
-        success,
-    ]
-
-    partial = api.post("/telco-docs/ingest")
-    assert partial.status_code == 502
-    assert partial.json()["detail"]["failed"] == [{"object_name": "vendor#001.md", "reason": "upload failed"}]
-    assert api.post("/telco-docs/ingest").json()["ingested_count"] == 1
-    assert vector_client.clear_vector_store_files.call_count == 2
-    assert all(call.args == ("stable-store",) for call in vector_client.clear_vector_store_files.call_args_list)
 
 
 def test_partial_source_sync_still_allows_prepared_units(telco_api, monkeypatch, tmp_path):
