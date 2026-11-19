@@ -74,7 +74,7 @@ jobs:
 
           BASE_SHA="${{ github.event.before }}"
           if [ -n "${BASE_SHA}" ] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
-            if git diff --name-only "${BASE_SHA}"..HEAD -- e2e-showcase | grep -q .; then
+            if [ -n "$(git diff --name-only "${BASE_SHA}"..HEAD -- e2e-showcase)" ]; then
               build=true
               reason="e2e-showcase changed"
             fi
