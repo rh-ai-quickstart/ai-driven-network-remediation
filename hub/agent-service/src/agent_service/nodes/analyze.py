@@ -43,6 +43,7 @@ async def analyze_node(state: dict) -> dict:
         latency_ms = (time.monotonic() - t0) * 1000
 
         diagnosis = json.loads(response.content)
+        updates = {}
         try:
             rca = RootCauseAnalysis.model_validate(diagnosis)
         except ValidationError as exc:
@@ -51,12 +52,12 @@ async def analyze_node(state: dict) -> dict:
             if not (
                 isinstance(diagnosis, dict)
                 and diagnosis.get("selected_action") is not None
-                and all(error["loc"] and error["loc"][0] == "selected_action" for error in exc.errors())
+                and all(error["loc"] and error["loc"][0] == "selected_action" for error in exc.errors(include_input=False))
             ):
                 raise
-            logger.warning("Discarding invalid selected_action from LLM diagnosis: {}", exc)
-            diagnosis["selected_action"] = None
-            rca = RootCauseAnalysis.model_validate(diagnosis)
+            rca = RootCauseAnalysis.model_validate({**diagnosis, "selected_action": None})
+            logger.warning("Model returned an invalid remediation action; escalating with the diagnosis")
+            updates["decision"] = "escalate"
 
         logger.debug("Root cause analysis: {}", rca.model_dump_json())
 
@@ -64,6 +65,7 @@ async def analyze_node(state: dict) -> dict:
         tokens = usage.get("total_tokens", 0)
 
         return {
+            **updates,
             "root_cause_analysis": rca,
             "analysis_tokens_used": tokens,
             "analysis_latency_ms": latency_ms,
