@@ -109,9 +109,13 @@ chosen channel. Follow the [Slack app setup guide](https://docs.slack.dev/app-ma
 to add the `chat:write` bot scope, install the app in your workspace, and
 obtain its bot token. Invite the bot to the channel.
 
-1. `SLACK_BOT_TOKEN`: bot token.
-2. `SLACK_CHANNEL`: the channel where incident events will be posted.
-3. Set `ENABLE_SLACK` to `true`.
+Set `ENABLE_SLACK=true` to enable notifications for both installed profiles by
+default. Set `ENABLE_NETWORK_SLACK` or `ENABLE_TELCO_SLACK` to override the
+default for one profile.
+
+- Network uses `SLACK_BOT_TOKEN` and posts to `SLACK_CHANNEL`.
+- Telco uses the `token` key in `slack-secret` in the hub namespace and posts to
+  `TELCO_SLACK_CHANNEL`. See the [Telco Slack configuration examples](telco-oran-remediation.md#enable-slack-notifications).
 
 ## Deploy the quickstart
 

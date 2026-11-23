@@ -44,7 +44,7 @@ START → decide → remediate → notify → audit → END
 - **`remediate`** — calls AAP directly (`launch_job`, `get_job_status`,
   `get_job_output`); polls until the job reaches a terminal state
 - **`notify`** — sends a Slack Block Kit message (color-coded green/red); same pattern
-  as Workflow 1's `agent-service/nodes/notify.py`; gated by `SLACK_BOT_TOKEN`
+  as Workflow 1's `agent-service/nodes/notify.py`. Posting requires enablement and a bot token.
 - **`audit`** — publishes a structured record to `ran-remediation-results` Kafka topic;
   same pattern as Workflow 1's `agent-service/nodes/audit.py`
 
@@ -267,6 +267,54 @@ processed **exactly once** even across replicas.
 | `GET /remediation-results` | Recent remediation records (in-memory buffer) |
 
 ---
+
+## Enable Slack notifications
+
+Slack defaults to off. With Make, `ENABLE_SLACK=true` now enables notifications for
+both installed profiles by default. Set `ENABLE_NETWORK_SLACK` or `ENABLE_TELCO_SLACK`
+to `true` or `false` to override the default for that profile. Set `SLACK_CHANNEL`
+for Network and `TELCO_SLACK_CHANNEL` for Telco.
+
+```bash
+# Enable both installed profiles and send to separate channels.
+make deploy ENABLE_SLACK=true SLACK_CHANNEL='#network-ops' TELCO_SLACK_CHANNEL='#ran-ops'
+
+# Enable Slack for Telco only, even if both profiles are installed.
+make deploy ENABLE_SLACK=false ENABLE_TELCO_SLACK=true TELCO_SLACK_CHANNEL='#ran-ops'
+
+# Enable Slack for Network only by overriding the hub default for Telco.
+make deploy ENABLE_SLACK=true ENABLE_TELCO_SLACK=false SLACK_CHANNEL='#network-ops'
+```
+
+For direct Helm installs, set `global.slack.enabled` for any combination of installed
+profiles. These values enable Telco and turn off Network notifications for a hub
+with both profiles.
+
+```yaml
+global:
+  slack:
+    enabled: true
+network:
+  agentService:
+    slack:
+      enabled: false
+      channel: "#network-ops"
+telco:
+  ranRemediationService:
+    env:
+      slackChannel: "#ran-ops"
+```
+
+Set `telco.ranRemediationService.env.slackEnabled` to override Telco enablement.
+Omit the profile enablement fields to inherit the hub default. When upgrading,
+pass your existing values file or use `helm upgrade --reset-then-reuse-values`
+to retain saved channel and credential settings. A saved profile enablement
+value still acts as an explicit override when carried forward.
+
+Telco reads the `token` key from `slack-secret` in the hub namespace. Keep using
+that Secret on upgrade, or create it for a new install using a Slack bot token
+with `chat:write`. Invite the bot to the configured channel. Network continues to
+use `SLACK_BOT_TOKEN` from Make or its existing Helm credential settings.
 
 ## Config (env vars)
 

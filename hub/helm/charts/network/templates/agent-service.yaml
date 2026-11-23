@@ -108,7 +108,11 @@ spec:
             - name: GITEA_PROJECT_NAME
               value: {{ printf "%s%s" (include "network.aapResourcePrefix" .) .Values.agentService.lightspeed.projectName | quote }}
             - name: SLACK_ENABLED
-              value: {{ .Values.agentService.slack.enabled | quote }}
+              {{- $slackEnabled := dig "slack" "enabled" false (.Values.global | default dict) }}
+              {{- if ne .Values.agentService.slack.enabled nil }}
+              {{- $slackEnabled = .Values.agentService.slack.enabled }}
+              {{- end }}
+              value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL
               value: {{ .Values.agentService.slack.channel | quote }}
             {{- if or .Values.agentService.slack.botToken .Values.agentService.slack.existingSecret }}

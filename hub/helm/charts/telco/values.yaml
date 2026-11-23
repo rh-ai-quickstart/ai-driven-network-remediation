@@ -143,7 +143,7 @@ ranRemediationService:
     kafkaRemediationTopic: "ran-remediation-results"
     kafkaGroupId: "ran-remediation-service"
     kafkaConsumerEnabled: "true"
-    slackEnabled: "false"
+    # slackEnabled: false  # Omit to inherit global.slack.enabled.
     slackChannel: "#ran-alerts"
     pollIntervalSeconds: "5"
     jobTimeoutSeconds: "120"

@@ -119,6 +119,9 @@ AUTO_INGEST_ON_STARTUP ?= true
 AAP_NAMESPACE          ?= aap
 AAP_URL                ?= $(if $(filter true,$(ENABLE_AAP_MOCK)),http://aap-mock.$(NAMESPACE).svc:8080,http://aap.aap.svc)
 ENABLE_SLACK           ?= false
+# Empty profile overrides inherit ENABLE_SLACK.
+ENABLE_NETWORK_SLACK   ?=
+ENABLE_TELCO_SLACK     ?=
 ENABLE_NETWORK_REMEDIATION ?= true
 ENABLE_TELCO_ORAN          ?= true
 ENABLE_MULTICLUSTER    ?= false
@@ -150,7 +153,8 @@ endif
 endif
 
 SLACK_BOT_TOKEN        ?=
-SLACK_CHANNEL          ?= \#ai-driven-network
+SLACK_CHANNEL          ?=
+TELCO_SLACK_CHANNEL    ?=
 SERVICENOW_INSTANCE_URL ?=
 SERVICENOW_CREATE_RESOLVED ?= false
 SERVICENOW_API_KEY  ?=
@@ -337,9 +341,12 @@ helm_lightspeed_args = \
 	$(if $(filter true,$(ENABLE_LIGHTSPEED)),--set-string network.agentService.lightspeed.timeoutSeconds='$(LIGHTSPEED_TIMEOUT_SECONDS)',)
 
 helm_slack_args = \
-	--set network.agentService.slack.enabled=$(ENABLE_SLACK) \
+	--set global.slack.enabled=$(ENABLE_SLACK) \
+	$(if $(ENABLE_NETWORK_SLACK),--set network.agentService.slack.enabled=$(ENABLE_NETWORK_SLACK),) \
+	$(if $(ENABLE_TELCO_SLACK),--set telco.ranRemediationService.env.slackEnabled=$(ENABLE_TELCO_SLACK),) \
 	$(if $(SLACK_BOT_TOKEN),--set-string network.agentService.slack.botToken='$(SLACK_BOT_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SLACK)),--set-string network.agentService.slack.channel='$(SLACK_CHANNEL)',)
+	$(if $(SLACK_CHANNEL),--set-string network.agentService.slack.channel='$(SLACK_CHANNEL)',) \
+	$(if $(TELCO_SLACK_CHANNEL),--set-string telco.ranRemediationService.env.slackChannel='$(TELCO_SLACK_CHANNEL)',)
 
 helm_multicluster_args = \
 	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set network.aapCredential.multicluster.enabled=true,) \

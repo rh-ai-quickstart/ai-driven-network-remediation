@@ -46,6 +46,9 @@ global:
   # Shared ServiceNow overrides. Omitted fields fall back to existing Network
   # values and then the hub defaults. See docs/integration-setup.md.
   servicenow: {}
+  slack:
+    # Default for each installed profile. Profile settings can override it.
+    enabled: false
 
 # ══════════════════════════════════════════════════════════════════════
 # Remote subcharts

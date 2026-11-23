@@ -153,7 +153,7 @@ agentService:
     baseTemplateName: "lightspeed-runner"
     projectName: "lightspeed-generated"
   slack:
-    enabled: "false"
+    # enabled: false  # Omit to inherit global.slack.enabled.
     botToken: ""
     existingSecret: ""
     channel: "#ai-driven-network"
