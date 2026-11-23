@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from llama_stack_client import APIError
+from loguru import logger
+from shared.rag import RagClient
+
 from ran_rca_service.config import LLAMASTACK_HOST, LLAMASTACK_PORT, VECTOR_STORE_NAME
 from ran_rca_service.models import RCAState
-from shared.rag import RagClient
 
 _rag_client: RagClient | None = None
 
@@ -27,5 +30,9 @@ async def rag_retrieval_node(state: RCAState) -> dict:
         query += f" top KPIs: {kpi_hint}"
     if state.ml_steer_used:
         query += f" possible root cause: {state.root_cause_category} (Mantis RCA confidence {state.ml_confidence:.2f})"
-    snippets = await _get_rag_client().search(query)
+    try:
+        snippets = await _get_rag_client().search(query)
+    except APIError:
+        logger.exception("LlamaStack search failed for incident_id={}", state.incident_id)
+        snippets = []
     return {"context_snippets": snippets, "rag_query_used": query}

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from helpers import make_state
+from llama_stack_client import APIConnectionError
 from ran_rca_service.nodes.rag_retrieval import rag_retrieval_node
 
 
@@ -96,10 +98,21 @@ class TestSearchResults:
 
 class TestErrorHandling:
     @pytest.mark.asyncio
-    async def test_search_error_propagates(self):
+    async def test_search_error_keeps_query_and_returns_empty_context(self):
         mock = MagicMock()
-        mock.search = AsyncMock(side_effect=ConnectionError("LlamaStack unreachable"))
+        request = httpx.Request("POST", "http://llamastack/v1/vector_stores/vs/search")
+        mock.search = AsyncMock(side_effect=APIConnectionError(request=request))
 
         with _patch_rag_client(mock):
-            with pytest.raises(ConnectionError):
-                await rag_retrieval_node(make_state())
+            result = await rag_retrieval_node(make_state())
+
+        assert result["context_snippets"] == []
+        assert result["rag_query_used"] == mock.search.call_args.args[0]
+
+    @pytest.mark.asyncio
+    async def test_unexpected_client_error_surfaces(self):
+        mock = MagicMock()
+        mock.search = AsyncMock(side_effect=AttributeError("invalid client attribute"))
+
+        with _patch_rag_client(mock), pytest.raises(AttributeError, match="invalid client attribute"):
+            await rag_retrieval_node(make_state())
