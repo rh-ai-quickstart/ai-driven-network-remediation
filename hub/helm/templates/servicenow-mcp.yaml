@@ -13,6 +13,7 @@ spec:
       {{- include "hub.servicenowMcpSelector" . | nindent 6 }}
   template:
     metadata:
+      {{- include "hub.servicenowCredentialAnnotation" $config.credentials | nindent 6 }}
       labels:
         {{- include "hub.servicenowMcpSelector" . | nindent 8 }}
         app: mcp-noc-servicenow

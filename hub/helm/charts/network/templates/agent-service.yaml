@@ -1,4 +1,6 @@
 {{- if .Values.agentService.enabled }}
+{{- $sharedServiceNow := .Values.global.servicenow | default dict -}}
+{{- $serviceNowInstanceUrl := coalesce .Values.agentService.servicenowInstanceUrl $sharedServiceNow.url | default "" | trim | trimSuffix "/" -}}
 {{- $enabledMcpServers := list }}
 {{- if index .Values "mcp-servers" "enabled" }}
 {{- range $name, $server := index .Values "mcp-servers" "mcp-servers" }}
@@ -116,9 +118,9 @@ spec:
                   name: {{ .Values.agentService.slack.existingSecret | default "noc-slack-secret" }}
                   key: SLACK_BOT_TOKEN
             {{- end }}
-            {{- if .Values.agentService.servicenowInstanceUrl }}
+            {{- if $serviceNowInstanceUrl }}
             - name: SERVICENOW_INSTANCE_URL
-              value: {{ .Values.agentService.servicenowInstanceUrl | quote }}
+              value: {{ $serviceNowInstanceUrl | quote }}
             {{- end }}
             - name: SERVICENOW_CREATE_RESOLVED
               value: {{ .Values.agentService.servicenowCreateResolved | quote }}

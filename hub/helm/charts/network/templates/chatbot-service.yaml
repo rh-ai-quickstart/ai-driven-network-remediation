@@ -9,9 +9,18 @@
 {{- if eq $legacyChatbotUrl "http://servicenow-mock:8080" -}}
   {{- $legacyChatbotUrl = "" -}}
 {{- end -}}
-{{- $serviceNowUrl := coalesce $sharedServiceNow.url $legacyChatbotUrl $legacyMcpUrl "http://servicenow-mock:8080" -}}
-{{- $serviceNowCredentials := mergeOverwrite (dict) (dig "servicenow" (dict) .Values.mcpSecrets) ($sharedServiceNow.credentials | default dict) -}}
+{{- $serviceNowUrl := coalesce $legacyChatbotUrl $legacyMcpUrl -}}
+{{- if hasKey $sharedServiceNow "url" -}}
+  {{- $serviceNowUrl = $sharedServiceNow.url -}}
+{{- end -}}
+{{- $serviceNowUrl = $serviceNowUrl | default "" | trim | trimSuffix "/" | default "http://servicenow-mock:8080" -}}
+{{- $legacyCredentials := dig "servicenow" (dict) .Values.mcpSecrets -}}
+{{- $sharedCredentials := $sharedServiceNow.credentials | default dict -}}
+{{- $serviceNowCredentials := mergeOverwrite (dict "create" true) $legacyCredentials $sharedCredentials -}}
 {{- $serviceNowSecret := $serviceNowCredentials.existingSecretName | default "noc-servicenow-secret" -}}
+{{- /* Mock mode controls the hub Secret's credential defaults. */ -}}
+{{- $legacyMockEnabled := dig "enabled" true (.Values.servicenowMock | default dict) -}}
+{{- $mockEnabled := dig "enabled" $legacyMockEnabled ($sharedServiceNow.mock | default dict) -}}
 {{- $defaultCpuDemoSiteA := .Values.chatbotService.env.edgeSiteId -}}
 {{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 0) -}}
 {{- $defaultCpuDemoSiteA = index (index .Values.topology.spokes 0) "siteId" -}}
@@ -37,6 +46,10 @@ spec:
       app.kubernetes.io/component: chatbot-service
   template:
     metadata:
+      {{- if and $serviceNowCredentials.create (not $serviceNowCredentials.existingSecretName) }}
+      annotations:
+        checksum/servicenow-credentials: {{ list $legacyCredentials $sharedCredentials $mockEnabled | toJson | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "network.labels" . | nindent 8 }}
         app.kubernetes.io/component: chatbot-service

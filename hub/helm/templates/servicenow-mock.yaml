@@ -15,6 +15,7 @@ spec:
       app: servicenow-mock
   template:
     metadata:
+      {{- include "hub.servicenowCredentialAnnotation" $config.credentials | nindent 6 }}
       labels:
         app: servicenow-mock
     spec:

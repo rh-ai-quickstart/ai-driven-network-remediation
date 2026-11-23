@@ -15,13 +15,12 @@ ROOT = Path(__file__).resolve().parents[4]
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="helm CLI not available")
 
 
-def _make(*args, input=None):
+def _make(*args):
     result = subprocess.run(
         ["make", "--no-print-directory", *args],
         cwd=ROOT,
         env={"PATH": os.environ["PATH"], "TMPDIR": tempfile.gettempdir()},
         check=False,
-        input=input,
         capture_output=True,
         text=True,
     )
@@ -29,31 +28,31 @@ def _make(*args, input=None):
     return result.stdout
 
 
-def _render(profile, entry_point, *overrides, namespace="hub-lab", make_vars=(), upgrading=False):
+def _render(profile, entry_point, *overrides, namespace="hub-lab", make_vars=(), upgrading=False, error=None):
     network, telco = profile
     overrides = ("--set", "telco.ranAnomalyDetector.enabled=false", *overrides)
     if entry_point == "make":
         output = _make(
-            "-s",
-            "-f",
-            "Makefile",
-            "-f",
-            "-",
-            "print-helm-args",
+            "-n",
+            "helm-install",
             f"ENABLE_NETWORK_REMEDIATION={network}",
             f"ENABLE_TELCO_ORAN={telco}",
             f"NAMESPACE={namespace}",
+            "RELEASE=hub",
+            "SPOKES_GENERATED=/dev/null",
             "ROUTES_ENABLED=false",
             "ENABLE_AAP_MOCK=true",
+            "ENABLE_LANGFUSE=false",
             "ENABLE_LIGHTSPEED=false",
-            "ENABLE_SERVICENOW_MOCK=true",
             "REGISTRY=example.test/demo",
             "VERSION=test",
             *make_vars,
             f"HELM_EXTRA_ARGS={shlex.join(overrides)}",
-            input="print-helm-args:\n\t$(info $(helm_all_args))\n\t@true\n",
         )
-        args = shlex.split(output)
+        (upgrade,) = [
+            line for line in output.replace("\\\n", "").splitlines() if line.startswith("helm upgrade --install hub hub/helm ")
+        ]
+        args = shlex.split(upgrade)[5:]
     else:
         args = ["--set", f"network.enabled={network},telco.enabled={telco}", *overrides]
     if upgrading:
@@ -65,6 +64,10 @@ def _render(profile, entry_point, *overrides, namespace="hub-lab", make_vars=(),
         text=True,
         capture_output=True,
     )
+    if error:
+        assert result.returncode != 0
+        assert error in result.stderr
+        return []
     assert result.returncode == 0, result.stderr
     return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
 
@@ -113,7 +116,9 @@ def _env(docs, deployment):
 
 
 @pytest.mark.parametrize("entry_point", ["helm", "make"])
-def test_upgrade_preserves_network_overrides_and_resource_identities(entry_point):
+@pytest.mark.parametrize("shared_url", [None, "https://shared.test"])
+def test_upgrade_preserves_omitted_network_overrides_and_resource_identities(entry_point, shared_url):
+    shared_settings = ("--set-string", f"global.servicenow.url={shared_url}") if shared_url else ()
     docs = _render(
         ("true", "false"),
         entry_point,
@@ -129,6 +134,7 @@ def test_upgrade_preserves_network_overrides_and_resource_identities(entry_point
         "network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=https://legacy.test",
         "--set-string",
         "network.mcpSecrets.servicenow.apiKey=legacy-key",
+        *shared_settings,
         upgrading=True,
     )
     assert all(doc["metadata"]["name"] != "servicenow-mock" for doc in docs)
@@ -140,7 +146,7 @@ def test_upgrade_preserves_network_overrides_and_resource_identities(entry_point
     assert _container(docs, "mcp-noc-servicenow")["image"] == "legacy.test/servicenow:legacy"
     for name in ("mcp-noc-servicenow", "hub-chatbot-service"):
         env = _env(docs, name)
-        assert env["SERVICENOW_URL"]["value"] == "https://legacy.test"
+        assert env["SERVICENOW_URL"]["value"] == (shared_url or "https://legacy.test")
         assert env["SERVICENOW_API_KEY"]["valueFrom"]["secretKeyRef"]["name"] == "noc-servicenow-secret"
     assert "noc-servicenow" in _env(docs, "hub-agent-service")["ENABLED_MCP_SERVERS"]["value"].split(",")
     secret = _resource(docs, "Secret", "noc-servicenow-secret")
@@ -159,6 +165,8 @@ def test_shared_values_win_over_legacy_settings():
         "--set-string",
         "network.chatbotService.env.servicenowUrl=https://legacy.test",
         "--set-string",
+        "network.agentService.servicenowInstanceUrl=https://tickets.test",
+        "--set-string",
         "network.mcpSecrets.servicenow.existingSecretName=legacy-servicenow",
         "--set-string",
         "global.servicenow.url=https://shared.test",
@@ -174,7 +182,36 @@ def test_shared_values_win_over_legacy_settings():
         assert env["SERVICENOW_URL"]["value"] == "https://shared.test"
         for key in ("SERVICENOW_USERNAME", "SERVICENOW_PASSWORD", "SERVICENOW_API_KEY"):
             assert env[key]["valueFrom"]["secretKeyRef"] == {"name": "shared-servicenow", "key": key, "optional": True}
+    assert _env(docs, "hub-agent-service")["SERVICENOW_INSTANCE_URL"]["value"] == "https://tickets.test"
     _toolgroup(docs)
+
+
+def test_shared_api_key_rotation_rolls_both_clients_without_changing_the_url():
+    legacy_settings = (
+        "--set",
+        "network.servicenowMock.enabled=false",
+        "--set-string",
+        "network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=https://servicenow.test",
+        "--set-string",
+        "network.mcpSecrets.servicenow.apiKey=legacy-key",
+    )
+    profile = ("true", "false")
+    before = _render(profile, "helm", *legacy_settings, upgrading=True)
+    after = _render(
+        profile,
+        "helm",
+        *legacy_settings,
+        "--set-string",
+        "global.servicenow.credentials.apiKey=shared-key",
+        upgrading=True,
+    )
+    secret = _resource(after, "Secret", "noc-servicenow-secret")
+    assert base64.b64decode(secret["data"]["SERVICENOW_API_KEY"]) == b"shared-key"
+    for deployment in ("mcp-noc-servicenow", "hub-chatbot-service"):
+        assert _env(before, deployment) == _env(after, deployment)
+        before_pod = _resource(before, "Deployment", deployment)["spec"]["template"]
+        after_pod = _resource(after, "Deployment", deployment)["spec"]["template"]
+        assert before_pod != after_pod
 
 
 def test_mock_defaults_resolve_values_from_a_legacy_release():
@@ -217,20 +254,132 @@ def test_shared_basic_auth_replaces_the_legacy_mock_api_key():
     assert secret["data"]["SERVICENOW_API_KEY"] == ""
 
 
-def test_make_telco_only_with_real_servicenow():
+@pytest.mark.parametrize("entry_point", ["helm", "make"])
+@pytest.mark.parametrize(
+    ("has_url", "error"),
+    [
+        (False, "Set global.servicenow.url"),
+        (True, "Set global.servicenow.credentials"),
+    ],
+)
+def test_real_servicenow_requires_a_backend_and_credentials(entry_point, has_url, error):
+    make_vars = ["ENABLE_SERVICENOW_MOCK=false"]
+    overrides = ["--set", "global.servicenow.mock.enabled=false"] if entry_point == "helm" else []
+    if has_url:
+        make_vars += ["SERVICENOW_INSTANCE_URL=https://example.test", "SERVICENOW_USERNAME=test-user"]
+        if entry_point == "helm":
+            overrides += [
+                "--set-string",
+                "global.servicenow.url=https://example.test",
+                "--set-string",
+                "global.servicenow.credentials.username=test-user",
+            ]
+    _render(("false", "true"), entry_point, *overrides, make_vars=make_vars, error=error)
+
+
+@pytest.mark.parametrize("profile", [("true", "false"), ("false", "true"), ("true", "true")])
+@pytest.mark.parametrize("entry_point", ["helm", "make"])
+@pytest.mark.parametrize(
+    ("make_credentials", "helm_credentials", "expected_data"),
+    [
+        pytest.param(
+            ("SERVICENOW_API_KEY=example-key",),
+            ("apiKey=example-key",),
+            {"SERVICENOW_API_KEY": "example-key", "SERVICENOW_USERNAME": "", "SERVICENOW_PASSWORD": ""},
+            id="api-key",
+        ),
+        pytest.param(
+            ("SERVICENOW_USERNAME=example-user", "SERVICENOW_PASSWORD=example-password"),
+            ("username=example-user", "password=example-password"),
+            {
+                "SERVICENOW_API_KEY": "",
+                "SERVICENOW_USERNAME": "example-user",
+                "SERVICENOW_PASSWORD": "example-password",
+            },
+            id="basic-auth",
+        ),
+        pytest.param(
+            ("SERVICENOW_SECRET_NAME=external-servicenow",),
+            ("existingSecretName=external-servicenow",),
+            None,
+            id="existing-secret",
+        ),
+    ],
+)
+def test_each_profile_can_connect_to_real_servicenow(
+    profile, entry_point, make_credentials, helm_credentials, expected_data
+):
+    overrides = []
+    if entry_point == "helm":
+        overrides = [
+            "--set",
+            "global.servicenow.mock.enabled=false",
+            "--set-string",
+            "global.servicenow.url=https://external.test/",
+        ]
+        for credential in helm_credentials:
+            overrides += ["--set-string", f"global.servicenow.credentials.{credential}"]
     docs = _render(
-        ("false", "true"),
-        "make",
+        profile,
+        entry_point,
+        *overrides,
         make_vars=(
             "ENABLE_SERVICENOW_MOCK=false",
-            "SERVICENOW_INSTANCE_URL=https://external.test",
-            "SERVICENOW_SECRET_NAME=external-servicenow",
+            "SERVICENOW_INSTANCE_URL=https://external.test/",
+            *make_credentials,
         ),
     )
-    assert all(doc["metadata"]["name"] not in {"servicenow-mock", "noc-servicenow-secret"} for doc in docs)
-    env = _env(docs, "mcp-noc-servicenow")
-    assert env["SERVICENOW_URL"]["value"] == "https://external.test"
-    assert env["SERVICENOW_API_KEY"]["valueFrom"]["secretKeyRef"]["name"] == "external-servicenow"
+    assert all(doc["metadata"]["name"] != "servicenow-mock" for doc in docs)
+    if expected_data is None:
+        assert all(doc["metadata"]["name"] != "noc-servicenow-secret" for doc in docs)
+        secret_name = "external-servicenow"
+    else:
+        secret_name = "noc-servicenow-secret"
+        secret = _resource(docs, "Secret", secret_name)
+        assert {key: base64.b64decode(value).decode() for key, value in secret["data"].items()} == expected_data
+
+    deployments = ["mcp-noc-servicenow"]
+    if profile[0] == "true":
+        deployments.append("hub-chatbot-service")
+        agent_env = _env(docs, "hub-agent-service")
+        assert agent_env["SERVICENOW_INSTANCE_URL"]["value"] == "https://external.test"
+        assert "noc-servicenow" in agent_env["ENABLED_MCP_SERVERS"]["value"].split(",")
+    for name in deployments:
+        env = _env(docs, name)
+        assert env["SERVICENOW_URL"]["value"] == "https://external.test"
+        for key in ("SERVICENOW_USERNAME", "SERVICENOW_PASSWORD", "SERVICENOW_API_KEY"):
+            assert env[key]["valueFrom"]["secretKeyRef"] == {"name": secret_name, "key": key, "optional": True}
+    _toolgroup(docs)
+
+
+def test_make_real_servicenow_settings_override_legacy_network_values():
+    password = r"{pass,$word\' spaced}"
+    docs = _render(
+        ("true", "true"),
+        "make",
+        "--set",
+        "network.servicenowMock.enabled=true",
+        "--set-string",
+        "network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=https://legacy.test",
+        "--set-string",
+        "network.chatbotService.env.servicenowUrl=https://legacy-chatbot.test",
+        "--set-string",
+        "network.mcpSecrets.servicenow.apiKey=legacy-key",
+        make_vars=(
+            "ENABLE_SERVICENOW_MOCK=false",
+            "SERVICENOW_INSTANCE_URL=https://shared.test",
+            "SERVICENOW_USERNAME=shared-user",
+            f"SERVICENOW_PASSWORD={password}",
+        ),
+        upgrading=True,
+    )
+    assert all(doc["metadata"]["name"] != "servicenow-mock" for doc in docs)
+    for name in ("mcp-noc-servicenow", "hub-chatbot-service"):
+        assert _env(docs, name)["SERVICENOW_URL"]["value"] == "https://shared.test"
+    secret = _resource(docs, "Secret", "noc-servicenow-secret")
+    assert base64.b64decode(secret["data"]["SERVICENOW_USERNAME"]) == b"shared-user"
+    assert base64.b64decode(secret["data"]["SERVICENOW_PASSWORD"]).decode() == password
+    assert secret["data"]["SERVICENOW_API_KEY"] == ""
     _toolgroup(docs)
 
 

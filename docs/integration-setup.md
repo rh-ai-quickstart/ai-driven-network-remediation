@@ -114,11 +114,11 @@ Use the real-integration `AAP_URL` example in [.env.example](../.env.example) an
 
 ## ServiceNow
 
-The hub deploys one `mcp-noc-servicenow` endpoint and registers `mcp::noc-servicenow` with LlamaStack for each profile. The default backend is `http://servicenow-mock:8080`. The mock and MCP Service resolve within the hub namespace, including a custom `NAMESPACE`. The Network chatbot uses the shared backend and credentials for incident counts by default.
+Network-only, Telco-only, and combined hubs each deploy one `mcp-noc-servicenow` endpoint and register `mcp::noc-servicenow` once with LlamaStack. The Network agent uses that toolgroup for escalation. The Network chatbot uses the configured backend and credentials to read incident counts.
 
 ### Use the mock
 
-Make and direct Helm use the mock by default. With your usual model settings loaded, install a Telco-only hub in a custom namespace with this command.
+Make and direct Helm use the namespace-local `http://servicenow-mock:8080` backend by default. Set `ENABLE_SERVICENOW_MOCK=true` in Make or `global.servicenow.mock.enabled=true` in Helm to enable the mock. Clear any previous backend URL override to use the namespace-local default. With your usual model settings loaded, install a Telco-only hub in a custom namespace with this command.
 
 ```bash
 make helm-install NAMESPACE=hub-demo ENABLE_NETWORK_REMEDIATION=false \
@@ -129,9 +129,19 @@ Run `make telco-integration-tests NAMESPACE=hub-demo ENABLE_SERVICENOW_MOCK=true
 
 ### Connect a real instance
 
-Set `ENABLE_SERVICENOW_MOCK=false` and `SERVICENOW_INSTANCE_URL` in your Make configuration. Supply `SERVICENOW_API_KEY`, or supply both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD` for Basic auth. You can also set `SERVICENOW_SECRET_NAME` to use an existing Secret in the hub namespace. Make uses `SERVICENOW_INSTANCE_URL` as the base for Network incident links. For API key provisioning, follow the [ServiceNow bootstrap guide](../scripts/servicenow-bootstrap/README.md).
+Set `ENABLE_SERVICENOW_MOCK=false` and `SERVICENOW_INSTANCE_URL=https://your-instance.service-now.com` in `.env`, then load it and run `make helm-install` with your profile and deployment settings. Direct Helm takes the same URL as `global.servicenow.url`. The Network agent uses this URL for incident links by default. Keep `network.agentService.servicenowInstanceUrl` if your users open tickets at a separate browser URL.
 
-For direct Helm, add the shared values below to your deployment values. The referenced Secret should contain `SERVICENOW_API_KEY` or both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD`. To have Helm create `noc-servicenow-secret`, set `credentials.apiKey` or `credentials.username` and `credentials.password` under `global.servicenow`.
+Choose one credential configuration. The Helm keys in the table go under `global.servicenow.credentials`.
+
+| Authentication | Make | Helm |
+| --- | --- | --- |
+| API key | `SERVICENOW_API_KEY=<api-key>` | `apiKey: <api-key>` |
+| Basic auth | `SERVICENOW_USERNAME=<user>` and `SERVICENOW_PASSWORD=<password>` | `username: <user>` and `password: <password>` |
+| Existing Secret | `SERVICENOW_SECRET_NAME=servicenow-credentials` | `existingSecretName: servicenow-credentials` |
+
+API key and Basic auth values create the Helm-managed `noc-servicenow-secret`. An existing Secret must be in the hub namespace and contain `SERVICENOW_API_KEY` or both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD`. The API key takes precedence when the Secret contains both forms. For API key provisioning, see the [ServiceNow bootstrap guide](../scripts/servicenow-bootstrap/README.md).
+
+For direct Helm, add the following to your deployment values and pass the file with `-f` to `helm upgrade --install`. This example uses an existing Secret.
 
 ```yaml
 global:
@@ -147,14 +157,27 @@ Set `global.servicenow.mcp.image.repository` and `global.servicenow.mcp.image.ta
 
 ### Upgrade an existing Network release
 
-With Make, run `make helm-install` using the same release name, namespace, and configuration. With direct Helm, use the same release and namespace and load the current chart defaults together with your existing overrides.
+With Make, run `make helm-install` using the same release name and namespace and pass your existing configuration, including any overrides in `HELM_EXTRA_ARGS`. With direct Helm, use the same release and namespace and load the current chart defaults together with the stored release overrides.
 
 ```bash
 make helm-depend
 helm upgrade hub hub/helm --namespace <namespace> --reset-then-reuse-values --wait
 ```
 
-Helm updates `servicenow-mock`, `mcp-noc-servicenow`, and `noc-servicenow-secret` under the existing release. The `mcp::noc-servicenow` toolgroup keeps its endpoint. Legacy overrides in `network.servicenowMock`, `network.mcpSecrets.servicenow`, and `network.mcp-servers.mcp-servers.noc-servicenow` still supply the mock selection, credentials, backend URL, and MCP image. Explicit `global.servicenow` settings take precedence. For an existing externally managed `noc-servicenow-secret`, keep `network.mcpSecrets.servicenow.create=false` or set `global.servicenow.credentials.existingSecretName` to that Secret.
+The upgrade retains the MCP Deployment, Service, credential Secret name, and LlamaStack toolgroup. Move each legacy override to its shared path when you migrate your configuration. Shared fields take precedence, and omitted shared fields can still inherit their legacy values.
+
+| Legacy Helm value | Shared Helm value |
+| --- | --- |
+| `network.servicenowMock.enabled` | `global.servicenow.mock.enabled` |
+| `network.servicenowMock.image` | `global.servicenow.mock.image` |
+| `network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL` | `global.servicenow.url` |
+| `network.chatbotService.env.servicenowUrl` | `global.servicenow.url` |
+| `network.mcpSecrets.servicenow` | `global.servicenow.credentials` |
+| `network.mcp-servers.mcp-servers.noc-servicenow.image` | `global.servicenow.mcp.image` |
+
+To switch from a legacy API key to Basic auth, set both shared `username` and `password`. They clear the inherited API key unless you also set a shared `apiKey`. For an externally managed `noc-servicenow-secret`, keep `network.mcpSecrets.servicenow.create=false` or set `global.servicenow.credentials.existingSecretName` to that Secret. To switch from an inherited existing Secret to Helm-managed credentials, set `global.servicenow.credentials.existingSecretName` to an empty string and `global.servicenow.credentials.create=true` together with the new credentials.
+
+Helm replaces pods that use the managed credentials when they change. After rotating an externally managed Secret, restart `deployment/mcp-noc-servicenow` in the hub namespace so it reloads the Secret. Also restart `deployment/hub-chatbot-service` and `deployment/servicenow-mock` if they are installed.
 
 ## Operational inputs
 

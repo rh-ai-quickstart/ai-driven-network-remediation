@@ -45,10 +45,30 @@ new chart defaults. Preserve the global/local precedence of llama-stack 0.8.7.
   {{- /* Helm can carry the old hardcoded namespace forward with --reuse-values. */ -}}
   {{- $legacyUrl = "" -}}
 {{- end -}}
-{{- $url := coalesce (get $shared "url") $legacyUrl "http://servicenow-mock:8080" -}}
+{{- $url := $legacyUrl -}}
+{{- if hasKey $shared "url" -}}
+  {{- $url = get $shared "url" -}}
+{{- end -}}
+{{- $url = $url | default "" | trim | trimSuffix "/" -}}
+{{- if not $mock.enabled -}}
+  {{- if or (not $url) (eq $url "http://servicenow-mock:8080") -}}
+    {{- fail "Set global.servicenow.url (SERVICENOW_INSTANCE_URL in Make) to use a real ServiceNow instance." -}}
+  {{- end -}}
+  {{- $apiKey := trim ($credentials.apiKey | default "" | toString) -}}
+  {{- if and $credentials.create (not $credentials.existingSecretName) (not (or $apiKey (and $credentials.username $credentials.password))) -}}
+    {{- fail "Set global.servicenow.credentials to an API key, a username and password, or an existing Secret name. See docs/integration-setup.md for Helm and Make settings." -}}
+  {{- end -}}
+{{- end -}}
 {{- $env := mergeOverwrite (dict "MCP_PORT" "8000" "MCP_TRANSPORT" "streamable-http") (get $legacyMcp "env" | default dict) -}}
-{{- $_ := set $env "SERVICENOW_URL" $url -}}
+{{- $_ := set $env "SERVICENOW_URL" ($url | default "http://servicenow-mock:8080") -}}
 {{- dict "mock" $mock "mcp" $mcp "credentials" $credentials "env" $env | toJson -}}
+{{- end -}}
+
+{{- define "hub.servicenowCredentialAnnotation" -}}
+{{- if and .create (not .existingSecretName) -}}
+annotations:
+  checksum/servicenow-credentials: {{ . | toJson | sha256sum | quote }}
+{{- end -}}
 {{- end -}}
 
 {{- define "hub.servicenowCredentialEnv" -}}

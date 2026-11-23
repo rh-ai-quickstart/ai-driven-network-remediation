@@ -110,6 +110,7 @@ ENABLE_S4              ?= true
 ENABLE_LOKISTACK       ?= $(if $(filter 1,$(CLUSTER_COUNT)),false,true)
 ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
+_servicenow_mock_override := $(if $(filter undefined,$(origin ENABLE_SERVICENOW_MOCK)),,$(ENABLE_SERVICENOW_MOCK))
 ENABLE_SERVICENOW_MOCK ?= true
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
@@ -276,22 +277,27 @@ helm_mock_args = \
 	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set network.aapCredential.enabled=true,) \
 	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set-string network.aapCredential.saNamespace='$(EDGE_NAMESPACE)',)
 
-# The hub reads these legacy paths for both profiles. This keeps existing
-# HELM_EXTRA_ARGS overrides working, while explicit global.servicenow values win.
+# Pass explicit backend settings at hub scope. Keep image build defaults on the
+# legacy paths so existing image overrides in HELM_EXTRA_ARGS still apply.
+_servicenow_comma := ,
+servicenow_helm_escape = $(subst {,\{,$(subst $(_servicenow_comma),\$(_servicenow_comma),$(subst \,\\,$(1))))
+servicenow_helm_string = $(if $(value $(2)),--set-string '$(1)=$(subst ','"'"',$(call servicenow_helm_escape,$(value $(2))))')
+
 helm_servicenow_args = \
-	--set network.servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
+	$(if $(_servicenow_mock_override),--set global.servicenow.mock.enabled=$(_servicenow_mock_override),) \
 	--set-string network.servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
 	--set-string network.servicenowMock.image.tag=$(VERSION) \
 	--set-string network.mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
 	--set-string network.mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION) \
-	$(if $(SERVICENOW_SECRET_NAME),--set-string network.mcpSecrets.servicenow.existingSecretName='$(SERVICENOW_SECRET_NAME)',) \
-	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(helm_servicenow_real_args),)
+	$(call servicenow_helm_string,global.servicenow.credentials.existingSecretName,SERVICENOW_SECRET_NAME) \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(helm_servicenow_real_args),$(call servicenow_helm_string,network.agentService.servicenowInstanceUrl,SERVICENOW_INSTANCE_URL)) \
+	--set-string network.agentService.servicenowCreateResolved='$(SERVICENOW_CREATE_RESOLVED)'
 
 helm_servicenow_real_args = \
-	$(if $(SERVICENOW_INSTANCE_URL),--set-string network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL='$(SERVICENOW_INSTANCE_URL)',) \
-	$(if $(SERVICENOW_API_KEY),--set-string network.mcpSecrets.servicenow.apiKey='$(SERVICENOW_API_KEY)',) \
-	$(if $(SERVICENOW_USERNAME),--set-string network.mcpSecrets.servicenow.username='$(SERVICENOW_USERNAME)',) \
-	$(if $(SERVICENOW_PASSWORD),--set-string network.mcpSecrets.servicenow.password='$(SERVICENOW_PASSWORD)',)
+	$(call servicenow_helm_string,global.servicenow.url,SERVICENOW_INSTANCE_URL) \
+	$(call servicenow_helm_string,global.servicenow.credentials.apiKey,SERVICENOW_API_KEY) \
+	$(call servicenow_helm_string,global.servicenow.credentials.username,SERVICENOW_USERNAME) \
+	$(call servicenow_helm_string,global.servicenow.credentials.password,SERVICENOW_PASSWORD)
 
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
@@ -333,9 +339,7 @@ helm_lightspeed_args = \
 helm_slack_args = \
 	--set network.agentService.slack.enabled=$(ENABLE_SLACK) \
 	$(if $(SLACK_BOT_TOKEN),--set-string network.agentService.slack.botToken='$(SLACK_BOT_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SLACK)),--set-string network.agentService.slack.channel='$(SLACK_CHANNEL)',) \
-	$(if $(SERVICENOW_INSTANCE_URL),--set-string network.agentService.servicenowInstanceUrl='$(SERVICENOW_INSTANCE_URL)',) \
-	--set-string network.agentService.servicenowCreateResolved='$(SERVICENOW_CREATE_RESOLVED)'
+	$(if $(filter true,$(ENABLE_SLACK)),--set-string network.agentService.slack.channel='$(SLACK_CHANNEL)',)
 
 helm_multicluster_args = \
 	$(if $(filter true,$(ENABLE_MULTICLUSTER)),--set network.aapCredential.multicluster.enabled=true,) \
@@ -726,9 +730,6 @@ ifeq ($(ENABLE_LIGHTSPEED),true)
 	$(MAKE) _check-lightspeed-operator
 endif
 ifeq ($(ENABLE_HUB),true)
-ifeq ($(ENABLE_SERVICENOW_MOCK),false)
-	$(MAKE) check-servicenow-config
-endif
 	$(MAKE) check-adnr-llm-config
 	@helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
@@ -789,22 +790,6 @@ check-adnr-llm-config:
 		echo "ERROR: Missing required ADNR LLM configuration:$$missing"; \
 		echo "Set ADNR_LLM_ID, ADNR_LLM_URL, and ADNR_LLM_TOKEN before running 'make helm-install'."; \
 		echo "See .env.example and docs/manual-deploy.md for the expected values."; \
-		exit 1; \
-	fi
-
-.PHONY: check-servicenow-config
-check-servicenow-config:
-	@missing=""; \
-	[ -n "$(SERVICENOW_INSTANCE_URL)" ] || missing="$$missing SERVICENOW_INSTANCE_URL"; \
-	if [ -z "$(SERVICENOW_SECRET_NAME)" ] && [ -z "$(SERVICENOW_API_KEY)" ] && { [ -z "$(SERVICENOW_USERNAME)" ] || [ -z "$(SERVICENOW_PASSWORD)" ]; }; then \
-		missing="$$missing SERVICENOW_SECRET_NAME, SERVICENOW_API_KEY, or SERVICENOW_USERNAME+SERVICENOW_PASSWORD"; \
-	fi; \
-	if [ -n "$$missing" ]; then \
-		echo "ERROR: ENABLE_SERVICENOW_MOCK=false requires real ServiceNow config:$$missing"; \
-		echo "Recommended: run 'make servicenow-bootstrap' (needs admin creds), then set"; \
-		echo "SERVICENOW_INSTANCE_URL and SERVICENOW_API_KEY in .env."; \
-		echo "Basic auth alternative: SERVICENOW_INSTANCE_URL + SERVICENOW_USERNAME + SERVICENOW_PASSWORD."; \
-		echo "Or keep the mock: ENABLE_SERVICENOW_MOCK=true."; \
 		exit 1; \
 	fi
 
