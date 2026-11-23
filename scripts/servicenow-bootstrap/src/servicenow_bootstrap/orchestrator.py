@@ -239,9 +239,8 @@ Examples:
             "  3. Set the REST API dropdown on 'NOC Agent - Tables' access " "policy to 'Table API' (if not auto-set)"
         )
         print(
-            "  4. Deploy with: make helm-install "
-            'HELM_EXTRA_ARGS="--set mcp-servers.mcp-servers.'
-            'noc-servicenow.env.SERVICENOW_URL=https://devXXXXX.service-now.com ..."'
+            "  4. Set SERVICENOW_INSTANCE_URL, SERVICENOW_API_KEY, and "
+            "ENABLE_SERVICENOW_MOCK=false, then run make helm-install"
         )
 
     except KeyboardInterrupt:

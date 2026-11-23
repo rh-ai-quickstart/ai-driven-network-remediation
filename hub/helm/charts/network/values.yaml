@@ -27,16 +27,6 @@ gitea:
   adminPassword: ""
 
 # ══════════════════════════════════════════════════════════════════════
-# Mock services
-# ══════════════════════════════════════════════════════════════════════
-
-servicenowMock:
-  enabled: true
-  image:
-    repository: quay.io/rh-ai-quickstart/noc-servicenow-mock
-    tag: "0.1.0"
-
-# ══════════════════════════════════════════════════════════════════════
 # Edge RBAC hook (pre-install Job) — single-cluster only
 # ══════════════════════════════════════════════════════════════════════
 
@@ -97,7 +87,7 @@ chatbotService:
     mcpKafkaUrl: "http://mcp-noc-kafka:8000"
     mcpAapUrl: "http://mcp-noc-aap:8000"
     mcpServicenowUrl: "http://mcp-noc-servicenow:8000"
-    servicenowUrl: "http://servicenow-mock:8080"
+    servicenowUrl: ""
     kafkaBootstrap: "kafka:9092"
     modelApiUrl: "http://llamastack-service:8321/v1/chat/completions"
     modelName: ""
@@ -206,11 +196,6 @@ mcpSecrets:
   gitea:
     create: false
     token: ""
-  servicenow:
-    create: true
-    username: ""
-    password: ""
-    apiKey: ""
 
 # ══════════════════════════════════════════════════════════════════════
 # MCP Servers (subchart: mcp-servers from ai-architecture-charts)
@@ -318,31 +303,6 @@ mcp-servers:
         mountPath: /secrets
         secrets:
           - noc-gitea-secret
-
-    noc-servicenow:
-      enabled: true
-      deploymentMode: deployment
-      image:
-        repository: quay.io/rh-ai-quickstart/noc-mcp-servicenow
-        tag: "0.1.0"
-      port: 8000
-      targetPort: 8000
-      transport: streamable-http
-      imagePullPolicy: Always
-      env:
-        MCP_TRANSPORT: "streamable-http"
-        MCP_PORT: "8000"
-        SERVICENOW_URL: "http://servicenow-mock.hub.svc:8080"
-      envSecrets:
-        SERVICENOW_USERNAME:
-          name: noc-servicenow-secret
-          key: SERVICENOW_USERNAME
-        SERVICENOW_PASSWORD:
-          name: noc-servicenow-secret
-          key: SERVICENOW_PASSWORD
-        SERVICENOW_API_KEY:
-          name: noc-servicenow-secret
-          key: SERVICENOW_API_KEY
 
     # Disable default servers from the shared chart
     weather:

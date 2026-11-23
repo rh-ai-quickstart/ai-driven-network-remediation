@@ -2,9 +2,13 @@
 {{- $enabledMcpServers := list }}
 {{- if index .Values "mcp-servers" "enabled" }}
 {{- range $name, $server := index .Values "mcp-servers" "mcp-servers" }}
-{{- if $server.enabled }}
+{{- if and (ne $name "noc-servicenow") $server.enabled }}
 {{- $enabledMcpServers = append $enabledMcpServers $name }}
 {{- end }}
+{{- end }}
+{{- $legacyMcp := dig "mcp-servers" "noc-servicenow" (dict) (index .Values "mcp-servers") }}
+{{- if dig "enabled" true $legacyMcp }}
+{{- $enabledMcpServers = append $enabledMcpServers "noc-servicenow" }}
 {{- end }}
 {{- end }}
 apiVersion: apps/v1

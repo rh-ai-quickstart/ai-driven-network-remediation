@@ -109,11 +109,52 @@ Use the real-integration `AAP_URL` example in [.env.example](../.env.example) an
 | Network AAP | Make sets `AAP_URL` to the namespace-local mock when enabled, or `http://aap.aap.svc` otherwise. |
 | RAN AAP | Uses the same Make `AAP_URL` value as Network. |
 | AAP namespace | `AAP_NAMESPACE` controls the prerequisite check and Lightspeed token lookup; it does not change controller URLs. The prerequisite check requires a controller Service named `aap` in that namespace. |
-| ServiceNow escalation | Set `ENABLE_SERVICENOW_MOCK=false` with `SERVICENOW_INSTANCE_URL` and `SERVICENOW_API_KEY` (preferred), or `SERVICENOW_USERNAME` + `SERVICENOW_PASSWORD` (Basic-auth fallback). `make helm-install` wires the `noc-servicenow` MCP server and the chatbot dashboard probe from these; no manual Helm overrides needed. |
-| ServiceNow dashboard | Uses the same `SERVICENOW_INSTANCE_URL` and `noc-servicenow-secret` credentials as the MCP server for open-incident counts and reachability. |
-| Incident links | `SERVICENOW_INSTANCE_URL` sets the base URL for incident links. |
 
-`AAP_URL` is a Make variable shared by both services. Its default is the namespace-local mock when `ENABLE_AAP_MOCK=true` and `http://aap.aap.svc` otherwise. Set `AAP_URL` on the Make command line or in the environment to override both URLs. Direct Helm installs retain the chart defaults. The AAP controller API prefix defaults to `/api/controller/v2`. `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD` provision the local bootstrap account and, when `ENABLE_SERVICENOW_MOCK=false`, serve as the Basic-auth fallback the Makefile forwards to the `noc-servicenow` MCP server. See the [ServiceNow setup guide](../scripts/servicenow-bootstrap/README.md) for account provisioning.
+`AAP_URL` is a Make variable shared by both services. Its default is the namespace-local mock when `ENABLE_AAP_MOCK=true` and `http://aap.aap.svc` otherwise. Set `AAP_URL` on the Make command line or in the environment to override both URLs. Direct Helm installs retain the chart defaults. The AAP controller API prefix defaults to `/api/controller/v2`.
+
+## ServiceNow
+
+The hub deploys one `mcp-noc-servicenow` endpoint and registers `mcp::noc-servicenow` with LlamaStack for each profile. The default backend is `http://servicenow-mock:8080`. The mock and MCP Service resolve within the hub namespace, including a custom `NAMESPACE`. The Network chatbot uses the shared backend and credentials for incident counts by default.
+
+### Use the mock
+
+Make and direct Helm use the mock by default. With your usual model settings loaded, install a Telco-only hub in a custom namespace with this command.
+
+```bash
+make helm-install NAMESPACE=hub-demo ENABLE_NETWORK_REMEDIATION=false \
+  ENABLE_TELCO_ORAN=true ENABLE_SERVICENOW_MOCK=true
+```
+
+Run `make telco-integration-tests NAMESPACE=hub-demo ENABLE_SERVICENOW_MOCK=true` to include the smoke test that discovers the toolgroup and reads an incident created in that hub's mock.
+
+### Connect a real instance
+
+Set `ENABLE_SERVICENOW_MOCK=false` and `SERVICENOW_INSTANCE_URL` in your Make configuration. Supply `SERVICENOW_API_KEY`, or supply both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD` for Basic auth. You can also set `SERVICENOW_SECRET_NAME` to use an existing Secret in the hub namespace. Make uses `SERVICENOW_INSTANCE_URL` as the base for Network incident links. For API key provisioning, follow the [ServiceNow bootstrap guide](../scripts/servicenow-bootstrap/README.md).
+
+For direct Helm, add the shared values below to your deployment values. The referenced Secret should contain `SERVICENOW_API_KEY` or both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD`. To have Helm create `noc-servicenow-secret`, set `credentials.apiKey` or `credentials.username` and `credentials.password` under `global.servicenow`.
+
+```yaml
+global:
+  servicenow:
+    mock:
+      enabled: false
+    url: https://your-instance.service-now.com
+    credentials:
+      existingSecretName: servicenow-credentials
+```
+
+Set `global.servicenow.mcp.image.repository` and `global.servicenow.mcp.image.tag` to use a custom MCP image. The mock image uses `global.servicenow.mock.image.repository` and `global.servicenow.mock.image.tag`.
+
+### Upgrade an existing Network release
+
+With Make, run `make helm-install` using the same release name, namespace, and configuration. With direct Helm, use the same release and namespace and load the current chart defaults together with your existing overrides.
+
+```bash
+make helm-depend
+helm upgrade hub hub/helm --namespace <namespace> --reset-then-reuse-values --wait
+```
+
+Helm updates `servicenow-mock`, `mcp-noc-servicenow`, and `noc-servicenow-secret` under the existing release. The `mcp::noc-servicenow` toolgroup keeps its endpoint. Legacy overrides in `network.servicenowMock`, `network.mcpSecrets.servicenow`, and `network.mcp-servers.mcp-servers.noc-servicenow` still supply the mock selection, credentials, backend URL, and MCP image. Explicit `global.servicenow` settings take precedence. For an existing externally managed `noc-servicenow-secret`, keep `network.mcpSecrets.servicenow.create=false` or set `global.servicenow.credentials.existingSecretName` to that Secret.
 
 ## Operational inputs
 

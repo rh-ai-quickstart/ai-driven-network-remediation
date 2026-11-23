@@ -120,7 +120,7 @@ The following steps install Network and RAN on one hub cluster, with edge worklo
 
    **Real ServiceNow setup:** Run `make servicenow-bootstrap` once with your PDI admin credentials to provision the integration account and an API key. Then set `SERVICENOW_INSTANCE_URL` and `SERVICENOW_API_KEY`, and set `ENABLE_SERVICENOW_MOCK=false`. See [scripts/servicenow-bootstrap/README.md](scripts/servicenow-bootstrap/README.md) for details.
 
-   **Current limitation:** Authenticated ServiceNow incident counts are unavailable in the Network dashboard through this deployment configuration. The escalation integration is configured separately.
+   The hub registers the same ServiceNow MCP endpoint for Network-only, Telco-only, and combined deployments. The Network dashboard uses the same backend and credentials to read incident counts by default.
 
    Quote values containing spaces or shell special characters. Configure [operational inputs](docs/integration-setup.md#operational-inputs) for workload logs and radio measurements so the workflows receive incidents.
 

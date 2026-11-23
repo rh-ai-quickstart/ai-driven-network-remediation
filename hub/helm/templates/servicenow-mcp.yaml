@@ -1,0 +1,47 @@
+{{- $config := include "hub.servicenow" . | fromJson }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-noc-servicenow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hub.servicenowMcpLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "hub.servicenowMcpSelector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "hub.servicenowMcpSelector" . | nindent 8 }}
+        app: mcp-noc-servicenow
+    spec:
+      containers:
+        - name: noc-servicenow
+          image: "{{ $config.mcp.image.repository }}:{{ $config.mcp.image.tag }}"
+          imagePullPolicy: {{ $config.mcp.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            {{- range $key, $value := $config.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- include "hub.servicenowCredentialEnv" $config.credentials | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-noc-servicenow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "hub.servicenowMcpLabels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "hub.servicenowMcpSelector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000

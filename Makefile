@@ -155,6 +155,7 @@ SERVICENOW_CREATE_RESOLVED ?= false
 SERVICENOW_API_KEY  ?=
 SERVICENOW_USERNAME ?=
 SERVICENOW_PASSWORD ?=
+SERVICENOW_SECRET_NAME ?=
 
 # ── Langfuse (optional: ENABLE_LANGFUSE=true) ───────────────────
 ENABLE_LANGFUSE        ?=
@@ -177,14 +178,14 @@ SERVICENOW_MOCK_IMG    := $(REGISTRY)/noc-servicenow-mock:$(VERSION)
 EDGE_FAST_PATH_HEALER_IMG := $(REGISTRY)/noc-edge-fast-path-healer:$(VERSION)
 
 SHARED_IMAGES := \
-	$(INGESTION_IMG)
+	$(INGESTION_IMG) \
+	$(MCP_SERVICENOW_IMG)
 
 MCP_IMAGES := \
 	$(MCP_OPENSHIFT_IMG) \
 	$(MCP_LOKISTACK_IMG) \
 	$(MCP_KAFKA_IMG) \
-	$(MCP_AAP_IMG) \
-	$(MCP_SERVICENOW_IMG)
+	$(MCP_AAP_IMG)
 
 NETWORK_IMAGES := \
 	$(CHATBOT_IMG) \
@@ -205,7 +206,7 @@ EDGE_IMAGES := \
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),$(AAP_MOCK_IMG)) \
-	$(if $(and $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(filter true,$(ENABLE_SERVICENOW_MOCK))),$(SERVICENOW_MOCK_IMG)) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),$(SERVICENOW_MOCK_IMG)) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(MCP_IMAGES) $(NETWORK_IMAGES) $(EDGE_IMAGES)) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES))
 
@@ -245,9 +246,7 @@ helm_mcp_image_args = \
 	--set network.mcp-servers.mcp-servers.noc-kafka.image.repository=$(REGISTRY)/noc-mcp-kafka \
 	--set network.mcp-servers.mcp-servers.noc-kafka.image.tag=$(VERSION) \
 	--set network.mcp-servers.mcp-servers.noc-aap.image.repository=$(REGISTRY)/noc-mcp-aap \
-	--set network.mcp-servers.mcp-servers.noc-aap.image.tag=$(VERSION) \
-	--set network.mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
-	--set network.mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION)
+	--set network.mcp-servers.mcp-servers.noc-aap.image.tag=$(VERSION)
 
 ifeq ($(ENABLE_MULTICLUSTER),true)
 ifndef CLUSTER_PROXY_URL
@@ -264,9 +263,6 @@ helm_mock_args = \
 	--set global.aapMock.enabled=$(ENABLE_AAP_MOCK) \
 	--set global.aapMock.image.repository=$(REGISTRY)/noc-aap-mock \
 	--set global.aapMock.image.tag=$(VERSION) \
-	--set network.servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
-	--set network.servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
-	--set network.servicenowMock.image.tag=$(VERSION) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.AAP_VERIFY_SSL=false,) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),--set network.mcp-servers.mcp-servers.noc-aap.env.GITEA_URL=http://aap-mock.$(NAMESPACE).svc:8080,) \
 	--set-string network.mcp-servers.mcp-servers.noc-aap.env.AAP_URL='$(AAP_URL)' \
@@ -277,24 +273,25 @@ helm_mock_args = \
 	$(if $(AAP_SECRET_NAME),--set-string network.mcpSecrets.aap.existingSecretName='$(AAP_SECRET_NAME)',) \
 	$(if $(AAP_SECRET_NAME),--set-string network.mcp-servers.mcp-servers.noc-aap.envSecrets.AAP_TOKEN.name='$(AAP_SECRET_NAME)',) \
 	$(if $(_aap_set_token),--set-string network.mcpSecrets.aap.token='$(AAP_TOKEN)',) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.chatbotService.env.servicenowUrl=http://servicenow-mock.$(NAMESPACE).svc:8080,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_MODE=mock,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.mcpSecrets.servicenow.username=admin,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.mcpSecrets.servicenow.password=admin,) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),--set-string network.mcpSecrets.servicenow.apiKey=demo-api-key-2026,) \
 	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set network.aapCredential.enabled=true,) \
 	$(if $(filter false,$(ENABLE_AAP_MOCK)),--set-string network.aapCredential.saNamespace='$(EDGE_NAMESPACE)',)
 
-# Real ServiceNow wiring - emitted only when the mock is disabled.
-# URL reuses SERVICENOW_INSTANCE_URL (same var as bootstrap + dashboard links).
-# MCP server prefers the API key and falls back to Basic Auth automatically.
+# The hub reads these legacy paths for both profiles. This keeps existing
+# HELM_EXTRA_ARGS overrides working, while explicit global.servicenow values win.
+helm_servicenow_args = \
+	--set network.servicenowMock.enabled=$(ENABLE_SERVICENOW_MOCK) \
+	--set-string network.servicenowMock.image.repository=$(REGISTRY)/noc-servicenow-mock \
+	--set-string network.servicenowMock.image.tag=$(VERSION) \
+	--set-string network.mcp-servers.mcp-servers.noc-servicenow.image.repository=$(REGISTRY)/noc-mcp-servicenow \
+	--set-string network.mcp-servers.mcp-servers.noc-servicenow.image.tag=$(VERSION) \
+	$(if $(SERVICENOW_SECRET_NAME),--set-string network.mcpSecrets.servicenow.existingSecretName='$(SERVICENOW_SECRET_NAME)',) \
+	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(helm_servicenow_real_args),)
+
 helm_servicenow_real_args = \
-	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_INSTANCE_URL),--set-string network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL='$(SERVICENOW_INSTANCE_URL)',),) \
-	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_INSTANCE_URL),--set-string network.chatbotService.env.servicenowUrl='$(SERVICENOW_INSTANCE_URL)',),) \
-	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_API_KEY),--set-string network.mcpSecrets.servicenow.apiKey='$(SERVICENOW_API_KEY)',),) \
-	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_USERNAME),--set-string network.mcpSecrets.servicenow.username='$(SERVICENOW_USERNAME)',),) \
-	$(if $(filter false,$(ENABLE_SERVICENOW_MOCK)),$(if $(SERVICENOW_PASSWORD),--set-string network.mcpSecrets.servicenow.password='$(SERVICENOW_PASSWORD)',),)
+	$(if $(SERVICENOW_INSTANCE_URL),--set-string network.mcp-servers.mcp-servers.noc-servicenow.env.SERVICENOW_URL='$(SERVICENOW_INSTANCE_URL)',) \
+	$(if $(SERVICENOW_API_KEY),--set-string network.mcpSecrets.servicenow.apiKey='$(SERVICENOW_API_KEY)',) \
+	$(if $(SERVICENOW_USERNAME),--set-string network.mcpSecrets.servicenow.username='$(SERVICENOW_USERNAME)',) \
+	$(if $(SERVICENOW_PASSWORD),--set-string network.mcpSecrets.servicenow.password='$(SERVICENOW_PASSWORD)',)
 
 helm_gitea_args = \
 	--set gitea.gitea.external=$(GITEA_EXTERNAL) \
@@ -361,8 +358,7 @@ helm_infra_args = \
 helm_network_remediation_mcp_args = \
 	--set-string llama-stack.mcp-servers.noc-openshift.uri=http://mcp-noc-openshift:8000/mcp \
 	--set-string llama-stack.mcp-servers.noc-aap.uri=http://mcp-noc-aap:8000/mcp \
-	$(if $(filter true,$(ENABLE_KAFKA)),--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp,) \
-	--set-string llama-stack.mcp-servers.noc-servicenow.uri=http://mcp-noc-servicenow:8000/mcp
+	$(if $(filter true,$(ENABLE_KAFKA)),--set-string llama-stack.mcp-servers.noc-kafka.uri=http://mcp-noc-kafka:8000/mcp,)
 
 helm_all_args = \
 	--set image.registry=$(REGISTRY) \
@@ -396,7 +392,7 @@ helm_all_args = \
 	$(helm_mcp_image_args) \
 	$(helm_mock_args) \
 	$(helm_gitea_args) \
-	$(helm_servicenow_real_args) \
+	$(helm_servicenow_args) \
 	$(helm_adnr_llm_args) \
 	$(helm_adnr_detect_args) \
 	$(helm_adnr_classify_args) \
@@ -734,7 +730,7 @@ ifeq ($(ENABLE_SERVICENOW_MOCK),false)
 	$(MAKE) check-servicenow-config
 endif
 	$(MAKE) check-adnr-llm-config
-	helm upgrade --install $(RELEASE) hub/helm \
+	@helm upgrade --install $(RELEASE) hub/helm \
 		--namespace $(NAMESPACE) \
 		-f $(SPOKES_GENERATED) \
 		$(helm_all_args) \
@@ -800,8 +796,8 @@ check-adnr-llm-config:
 check-servicenow-config:
 	@missing=""; \
 	[ -n "$(SERVICENOW_INSTANCE_URL)" ] || missing="$$missing SERVICENOW_INSTANCE_URL"; \
-	if [ -z "$(SERVICENOW_API_KEY)" ] && { [ -z "$(SERVICENOW_USERNAME)" ] || [ -z "$(SERVICENOW_PASSWORD)" ]; }; then \
-		missing="$$missing SERVICENOW_API_KEY(or SERVICENOW_USERNAME+SERVICENOW_PASSWORD)"; \
+	if [ -z "$(SERVICENOW_SECRET_NAME)" ] && [ -z "$(SERVICENOW_API_KEY)" ] && { [ -z "$(SERVICENOW_USERNAME)" ] || [ -z "$(SERVICENOW_PASSWORD)" ]; }; then \
+		missing="$$missing SERVICENOW_SECRET_NAME, SERVICENOW_API_KEY, or SERVICENOW_USERNAME+SERVICENOW_PASSWORD"; \
 	fi; \
 	if [ -n "$$missing" ]; then \
 		echo "ERROR: ENABLE_SERVICENOW_MOCK=false requires real ServiceNow config:$$missing"; \
@@ -849,9 +845,9 @@ edge-rbac-teardown:
 # ══════════════════════════════════════════════════════════════════════
 
 .PHONY: build-all-images
-build-all-images: build-ingestion-image \
+build-all-images: build-ingestion-image build-servicenow-mcp-image \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),build-aap-mock-image) \
-	$(if $(and $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(filter true,$(ENABLE_SERVICENOW_MOCK))),build-servicenow-mock-image) \
+	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),build-servicenow-mock-image) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image)
 
@@ -910,11 +906,14 @@ build-frontend-image:
 	$(CONTAINER_TOOL) build -t $(FRONTEND_IMG) --platform=$(ARCH) --build-arg VITE_ENABLE_TELCO_ORAN=$(ENABLE_TELCO_ORAN) -f hub/frontend/Containerfile hub/frontend
 
 .PHONY: build-mcp-images
-build-mcp-images:
+build-mcp-images: build-servicenow-mcp-image
 	$(CONTAINER_TOOL) build -t $(MCP_OPENSHIFT_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-openshift  --build-arg MODULE_NAME=mcp_openshift  -f $(MCP_OPENSHIFT_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_LOKISTACK_IMG)  --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-lokistack  --build-arg MODULE_NAME=mcp_lokistack  -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_KAFKA_IMG)      --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-kafka      --build-arg MODULE_NAME=mcp_kafka      -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 	$(CONTAINER_TOOL) build -t $(MCP_AAP_IMG)        --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-aap        --build-arg MODULE_NAME=mcp_aap        -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
+
+.PHONY: build-servicenow-mcp-image
+build-servicenow-mcp-image:
 	$(CONTAINER_TOOL) build -t $(MCP_SERVICENOW_IMG) --platform=$(ARCH) --build-arg SERVICE_NAME=mcp-servicenow --build-arg MODULE_NAME=mcp_servicenow -f $(MCP_CONTAINERFILE) $(MCP_CONTEXT)
 
 .PHONY: build-edge-fast-path-healer-image
@@ -1098,98 +1097,57 @@ multi-cluster-template-tests: helm-depend
 	fi
 	cd hub/integration-tests && uv sync && uv run pytest tests/multi_cluster/ -v
 
-# ── Shared port-forward block for integration tests ──────────────
-# Starts port-forwards for services used by tests/generic/ (MCP servers,
-# ingestion-pipeline, llamastack). Each target appends use-case-specific
-# port-forwards and its own trap/pytest line.
-.PHONY: network-integration-tests
-network-integration-tests:
-	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
-	PF_INGESTION_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
-	PF_LLAMASTACK_PID=$$!; \
-	PF_LOKISTACK_PID=""; \
-	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
-		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
-		PF_LOKISTACK_PID=$$!; \
-	fi; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-kafka 8003:8000 & \
-	PF_KAFKA_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
-	PF_AAP_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
-	PF_SERVICENOW_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-openshift 8001:8000 & \
-	PF_OPENSHIFT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
-	PF_CHATBOT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
-	PF_AGENT_PID=$$!; \
-	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID" EXIT; \
-	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/network -v
+# Use the same test runner for the profile-specific and combined entry points.
+TEST_NETWORK ?= $(ENABLE_NETWORK_REMEDIATION)
+TEST_TELCO ?= $(ENABLE_TELCO_ORAN)
+network-integration-tests: TEST_NETWORK = true
+network-integration-tests: TEST_TELCO = false
+telco-integration-tests: TEST_NETWORK = false
+telco-integration-tests: TEST_TELCO = true
 
-.PHONY: telco-integration-tests
-telco-integration-tests:
-	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
-	PF_INGESTION_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
-	PF_LLAMASTACK_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
-	PF_RAN_CHATBOT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-ran-anomaly-detector 8002:8002 & \
-	PF_RAN_ANOMALY_PID=$$!; \
-	PF_RAN_RCA_PID=""; PF_RAN_REMEDIATION_PID=""; \
-	if [ "$(RCA_REAL_E2E)" = "1" ]; then \
-	  oc port-forward -n $(NAMESPACE) svc/hub-ran-rca-service 8013:8003 & \
-	  PF_RAN_RCA_PID=$$!; \
-	  oc port-forward -n $(NAMESPACE) svc/hub-ran-remediation-service 8014:8004 & \
-	  PF_RAN_REMEDIATION_PID=$$!; \
+.PHONY: integration-tests network-integration-tests telco-integration-tests
+integration-tests network-integration-tests telco-integration-tests:
+	@pids=""; \
+	forward() { oc port-forward -n "$$1" "svc/$$2" "$$3" & pids="$$pids $$!"; }; \
+	trap 'if [ -n "$$pids" ]; then kill $$pids 2>/dev/null || true; fi' EXIT; \
+	forward $(NAMESPACE) hub-ingestion-pipeline 8000:8000; \
+	forward $(NAMESPACE) llamastack-service 8321:8321; \
+	if [ "$(TEST_NETWORK)" = "true" ]; then \
+	  forward $(NAMESPACE) mcp-noc-openshift 8001:8000; \
+	  if [ "$(ENABLE_LOKISTACK)" = "true" ]; then forward $(NAMESPACE) mcp-noc-lokistack 8002:8000; fi; \
+	  forward $(NAMESPACE) mcp-noc-kafka 8003:8000; \
+	  forward $(NAMESPACE) mcp-noc-aap 8004:8000; \
+	  forward $(NAMESPACE) mcp-noc-servicenow 8006:8000; \
+	  forward $(NAMESPACE) hub-agent-service 8007:8001; \
+	  forward $(NAMESPACE) hub-chatbot-service 8080:80; \
 	fi; \
-	PF_RAN_ML_PID=""; \
-	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ] && [ "$(RAN_ML_SERVICE_REQUIRED)" = "true" ]; then \
-	  oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
-	  PF_RAN_ML_PID=$$!; \
+	servicenow_mock_url=""; \
+	if [ "$(TEST_TELCO)" = "true" ]; then \
+	  forward $(NAMESPACE) hub-ran-chatbot-service 8008:8003; \
+	  forward $(NAMESPACE) hub-ran-anomaly-detector 8012:8002; \
+	  if [ "$(RCA_REAL_E2E)" = "1" ]; then \
+	    forward $(NAMESPACE) hub-ran-rca-service 8013:8003; \
+	    forward $(NAMESPACE) hub-ran-remediation-service 8014:8004; \
+	  fi; \
+	  if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ] && [ "$(RAN_ML_SERVICE_REQUIRED)" = "true" ]; then \
+	    forward $(MODEL_SERVING_NS) $(RAN_ML_SVC_NAME) 8009:80; \
+	  fi; \
+	  if [ "$(ENABLE_SERVICENOW_MOCK)" = "true" ]; then \
+	    forward $(NAMESPACE) servicenow-mock 8015:8080; \
+	    servicenow_mock_url=http://localhost:8015; \
+	  fi; \
 	fi; \
-	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ANOMALY_PID $$PF_RAN_RCA_PID $$PF_RAN_REMEDIATION_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
 	sleep 2 && cd hub/integration-tests && \
-	LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' RCA_E2E_EXPECT_CLASSIFIER=$(if $(ADNR_CLASSIFY_INFERENCE_URL),true,false) RCA_REAL_E2E='$(RCA_REAL_E2E)' RCA_EXPECTED_CLASSIFY_URL='$(ADNR_CLASSIFY_INFERENCE_URL)' RCA_EXPECTED_CLASSIFY_TOKEN='$(ADNR_CLASSIFY_TOKEN)' RCA_DEPLOYMENT_NAMESPACE='$(NAMESPACE)' RCA_EVIDENCE_FILE='$(RCA_EVIDENCE_FILE)' RAN_RCA_SERVICE_URL=http://localhost:8013 RAN_REMEDIATION_SERVICE_URL=http://localhost:8014 ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) ENABLE_NETWORK_REMEDIATION=false EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic tests/telco -v
-
-.PHONY: integration-tests
-integration-tests:
-	oc port-forward -n $(NAMESPACE) svc/hub-ingestion-pipeline 8000:8000 & \
-	PF_INGESTION_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/llamastack-service 8321:8321 & \
-	PF_LLAMASTACK_PID=$$!; \
-	PF_LOKISTACK_PID=""; \
-	if [ "$(ENABLE_LOKISTACK)" = "true" ]; then \
-		oc port-forward -n $(NAMESPACE) svc/mcp-noc-lokistack 8002:8000 & \
-		PF_LOKISTACK_PID=$$!; \
-	fi; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-kafka 8003:8000 & \
-	PF_KAFKA_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-aap 8004:8000 & \
-	PF_AAP_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-servicenow 8006:8000 & \
-	PF_SERVICENOW_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/mcp-noc-openshift 8001:8000 & \
-	PF_OPENSHIFT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-chatbot-service 8080:80 & \
-	PF_CHATBOT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-agent-service 8007:8001 & \
-	PF_AGENT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-ran-chatbot-service 8008:8003 & \
-	PF_RAN_CHATBOT_PID=$$!; \
-	oc port-forward -n $(NAMESPACE) svc/hub-ran-anomaly-detector 8002:8002 & \
-	PF_RAN_ANOMALY_PID=$$!; \
-	PF_RAN_ML_PID=""; \
-	if [ -z "$(ADNR_DETECT_INFERENCE_URL)" ] && [ "$(RAN_ML_SERVICE_REQUIRED)" = "true" ]; then \
-	  oc port-forward -n $(MODEL_SERVING_NS) svc/$(RAN_ML_SVC_NAME) 8009:80 & \
-	  PF_RAN_ML_PID=$$!; \
-	fi; \
-	trap "kill $$PF_INGESTION_PID $$PF_LLAMASTACK_PID $$PF_LOKISTACK_PID $$PF_KAFKA_PID $$PF_AAP_PID $$PF_SERVICENOW_PID $$PF_OPENSHIFT_PID $$PF_CHATBOT_PID $$PF_AGENT_PID $$PF_RAN_CHATBOT_PID $$PF_RAN_ANOMALY_PID $$PF_RAN_ML_PID 2>/dev/null || true" EXIT; \
-	sleep 2 && cd hub/integration-tests && \
-	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) uv run pytest tests/generic $(if $(filter true,$(ENABLE_TELCO_ORAN)),tests/telco) $(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),tests/network)
+	AGENT_SERVICE_URL=http://localhost:8007 LLAMASTACK_URL=http://localhost:8321 \
+	RAN_CHATBOT_SERVICE_URL=http://localhost:8008 RAN_ANOMALY_DETECTOR_URL=http://localhost:8012 \
+	RAN_ML_SERVICE_URL='$(RAN_ML_TEST_URL)' RAN_ML_SERVICE_TOKEN='$(ADNR_DETECT_TOKEN)' RAN_ML_SERVICE_REQUIRED='$(RAN_ML_SERVICE_REQUIRED)' \
+	RCA_E2E_EXPECT_CLASSIFIER=$(if $(ADNR_CLASSIFY_INFERENCE_URL),true,false) RCA_REAL_E2E='$(RCA_REAL_E2E)' \
+	RCA_EXPECTED_CLASSIFY_URL='$(ADNR_CLASSIFY_INFERENCE_URL)' RCA_EXPECTED_CLASSIFY_TOKEN='$(ADNR_CLASSIFY_TOKEN)' \
+	RCA_DEPLOYMENT_NAMESPACE='$(NAMESPACE)' RCA_EVIDENCE_FILE='$(RCA_EVIDENCE_FILE)' \
+	RAN_RCA_SERVICE_URL=http://localhost:8013 RAN_REMEDIATION_SERVICE_URL=http://localhost:8014 \
+	SERVICENOW_MOCK_URL="$$servicenow_mock_url" ENABLE_NETWORK_REMEDIATION=$(TEST_NETWORK) \
+	ENABLE_LOKISTACK=$(ENABLE_LOKISTACK) EDGE_NAMESPACE=$(EDGE_NAMESPACE) \
+	uv run pytest tests/generic $(if $(filter true,$(TEST_NETWORK)),tests/network) $(if $(filter true,$(TEST_TELCO)),tests/telco) -v
 
 # ══════════════════════════════════════════════════════════════════════
 # ServiceNow PDI Bootstrap

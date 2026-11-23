@@ -1,11 +1,13 @@
-{{- if .Values.servicenowMock.enabled }}
+{{- $config := include "hub.servicenow" . | fromJson }}
+{{- if $config.mock.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: servicenow-mock
+  namespace: {{ .Release.Namespace }}
   labels:
     app: servicenow-mock
-    {{- include "network.labels" . | nindent 4 }}
+    {{- include "hub.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
@@ -18,26 +20,12 @@ spec:
     spec:
       containers:
         - name: servicenow-mock
-          image: "{{ .Values.servicenowMock.image.repository }}:{{ .Values.servicenowMock.image.tag }}"
+          image: "{{ $config.mock.image.repository }}:{{ $config.mock.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 8080
           env:
-            - name: SERVICENOW_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: noc-servicenow-secret
-                  key: SERVICENOW_USERNAME
-            - name: SERVICENOW_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: noc-servicenow-secret
-                  key: SERVICENOW_PASSWORD
-            - name: SERVICENOW_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: noc-servicenow-secret
-                  key: SERVICENOW_API_KEY
+            {{- include "hub.servicenowCredentialEnv" $config.credentials | nindent 12 }}
           readinessProbe:
             httpGet:
               path: /healthz
@@ -49,9 +37,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: servicenow-mock
+  namespace: {{ .Release.Namespace }}
   labels:
     app: servicenow-mock
-    {{- include "network.labels" . | nindent 4 }}
+    {{- include "hub.labels" . | nindent 4 }}
 spec:
   selector:
     app: servicenow-mock
