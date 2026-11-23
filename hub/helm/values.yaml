@@ -49,6 +49,8 @@ global:
   slack:
     # Default for each installed profile. Profile settings can override it.
     enabled: false
+    # Shared bot credential. Supplying it does not enable notifications.
+    botToken: ""
 
 # ══════════════════════════════════════════════════════════════════════
 # Remote subcharts

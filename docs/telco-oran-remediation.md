@@ -275,6 +275,10 @@ both installed profiles by default. Set `ENABLE_NETWORK_SLACK` or `ENABLE_TELCO_
 to `true` or `false` to override the default for that profile. Set `SLACK_CHANNEL`
 for Network and `TELCO_SLACK_CHANNEL` for Telco.
 
+Set `SLACK_BOT_TOKEN` in your environment to use the shared bot in these examples.
+Set `TELCO_SLACK_SECRET_NAME` to select a Telco bot Secret with a `token` key.
+The selected Secret takes precedence for Telco.
+
 ```bash
 # Enable both installed profiles and send to separate channels.
 make deploy ENABLE_SLACK=true SLACK_CHANNEL='#network-ops' TELCO_SLACK_CHANNEL='#ran-ops'
@@ -305,16 +309,12 @@ telco:
       slackChannel: "#ran-ops"
 ```
 
-Set `telco.ranRemediationService.env.slackEnabled` to override Telco enablement.
-Omit the profile enablement fields to inherit the hub default. When upgrading,
-pass your existing values file or use `helm upgrade --reset-then-reuse-values`
-to retain saved channel and credential settings. A saved profile enablement
-value still acts as an explicit override when carried forward.
-
-Telco reads the `token` key from `slack-secret` in the hub namespace. Keep using
-that Secret on upgrade, or create it for a new install using a Slack bot token
-with `chat:write`. Invite the bot to the configured channel. Network continues to
-use `SLACK_BOT_TOKEN` from Make or its existing Helm credential settings.
+Set `global.slack.botToken` for the shared bot or select a Telco Secret with
+`telco.ranRemediationService.slack.existingSecret`. Telco falls back to the
+`token` key in `slack-secret` when both settings are empty. Set
+`telco.ranRemediationService.env.slackEnabled` to override Telco enablement.
+A saved profile enablement value still acts as an explicit override when
+carried forward. [Slack setup and upgrade examples](single-cluster-deploy.md#slack-configuration)
 
 ## Config (env vars)
 

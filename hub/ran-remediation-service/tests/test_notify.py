@@ -73,7 +73,7 @@ async def test_notify_node_slack_enabled_no_token_returns_empty():
 @pytest.mark.parametrize("enabled", [None, "false", "true"], ids=["default", "disabled", "enabled"])
 @pytest.mark.asyncio
 async def test_notify_node_uses_slack_settings_from_environment(monkeypatch, enabled):
-    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-telco-test")
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-shared-test")
     monkeypatch.setenv("SLACK_CHANNEL", "#ran-team")
     if enabled is None:
         monkeypatch.delenv("SLACK_ENABLED", raising=False)
@@ -89,7 +89,7 @@ async def test_notify_node_uses_slack_settings_from_environment(monkeypatch, ena
         assert await node(_state()) == {}
 
     if enabled == "true":
-        assert slack_client.call_args.kwargs["token"] == "xoxb-telco-test"
+        assert slack_client.call_args.kwargs["token"] == "xoxb-shared-test"
         post_message = slack_client.return_value.chat_postMessage
         post_message.assert_called_once()
         assert post_message.call_args.kwargs["channel"] == "#ran-team"

@@ -1,14 +1,17 @@
 import json
+import runpy
 from unittest.mock import AsyncMock, patch
 
-from helpers import make_rca, make_state
-
+import pytest
+from agent_service import config
 from agent_service.models import RemediationResult
+from agent_service.nodes import notify
 from agent_service.nodes.notify import (
     _SLACK_SECTION_TEXT_LIMIT,
     _build_payload,
     notify_node,
 )
+from helpers import make_rca, make_state
 
 
 def _stub_remediation(**overrides):
@@ -298,6 +301,35 @@ class TestNotifyNodeHappyPath:
 
         assert result == {"slack_thread_ts": "1234567890.123456"}
         fake_send.assert_awaited_once()
+
+
+@pytest.mark.parametrize("enabled", [None, "false", "true"], ids=["default", "disabled", "enabled"])
+async def test_notify_node_uses_slack_settings_from_environment(monkeypatch, enabled):
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-shared-test")
+    monkeypatch.setenv("SLACK_CHANNEL", "#network-team")
+    if enabled is None:
+        monkeypatch.delenv("SLACK_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("SLACK_ENABLED", enabled)
+
+    settings = runpy.run_path(config.__file__)
+    with (
+        patch.multiple(config, **{key: settings[key] for key in ("SLACK_ENABLED", "SLACK_BOT_TOKEN", "SLACK_CHANNEL")}),
+        patch("slack_sdk.WebClient", autospec=True) as slack_client,
+    ):
+        node = runpy.run_path(notify.__file__)["notify_node"]
+        post_message = slack_client.return_value.chat_postMessage
+        post_message.return_value = {"ts": "1234567890.123456"}
+        result = await node(_notify_state())
+
+    if enabled == "true":
+        assert result == {"slack_thread_ts": "1234567890.123456"}
+        assert slack_client.call_args.kwargs["token"] == "xoxb-shared-test"
+        post_message.assert_called_once()
+        assert post_message.call_args.kwargs["channel"] == "#network-team"
+    else:
+        assert result == {"slack_thread_ts": ""}
+        slack_client.assert_not_called()
 
 
 class TestNotifyNodeError:

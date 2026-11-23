@@ -49,12 +49,22 @@ spec:
               value: {{ .Values.ranRemediationService.env.jobTimeoutSeconds | quote }}
             - name: RECENT_RESULTS_LIMIT
               value: {{ .Values.ranRemediationService.env.recentResultsLimit | quote }}
+            {{- $slackSecret := dig "slack" "existingSecret" "" .Values.ranRemediationService }}
+            {{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) }}
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
+                  {{- if $slackSecret }}
+                  name: {{ $slackSecret | quote }}
+                  key: token
+                  {{- else if $sharedSlackToken }}
+                  name: hub-slack-secret
+                  key: SLACK_BOT_TOKEN
+                  {{- else }}
                   name: slack-secret
                   key: token
                   optional: true
+                  {{- end }}
             # Unset against aap-mock, which has no auth; a real AAP controller
             # needs this secret to exist.
             - name: AAP_TOKEN

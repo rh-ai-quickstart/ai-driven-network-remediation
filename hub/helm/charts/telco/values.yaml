@@ -135,6 +135,9 @@ ranRemediationService:
   aapSecretName: noc-aap-secret
   enabled: true
   replicaCount: 1
+  slack:
+    # Existing Secret in the release namespace with a token key.
+    existingSecret: ""
   env:
     # Same controller as Network; Make overrides this when ENABLE_AAP_MOCK=true.
     aapUrl: "http://aap.aap.svc"

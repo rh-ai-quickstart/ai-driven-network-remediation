@@ -154,7 +154,9 @@ agentService:
     projectName: "lightspeed-generated"
   slack:
     # enabled: false  # Omit to inherit global.slack.enabled.
+    # Legacy chart-managed credential for noc-slack-secret.
     botToken: ""
+    # Existing Secret in the release namespace with a SLACK_BOT_TOKEN key.
     existingSecret: ""
     channel: "#ai-driven-network"
   servicenowInstanceUrl: ""

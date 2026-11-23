@@ -153,6 +153,8 @@ endif
 endif
 
 SLACK_BOT_TOKEN        ?=
+NETWORK_SLACK_SECRET_NAME ?=
+TELCO_SLACK_SECRET_NAME ?=
 SLACK_CHANNEL          ?=
 TELCO_SLACK_CHANNEL    ?=
 SERVICENOW_INSTANCE_URL ?=
@@ -344,7 +346,9 @@ helm_slack_args = \
 	--set global.slack.enabled=$(ENABLE_SLACK) \
 	$(if $(ENABLE_NETWORK_SLACK),--set network.agentService.slack.enabled=$(ENABLE_NETWORK_SLACK),) \
 	$(if $(ENABLE_TELCO_SLACK),--set telco.ranRemediationService.env.slackEnabled=$(ENABLE_TELCO_SLACK),) \
-	$(if $(SLACK_BOT_TOKEN),--set-string network.agentService.slack.botToken='$(SLACK_BOT_TOKEN)',) \
+	$(if $(SLACK_BOT_TOKEN),--set-string global.slack.botToken='$(SLACK_BOT_TOKEN)',) \
+	$(if $(NETWORK_SLACK_SECRET_NAME),--set-string network.agentService.slack.existingSecret='$(NETWORK_SLACK_SECRET_NAME)',) \
+	$(if $(TELCO_SLACK_SECRET_NAME),--set-string telco.ranRemediationService.slack.existingSecret='$(TELCO_SLACK_SECRET_NAME)',) \
 	$(if $(SLACK_CHANNEL),--set-string network.agentService.slack.channel='$(SLACK_CHANNEL)',) \
 	$(if $(TELCO_SLACK_CHANNEL),--set-string telco.ranRemediationService.env.slackChannel='$(TELCO_SLACK_CHANNEL)',)
 

@@ -115,13 +115,19 @@ spec:
               value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL
               value: {{ .Values.agentService.slack.channel | quote }}
-            {{- if or .Values.agentService.slack.botToken .Values.agentService.slack.existingSecret }}
+            {{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) }}
+            {{- $slackSecretName := "noc-slack-secret" }}
+            {{- if $sharedSlackToken }}
+            {{- $slackSecretName = "hub-slack-secret" }}
+            {{- end }}
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.agentService.slack.existingSecret | default "noc-slack-secret" }}
+                  name: {{ .Values.agentService.slack.existingSecret | default $slackSecretName | quote }}
                   key: SLACK_BOT_TOKEN
-            {{- end }}
+                  {{- if not (or .Values.agentService.slack.existingSecret $sharedSlackToken .Values.agentService.slack.botToken) }}
+                  optional: true
+                  {{- end }}
             {{- if $serviceNowInstanceUrl }}
             - name: SERVICENOW_INSTANCE_URL
               value: {{ $serviceNowInstanceUrl | quote }}
