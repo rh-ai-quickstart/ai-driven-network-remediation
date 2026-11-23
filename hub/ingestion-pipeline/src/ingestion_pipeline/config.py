@@ -1,6 +1,9 @@
 import os
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
+
+DEFAULT_ATTACHMENT_WAIT_TIMEOUT_SECONDS = 300.0
 
 
 def _get_bool_env(name: str, default: str = "false") -> bool:
@@ -26,9 +29,15 @@ class Settings:
     telco_docs_include_optional: bool
     telco_vector_store_name: str
     minio_telco_docs_prefix: str
+    attachment_wait_timeout_seconds: float = DEFAULT_ATTACHMENT_WAIT_TIMEOUT_SECONDS
 
     @classmethod
     def from_env(cls) -> "Settings":
+        attachment_wait_timeout_seconds = float(
+            os.environ.get("ATTACHMENT_WAIT_TIMEOUT_SECONDS", str(DEFAULT_ATTACHMENT_WAIT_TIMEOUT_SECONDS))
+        )
+        if not isfinite(attachment_wait_timeout_seconds) or attachment_wait_timeout_seconds <= 0:
+            raise ValueError("ATTACHMENT_WAIT_TIMEOUT_SECONDS must be a positive, finite number")
         return cls(
             llamastack_host=os.environ.get("LLAMASTACK_HOST", "llamastack-service"),
             llamastack_port=int(os.environ.get("LLAMASTACK_PORT", "8321")),
@@ -47,6 +56,7 @@ class Settings:
             telco_docs_include_optional=_get_bool_env("TELCO_DOCS_INCLUDE_OPTIONAL"),
             telco_vector_store_name=os.environ.get("TELCO_VECTOR_STORE_NAME", ""),
             minio_telco_docs_prefix=os.environ.get("MINIO_TELCO_DOCS_PREFIX", "telco-docs/"),
+            attachment_wait_timeout_seconds=attachment_wait_timeout_seconds,
         )
 
     @property

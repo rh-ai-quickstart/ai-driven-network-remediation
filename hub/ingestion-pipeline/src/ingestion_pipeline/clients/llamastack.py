@@ -6,11 +6,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
+from ingestion_pipeline.config import DEFAULT_ATTACHMENT_WAIT_TIMEOUT_SECONDS
 from ogx_client import OgxClient
 from ogx_client.types.vector_stores import VectorStoreFile
 from ogx_client.types.vector_stores.file_create_params import ChunkingStrategy
 
 logger = logging.getLogger(__name__)
+_LIST_PAGE_SIZE = 100
 
 
 class DuplicateVectorStoreNameError(ValueError):
@@ -87,12 +89,14 @@ class LlamaStackVectorStoreClient:
         chunk_overlap_tokens: int = 80,
         # The first file attachment can download and initialize the embedding model.
         timeout_seconds: float = 300,
+        attachment_wait_timeout_seconds: float = DEFAULT_ATTACHMENT_WAIT_TIMEOUT_SECONDS,
     ) -> None:
         self._client = OgxClient(base_url=base_url, timeout=timeout_seconds)
         self._vector_store_name = vector_store_name
         self._embedding_model = embedding_model
         self._chunk_size_tokens = chunk_size_tokens
         self._chunk_overlap_tokens = chunk_overlap_tokens
+        self._attachment_wait_timeout_seconds = attachment_wait_timeout_seconds
 
     def list_models(self) -> list[dict[str, Any]]:
         response = self._client.models.list()
@@ -145,9 +149,8 @@ class LlamaStackVectorStoreClient:
 
     def _list_attachment_ids(self, vector_store_id: str) -> list[str]:
         try:
-            return [
-                file.id for file in self._iter_pages(self._client.vector_stores.files.list(vector_store_id, limit=100))
-            ]
+            first_page = self._client.vector_stores.files.list(vector_store_id, limit=_LIST_PAGE_SIZE)
+            return [file.id for file in self._iter_pages(first_page)]
         except Exception as exc:
             raise AttachmentListError(f"Could not list attachments in vector store '{vector_store_id}': {exc}") from exc
 
@@ -252,7 +255,7 @@ class LlamaStackVectorStoreClient:
         *,
         file_id: str,
         vector_store_id: str,
-        wait_timeout_seconds: float = 300,
+        wait_timeout_seconds: float | None = None,
         poll_interval_seconds: float = 1,
     ) -> VectorStoreFileContentSummary:
         vector_file = self._wait_for_file_ready(
@@ -282,9 +285,8 @@ class LlamaStackVectorStoreClient:
         )
 
     def _find_vector_store_by_name(self, name: str) -> Any | None:
-        matches = [
-            store for store in self._iter_pages(self._client.vector_stores.list(limit=100)) if store.name == name
-        ]
+        first_page = self._client.vector_stores.list(limit=_LIST_PAGE_SIZE)
+        matches = [store for store in self._iter_pages(first_page) if store.name == name]
         if len(matches) > 1:
             raise DuplicateVectorStoreNameError(f"Multiple vector stores named '{name}'")
         return matches[0] if matches else None
@@ -302,17 +304,20 @@ class LlamaStackVectorStoreClient:
         *,
         file_id: str,
         vector_store_id: str,
-        wait_timeout_seconds: float = 300,
+        wait_timeout_seconds: float | None = None,
         poll_interval_seconds: float = 1,
     ) -> VectorStoreFile:
+        if wait_timeout_seconds is None:
+            wait_timeout_seconds = self._attachment_wait_timeout_seconds
         deadline = time.monotonic() + wait_timeout_seconds
         while True:
             vector_file = self._client.vector_stores.files.retrieve(file_id, vector_store_id=vector_store_id)
             if vector_file.status != "in_progress":
                 return vector_file
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 return vector_file
-            time.sleep(poll_interval_seconds)
+            time.sleep(min(poll_interval_seconds, remaining))
 
     @staticmethod
     def _iter_items(result: Any) -> Iterable[Any]:

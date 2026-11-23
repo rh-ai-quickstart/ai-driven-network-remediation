@@ -52,6 +52,19 @@ def test_duplicate_store_names_fail_before_any_attachment_is_removed():
     client._client.vector_stores.files.delete.assert_not_called()
 
 
+def test_vector_store_summary_reports_duplicate_name(monkeypatch):
+    service = IngestionPipelineService()
+    service._vector_client = _client(Page([_store("first")], Page([_store("second")])))
+    app_module = importlib.import_module("ingestion_pipeline.app")
+    monkeypatch.setattr(app_module, "service", service)
+    api = TestClient(app_module.app, raise_server_exceptions=False)
+
+    response = api.get("/vector-store")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Multiple vector stores named 'noc_runbooks'"
+
+
 def test_empty_source_preserves_existing_attachments():
     service = IngestionPipelineService()
     service._minio_client = SimpleNamespace(load_prefix_text_objects=Mock(return_value=[]))

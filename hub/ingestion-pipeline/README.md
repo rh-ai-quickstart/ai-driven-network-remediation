@@ -18,9 +18,13 @@ Network remediation runbooks and RAN/ORAN vendor PDFs/DOCX are committed directl
 | `502 Bad Gateway` | Llama Stack could not list, attach, or detach files, or attachments remained after cleanup. `detail` gives the reason and identifies affected attachments where available. A failed attachment batch returns its `failed` items and their reasons. If rollback could not remove or verify any attachments, the summary also includes `rollback_errors` with their IDs. | Investigate the reported provider failure before retrying. See the repair procedure below if attachment metadata is unreadable. |
 | `500 Internal Server Error` | An unexpected ingestion exception occurred. | Check the ingestion service logs for the traceback. |
 
+`GET /vector-store` also returns `409 Conflict` if multiple stores match the configured runbook store name.
+
+Set `ATTACHMENT_WAIT_TIMEOUT_SECONDS` for a local process or `ingestionPipeline.attachmentWaitTimeoutSeconds` in Helm to change how long the service polls an in-progress attachment. The default is 300 seconds per attachment. Provider requests and retries have their own timeout and can extend the elapsed wait.
+
 ## Repair unreadable vector-store attachments
 
-Normal `/runbooks/ingest` and `/telco-docs/ingest` requests keep the store ID, clear the previous attachments, and upload the replacement corpus. Search can return partial or empty results during ingestion. If clearing fails, ingestion stops before uploading any replacements. A failed upload triggers rollback of the new attachments. If rollback cannot remove or verify an attachment, the service logs its ID. Retry ingestion to rebuild the corpus after resolving the reported failure.
+Normal `/runbooks/ingest` and `/telco-docs/ingest` requests keep the store ID, clear the previous attachments, and upload the replacement corpus. Search can return partial or empty results during ingestion. If clearing fails, ingestion stops before uploading any replacements. A failed upload triggers rollback of any attempted attachments. If rollback cannot remove or verify an attachment, the service logs its ID. After a failed or interrupted run, search can continue returning partial or empty results until a successful rerun. Resolve the reported failure and retry ingestion to rebuild the corpus.
 
 In the rare case where a provider failure interrupts an individual attachment deletion, attachment metadata can become unreadable. The attachment-list request then fails, so an ordinary rerun may fail again. The ingestion service does not delete a store automatically in response to this error.
 

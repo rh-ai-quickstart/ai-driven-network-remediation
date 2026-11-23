@@ -91,6 +91,25 @@ class TestSearch:
         assert mock_llamastack.vector_stores.list.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_search_recovers_when_replacement_appears_later(self, rag_client, mock_llamastack, stores):
+        assert await rag_client.search("before removal") == ["original context"]
+        stale_search_url = "/v1/vector_stores/vs-live/search"
+        stores["vs-live"] = bad_request(stale_search_url, "Vector_store 'vs-live' not found")
+        mock_llamastack.vector_stores.list.side_effect = None
+        mock_llamastack.vector_stores.list.return_value = store_page([])
+
+        assert await rag_client.search("while store is missing") == []
+        assert mock_llamastack.vector_stores.search.await_count == 2
+
+        del stores["vs-live"]
+        stores["vs-repaired"] = ["repaired context"]
+        replacement = SimpleNamespace(id="vs-repaired", name="test_docs")
+        mock_llamastack.vector_stores.list.return_value = store_page([replacement])
+
+        assert await rag_client.search("after recreation") == ["repaired context"]
+        assert mock_llamastack.vector_stores.list.await_count == 3
+
+    @pytest.mark.asyncio
     async def test_unrelated_search_error_does_not_retry_or_switch_stores(self, rag_client, mock_llamastack, stores):
         await rag_client.search("populate cache")
         error = bad_request("/v1/vector_stores/vs-live/search")

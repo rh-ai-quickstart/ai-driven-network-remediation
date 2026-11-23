@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import jsonschema
 import pytest
 from helpers import CONTRACTS_DIR, SAMPLE_ANOMALY, make_llm_response
+from llama_stack_client import APIConnectionError
 from loguru import logger
 from ran_rca_service.graph import build_graph
 
@@ -129,7 +131,12 @@ class TestFullGraph:
     @pytest.mark.asyncio
     async def test_rag_failure_is_logged_and_graph_completes_analysis(self):
         mock_rag = MagicMock()
-        mock_rag.search = AsyncMock(side_effect=ConnectionError("vector store down"))
+        mock_rag.search = AsyncMock(
+            side_effect=APIConnectionError(
+                message="vector store down",
+                request=httpx.Request("POST", "http://llamastack/v1/vector_stores/vs/search"),
+            )
+        )
 
         errors = []
         sink = logger.add(errors.append, level="ERROR", format="{message}")

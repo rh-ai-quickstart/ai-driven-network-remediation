@@ -81,6 +81,8 @@ spec:
               value: {{ .Values.ingestionPipeline.chunkSizeTokens | quote }}
             - name: CHUNK_OVERLAP_TOKENS
               value: {{ .Values.ingestionPipeline.chunkOverlapTokens | quote }}
+            - name: ATTACHMENT_WAIT_TIMEOUT_SECONDS
+              value: {{ .Values.ingestionPipeline.attachmentWaitTimeoutSeconds | quote }}
             - name: MINIO_ENDPOINT
               value: {{ printf "%s:%s" .Values.s4.host .Values.s4.port | quote }}
             - name: MINIO_ACCESS_KEY

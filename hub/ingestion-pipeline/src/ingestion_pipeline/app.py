@@ -114,7 +114,10 @@ def models() -> dict[str, Any]:
 
 @app.get("/vector-store")
 def vector_store() -> dict[str, Any]:
-    summary: VectorStoreSummary = service.vector_store_summary()
+    try:
+        summary: VectorStoreSummary = service.vector_store_summary()
+    except DuplicateVectorStoreNameError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {
         "id": summary.id,
         "name": summary.name,
