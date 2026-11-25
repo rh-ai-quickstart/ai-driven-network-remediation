@@ -37,8 +37,9 @@ spec:
               value: {{ .Values.ranRemediationService.env.kafkaConsumerEnabled | quote }}
             - name: SLACK_ENABLED
               {{- $slackEnabled := dig "slack" "enabled" false (.Values.global | default dict) }}
-              {{- if ne .Values.ranRemediationService.env.slackEnabled nil }}
-              {{- $slackEnabled = .Values.ranRemediationService.env.slackEnabled }}
+              {{- $profileSlackEnabled := .Values.ranRemediationService.env.slackEnabled }}
+              {{- if and (ne $profileSlackEnabled nil) (ne (toString $profileSlackEnabled) "") }}
+              {{- $slackEnabled = $profileSlackEnabled }}
               {{- end }}
               value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL

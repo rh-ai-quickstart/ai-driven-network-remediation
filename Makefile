@@ -112,6 +112,7 @@ ENABLE_LOKISTACK_TEST  ?= false
 ENABLE_AAP_MOCK        ?= true
 _servicenow_mock_override := $(if $(filter undefined,$(origin ENABLE_SERVICENOW_MOCK)),,$(ENABLE_SERVICENOW_MOCK))
 ENABLE_SERVICENOW_MOCK ?= true
+_servicenow_mock_build_enabled := $(or $(strip $(ENABLE_SERVICENOW_MOCK)),true)
 ENABLE_LIGHTSPEED      ?= false
 LIGHTSPEED_VERIFY_SSL  ?= false
 LIGHTSPEED_TIMEOUT_SECONDS ?= 180
@@ -213,7 +214,7 @@ EDGE_IMAGES := \
 CORE_BUILD_PUSH_IMAGES := \
 	$(SHARED_IMAGES) \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),$(AAP_MOCK_IMG)) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),$(SERVICENOW_MOCK_IMG)) \
+	$(if $(filter true,$(_servicenow_mock_build_enabled)),$(SERVICENOW_MOCK_IMG)) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),$(MCP_IMAGES) $(NETWORK_IMAGES) $(EDGE_IMAGES)) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),$(TELCO_IMAGES))
 
@@ -843,7 +844,7 @@ edge-rbac-teardown:
 .PHONY: build-all-images
 build-all-images: build-ingestion-image build-servicenow-mcp-image \
 	$(if $(filter true,$(ENABLE_AAP_MOCK)),build-aap-mock-image) \
-	$(if $(filter true,$(ENABLE_SERVICENOW_MOCK)),build-servicenow-mock-image) \
+	$(if $(filter true,$(_servicenow_mock_build_enabled)),build-servicenow-mock-image) \
 	$(if $(filter true,$(ENABLE_NETWORK_REMEDIATION)),build-mcp-images build-chatbot-image build-agent-image build-frontend-image build-edge-fast-path-healer-image) \
 	$(if $(filter true,$(ENABLE_TELCO_ORAN)),build-ran-anomaly-image build-ran-rca-image build-ran-chatbot-image build-ran-frontend-image build-ran-remediation-image)
 

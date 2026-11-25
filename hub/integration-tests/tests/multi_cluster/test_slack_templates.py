@@ -33,6 +33,21 @@ def test_installed_profiles_follow_the_hub_slack_default(profile, deployments, e
         assert deployment_env(docs, deployment)["SLACK_ENABLED"]["value"] == expected
 
 
+@pytest.mark.parametrize("flag", ["--set", "--set-string"])
+@pytest.mark.parametrize("overridden", [None, NETWORK, TELCO])
+def test_blank_helm_profile_slack_overrides_inherit_the_hub_setting(flag, overridden):
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set", "global.slack.enabled=true",
+        flag, f"network.agentService.slack.enabled={'false' if overridden == NETWORK else ''}",
+        flag, f"telco.ranRemediationService.env.slackEnabled={'false' if overridden == TELCO else ''}",
+    )
+    for deployment in (NETWORK, TELCO):
+        expected = "false" if deployment == overridden else "true"
+        assert deployment_env(docs, deployment)["SLACK_ENABLED"]["value"] == expected
+
+
 @pytest.mark.parametrize("entry_point", ["helm", "make"])
 @pytest.mark.parametrize("hub_enabled", ["true", "false"])
 def test_profile_overrides_and_channels_are_independent(entry_point, hub_enabled):

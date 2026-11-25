@@ -24,13 +24,13 @@ spec:
           imagePullPolicy: {{ $config.mcp.imagePullPolicy }}
           ports:
             - name: http
-              containerPort: 8000
+              containerPort: {{ $config.mcp.targetPort }}
           env:
             {{- range $key, $value := $config.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-            {{- include "hub.servicenowCredentialEnv" $config.credentials | nindent 12 }}
+            {{- include "hub.servicenowCredentialEnv" $config.mcpCredentialEnv | nindent 12 }}
 ---
 apiVersion: v1
 kind: Service
@@ -45,4 +45,4 @@ spec:
   ports:
     - name: http
       port: 8000
-      targetPort: 8000
+      targetPort: {{ $config.mcp.targetPort }}

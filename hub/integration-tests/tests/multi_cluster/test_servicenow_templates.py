@@ -10,6 +10,8 @@ from .hub_render import deployment_container, deployment_env, make, render_hub, 
 
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="helm CLI not available")
 
+NETWORK_MCP = "network.mcp-servers.mcp-servers.noc-servicenow"
+
 
 def _toolgroup(docs):
     config = resource(docs, "ConfigMap", "run-config")
@@ -28,6 +30,8 @@ def test_each_profile_gets_one_namespace_local_servicenow(profile, entry_point, 
             assert resource(docs, kind, name)["metadata"]["namespace"] == namespace
     mcp = deployment_container(docs, "mcp-noc-servicenow")
     mock = deployment_container(docs, "servicenow-mock")
+    service_port = resource(docs, "Service", "mcp-noc-servicenow")["spec"]["ports"][0]
+    assert (service_port["port"], service_port["targetPort"], mcp["ports"][0]["containerPort"]) == (8000, 8000, 8000)
     if entry_point == "make":
         assert mcp["image"] == "example.test/demo/noc-mcp-servicenow:test"
         assert mock["image"] == "example.test/demo/noc-servicenow-mock:test"
@@ -153,13 +157,134 @@ def test_mock_defaults_resolve_values_from_a_legacy_release():
         "network.mcpSecrets.servicenow.password=",
         upgrading=True,
     )
-    assert deployment_env(docs, "mcp-noc-servicenow")["SERVICENOW_URL"]["value"] == "http://servicenow-mock:8080"
+    for name in ("mcp-noc-servicenow", "hub-chatbot-service"):
+        assert deployment_env(docs, name)["SERVICENOW_URL"]["value"] == "http://servicenow-mock:8080"
     secret = resource(docs, "Secret", "noc-servicenow-secret")
     assert base64.b64decode(secret["data"]["SERVICENOW_USERNAME"]) == b"admin"
     _toolgroup(docs)
 
 
-def test_shared_basic_auth_replaces_the_legacy_mock_api_key():
+@pytest.mark.parametrize(
+    ("mock_enabled", "chatbot_url"),
+    [(True, None), (False, None), (True, "http://servicenow-mock:8080")],
+)
+def test_fresh_install_preserves_an_explicit_cross_namespace_url(mock_enabled, chatbot_url):
+    url = "http://servicenow-mock.hub.svc:8080"
+    real_settings = (
+        "--set", "global.servicenow.mock.enabled=false",
+        "--set-string", "global.servicenow.credentials.apiKey=example-key",
+    )
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set-string",
+        f"{NETWORK_MCP}.env.SERVICENOW_URL={url}",
+        *(() if mock_enabled else real_settings),
+        *(("--set-string", f"network.chatbotService.env.servicenowUrl={chatbot_url}") if chatbot_url else ()),
+        namespace="tenant-a",
+    )
+    assert deployment_env(docs, "mcp-noc-servicenow")["SERVICENOW_URL"]["value"] == url
+    assert deployment_env(docs, "hub-chatbot-service")["SERVICENOW_URL"]["value"] == (chatbot_url or url)
+
+
+def test_mcp_service_routes_to_the_configured_container_port():
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set",
+        f"{NETWORK_MCP}.targetPort=8123",
+        "--set-string",
+        f"{NETWORK_MCP}.env.APP_PORT=8123",
+    )
+    mcp = deployment_container(docs, "mcp-noc-servicenow")
+    service_port = resource(docs, "Service", "mcp-noc-servicenow")["spec"]["ports"][0]
+    assert deployment_env(docs, "mcp-noc-servicenow")["APP_PORT"]["value"] == "8123"
+    assert mcp["ports"][0]["containerPort"] == 8123
+    assert (service_port["port"], service_port["targetPort"]) == (8000, 8123)
+    _toolgroup(docs)
+
+
+@pytest.mark.parametrize("api_key", ["null", "false"])
+def test_unset_shared_api_key_preserves_basic_auth(api_key):
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set",
+        f"global.servicenow.mock.enabled=false,global.servicenow.credentials.apiKey={api_key}",
+        "--set-string",
+        "global.servicenow.url=https://instance.example.test",
+        "--set-string",
+        "global.servicenow.credentials.username=demo,global.servicenow.credentials.password=test",
+    )
+    secret = resource(docs, "Secret", "noc-servicenow-secret")
+    assert tuple(
+        base64.b64decode(secret["data"][key]).decode()
+        for key in ("SERVICENOW_API_KEY", "SERVICENOW_USERNAME", "SERVICENOW_PASSWORD")
+    ) == ("", "demo", "test")
+
+
+@pytest.mark.parametrize(
+    ("setting", "legacy_enabled", "expected_mock"),
+    [("false", True, False), ("", True, True), ("null", True, True), ("", False, False), ("null", False, False)],
+)
+def test_shared_mock_switch_accepts_quoted_false_and_inherits_when_unset(setting, legacy_enabled, expected_mock):
+    legacy_settings = () if legacy_enabled else ("--set", "network.servicenowMock.enabled=false")
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set" if setting == "null" else "--set-string",
+        f"global.servicenow.mock.enabled={setting}",
+        "--set-string",
+        "global.servicenow.url=https://instance.example.test",
+        "--set-string",
+        "global.servicenow.credentials.username=demo,global.servicenow.credentials.password=test",
+        *legacy_settings,
+    )
+    assert any(doc["metadata"]["name"] == "servicenow-mock" for doc in docs) == expected_mock
+    if not expected_mock:
+        secret = resource(docs, "Secret", "noc-servicenow-secret")
+        assert base64.b64decode(secret["data"]["SERVICENOW_API_KEY"]) == b""
+
+
+@pytest.mark.parametrize(
+    ("shared_create", "legacy_opt_out", "managed"),
+    [("null", False, True), ("false", False, False), ("null", True, False), ("true", True, True)],
+)
+def test_null_shared_credential_creation_inherits_the_network_setting(shared_create, legacy_opt_out, managed):
+    legacy_settings = ("--set", "network.mcpSecrets.servicenow.create=false") if legacy_opt_out else ()
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set",
+        f"global.servicenow.mock.enabled=false,global.servicenow.credentials.create={shared_create}",
+        "--set-string",
+        "global.servicenow.url=https://instance.example.test",
+        "--set-string",
+        "global.servicenow.credentials.apiKey=example-key",
+        *legacy_settings,
+    )
+    secrets = [doc for doc in docs if doc["kind"] == "Secret" and doc["metadata"]["name"] == "noc-servicenow-secret"]
+    assert len(secrets) == int(managed)
+    if managed:
+        assert base64.b64decode(secrets[0]["data"]["SERVICENOW_API_KEY"]) == b"example-key"
+    for name in ("mcp-noc-servicenow", "hub-chatbot-service"):
+        metadata = resource(docs, "Deployment", name)["spec"]["template"]["metadata"]
+        assert ("checksum/servicenow-credentials" in metadata.get("annotations", {})) == managed
+
+
+@pytest.mark.parametrize(
+    ("username", "password", "shared_key", "expected_key"),
+    [
+        ("", "", "", "legacy-key"),
+        ("shared-user", "", "", "legacy-key"),
+        ("", "shared-password", "", "legacy-key"),
+        ("shared-user", "shared-password", "", ""),
+        ("shared-user", "shared-password", "shared-key", "shared-key"),
+    ],
+)
+def test_shared_basic_auth_replaces_the_legacy_api_key_only_when_complete(
+    username, password, shared_key, expected_key
+):
     docs = render_hub(
         ("true", "false"),
         "helm",
@@ -168,17 +293,17 @@ def test_shared_basic_auth_replaces_the_legacy_mock_api_key():
         "--set-string",
         "global.servicenow.url=https://shared.test",
         "--set-string",
-        "global.servicenow.credentials.username=shared-user",
+        f"global.servicenow.credentials.username={username}",
         "--set-string",
-        "global.servicenow.credentials.password=shared-password",
+        f"global.servicenow.credentials.password={password}",
         "--set-string",
-        "network.mcpSecrets.servicenow.apiKey=demo-api-key-2026",
-        upgrading=True,
+        "network.mcpSecrets.servicenow.apiKey=legacy-key",
+        *(("--set-string", f"global.servicenow.credentials.apiKey={shared_key}") if shared_key else ()),
     )
     secret = resource(docs, "Secret", "noc-servicenow-secret")
-    assert base64.b64decode(secret["data"]["SERVICENOW_USERNAME"]) == b"shared-user"
-    assert base64.b64decode(secret["data"]["SERVICENOW_PASSWORD"]) == b"shared-password"
-    assert secret["data"]["SERVICENOW_API_KEY"] == ""
+    assert base64.b64decode(secret["data"]["SERVICENOW_USERNAME"]).decode() == username
+    assert base64.b64decode(secret["data"]["SERVICENOW_PASSWORD"]).decode() == password
+    assert base64.b64decode(secret["data"]["SERVICENOW_API_KEY"]).decode() == expected_key
 
 
 @pytest.mark.parametrize("entry_point", ["helm", "make"])
@@ -202,6 +327,50 @@ def test_real_servicenow_requires_a_backend_and_credentials(entry_point, has_url
                 "global.servicenow.credentials.username=test-user",
             ]
     render_hub(("false", "true"), entry_point, *overrides, make_vars=make_vars, error=error)
+
+
+@pytest.mark.parametrize(
+    ("shared_name", "mapping_name", "expected_name"),
+    [("snow", "snow", "snow"), ("snow", "legacy", "snow"), ("", "legacy", "legacy"), ("snow", "", "snow")],
+)
+def test_mcp_resolves_credential_secret_names_and_keys_independently(shared_name, mapping_name, expected_name):
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set",
+        "global.servicenow.mock.enabled=false,global.servicenow.credentials.create=false",
+        "--set-string",
+        "global.servicenow.url=https://instance.example.test",
+        "--set-string",
+        f"global.servicenow.credentials.existingSecretName={shared_name}",
+        "--set-string",
+        f"{NETWORK_MCP}.envSecrets.SERVICENOW_API_KEY.name={mapping_name}",
+        "--set-string",
+        f"{NETWORK_MCP}.envSecrets.SERVICENOW_API_KEY.key=api-token",
+        namespace="tenant-a",
+    )
+    mcp = deployment_env(docs, "mcp-noc-servicenow")
+    chatbot = deployment_env(docs, "hub-chatbot-service")
+    default_name = shared_name or "noc-servicenow-secret"
+    for name in ("SERVICENOW_API_KEY", "SERVICENOW_USERNAME", "SERVICENOW_PASSWORD"):
+        assert mcp[name]["valueFrom"]["secretKeyRef"] == {
+            "name": expected_name if name == "SERVICENOW_API_KEY" else default_name,
+            "key": "api-token" if name == "SERVICENOW_API_KEY" else name,
+            "optional": True,
+        }
+        assert chatbot[name]["valueFrom"]["secretKeyRef"] == {"name": default_name, "key": name, "optional": True}
+
+
+def test_mock_ignores_mcp_credential_mappings():
+    docs = render_hub(
+        ("true", "true"),
+        "helm",
+        "--set-string",
+        f"{NETWORK_MCP}.envSecrets.SERVICENOW_API_KEY.name=snow",
+    )
+    for deployment, name in (("mcp-noc-servicenow", "snow"), ("servicenow-mock", "noc-servicenow-secret")):
+        ref = deployment_env(docs, deployment)["SERVICENOW_API_KEY"]["valueFrom"]["secretKeyRef"]
+        assert ref == {"name": name, "key": "SERVICENOW_API_KEY", "optional": True}
 
 
 @pytest.mark.parametrize("profile", [("true", "false"), ("false", "true"), ("true", "true")])
@@ -310,7 +479,7 @@ def test_make_real_servicenow_settings_override_legacy_network_values():
     _toolgroup(docs)
 
 
-@pytest.mark.parametrize("mock_enabled", ["true", "false"])
+@pytest.mark.parametrize("mock_enabled", ["true", "false", ""])
 def test_make_build_and_push_include_servicenow_in_telco_only(mock_enabled):
     args = (
         "ENABLE_NETWORK_REMEDIATION=false",
@@ -319,11 +488,15 @@ def test_make_build_and_push_include_servicenow_in_telco_only(mock_enabled):
         "ENABLE_LIGHTSPEED=false",
         f"ENABLE_SERVICENOW_MOCK={mock_enabled}",
         "REGISTRY=example.test/demo",
-        "VERSION=test",
+        "VERSION=pr232",
     )
     build = make("-n", "build-all-images", *args)
     push = make("-n", "push-all-images", *args)
+    mock_image = "example.test/demo/noc-servicenow-mock:pr232"
+    if mock_enabled != "false":
+        docs = render_hub(("false", "true"), "make", make_vars=args)
+        assert deployment_container(docs, "servicenow-mock")["image"] == mock_image
     for command in (build, push):
-        assert command.count("example.test/demo/noc-mcp-servicenow:test") == 1
-        assert ("example.test/demo/noc-servicenow-mock:test" in command) == (mock_enabled == "true")
+        assert command.count("example.test/demo/noc-mcp-servicenow:pr232") == 1
+        assert command.count(mock_image) == (0 if mock_enabled == "false" else 1)
         assert "noc-mcp-openshift" not in command

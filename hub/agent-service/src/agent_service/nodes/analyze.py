@@ -58,6 +58,7 @@ async def analyze_node(state: dict) -> dict:
             rca = RootCauseAnalysis.model_validate({**diagnosis, "selected_action": None})
             logger.warning("Model returned an invalid remediation action; escalating with the diagnosis")
             updates["decision"] = "escalate"
+            updates["error_message"] = "The model supplied an invalid remediation action."
 
         logger.debug("Root cause analysis: {}", rca.model_dump_json())
 

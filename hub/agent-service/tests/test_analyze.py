@@ -214,6 +214,7 @@ class TestLlmErrorFallback:
         if valid_diagnosis:
             assert rca == RootCauseAnalysis.model_validate(diagnosis)
             assert result["analysis_tokens_used"] == 150
+            assert result["error_message"] == "The model supplied an invalid remediation action."
         else:
             assert rca.failure_type == "Unknown"
             assert result["analysis_tokens_used"] == 0

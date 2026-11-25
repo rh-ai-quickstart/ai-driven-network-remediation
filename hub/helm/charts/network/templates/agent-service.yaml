@@ -109,8 +109,9 @@ spec:
               value: {{ printf "%s%s" (include "network.aapResourcePrefix" .) .Values.agentService.lightspeed.projectName | quote }}
             - name: SLACK_ENABLED
               {{- $slackEnabled := dig "slack" "enabled" false (.Values.global | default dict) }}
-              {{- if ne .Values.agentService.slack.enabled nil }}
-              {{- $slackEnabled = .Values.agentService.slack.enabled }}
+              {{- $profileSlackEnabled := .Values.agentService.slack.enabled }}
+              {{- if and (ne $profileSlackEnabled nil) (ne (toString $profileSlackEnabled) "") }}
+              {{- $slackEnabled = $profileSlackEnabled }}
               {{- end }}
               value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL
