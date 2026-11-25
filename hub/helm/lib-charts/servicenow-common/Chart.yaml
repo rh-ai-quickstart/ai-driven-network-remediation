@@ -1,0 +1,5 @@
+apiVersion: v2
+name: servicenow-common
+description: ServiceNow defaults and credential references shared by the hub and Network charts
+type: library
+version: 0.1.0

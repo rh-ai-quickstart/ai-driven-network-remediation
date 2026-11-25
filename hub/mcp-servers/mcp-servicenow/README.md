@@ -16,15 +16,16 @@ MCP server wrapping the ServiceNow REST API for incident management in the AI-dr
 | Variable | Required | Default |
 |---|---|---|
 | `SERVICENOW_URL` | No | `http://servicenow-mock...svc:8080` |
-| `SERVICENOW_USERNAME` | No | `admin` |
-| `SERVICENOW_PASSWORD` | No | `admin` |
+| `SERVICENOW_API_KEY` | If Basic Auth is unset | Empty |
+| `SERVICENOW_USERNAME` | If the API key is unset | Empty |
+| `SERVICENOW_PASSWORD` | If the API key is unset | Empty |
 | `SERVICENOW_CALLER_NAME` | No | `NOC Agent` |
 | `MCP_TRANSPORT` | No | `sse` |
 | `MCP_PORT` | No | `8000` |
 
 The mock and real ServiceNow instances use the same API contract (flat JSON, `sysparm_query` lookups). Set `SERVICENOW_URL` to a real PDI or the local mock.
 
-Authentication: prefer `SERVICENOW_API_KEY` (sends `x-sn-apikey` header for `noc_agent` machine users). When unset, falls back to Basic Auth via `SERVICENOW_USERNAME` / `SERVICENOW_PASSWORD` (mock and admin bootstrap).
+Set `SERVICENOW_API_KEY` to authenticate with the `x-sn-apikey` header, or set both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD` for Basic Auth. The server refuses to start without one of these options. The hub Helm chart supplies demo credentials for its bundled mock.
 
 ## Running Locally
 

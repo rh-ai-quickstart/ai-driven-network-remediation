@@ -1,6 +1,7 @@
 """Check Slack configuration through the Helm and Make install interfaces."""
 
 import base64
+import hashlib
 import shutil
 
 import pytest
@@ -119,6 +120,28 @@ def test_installed_profiles_use_one_shared_token_without_changing_enablement(pro
     secret = resource(docs, "Secret", "hub-slack-secret")
     assert base64.b64decode(secret["data"]["SLACK_BOT_TOKEN"]) == b"xoxb-shared-test"
     assert all(doc["metadata"]["name"] != "noc-slack-secret" for doc in docs if doc["kind"] == "Secret")
+
+
+@pytest.mark.parametrize("profile_secret", [False, True])
+def test_shared_token_rotation_rolls_only_deployments_using_it(profile_secret):
+    overrides = (
+        "--set-string", "network.agentService.slack.existingSecret=network-bot",
+        "--set-string", "telco.ranRemediationService.slack.existingSecret=telco-bot",
+    ) if profile_secret else ()
+    tokens = ("xoxb-original-test", "xoxb-rotated-test")
+    pod_templates = []
+    for token in tokens:
+        docs = render_hub(
+            ("true", "true"), "helm", *overrides, "--set-string", f"global.slack.botToken={token}", upgrading=True
+        )
+        checksum = hashlib.sha256(token.encode()).hexdigest()
+        templates = [resource(docs, "Deployment", name)["spec"]["template"] for name in (NETWORK, TELCO)]
+        for template in templates:
+            annotations = template["metadata"].get("annotations", {})
+            assert annotations.get("checksum/slack-token") == (None if profile_secret else checksum)
+        pod_templates.append(templates)
+
+    assert (pod_templates[0] == pod_templates[1]) == profile_secret
 
 
 @pytest.mark.parametrize("entry_point", ["helm", "make"])

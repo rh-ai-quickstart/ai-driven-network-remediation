@@ -5,14 +5,16 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
-from mcp_servicenow.tools import (
-    _resolve_close_codes,
-    _snow_client,
-    create_incident,
-    get_incident,
-    resolve_incident,
-    update_incident,
-)
+
+with patch.dict("os.environ", {"SERVICENOW_API_KEY": "test-tool-api-key"}):
+    from mcp_servicenow.tools import (
+        _resolve_close_codes,
+        _snow_client,
+        create_incident,
+        get_incident,
+        resolve_incident,
+        update_incident,
+    )
 
 
 def _mock_response(status_code=200, json_data=None, text=""):

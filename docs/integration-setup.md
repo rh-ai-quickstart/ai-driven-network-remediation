@@ -139,7 +139,7 @@ Choose one credential configuration. The Helm keys in the table go under `global
 | Basic auth | `SERVICENOW_USERNAME=<user>` and `SERVICENOW_PASSWORD=<password>` | `username: <user>` and `password: <password>` |
 | Existing Secret | `SERVICENOW_SECRET_NAME=servicenow-credentials` | `existingSecretName: servicenow-credentials` |
 
-API key and Basic auth values create the Helm-managed `noc-servicenow-secret`. An existing Secret must be in the hub namespace and contain `SERVICENOW_API_KEY` or both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD`. The API key takes precedence when the Secret contains both forms. For API key provisioning, see the [ServiceNow bootstrap guide](../scripts/servicenow-bootstrap/README.md).
+API key and Basic auth values create the Helm-managed `noc-servicenow-secret`. An existing Secret must be in the hub namespace and contain `SERVICENOW_API_KEY` or both `SERVICENOW_USERNAME` and `SERVICENOW_PASSWORD`. The API key takes precedence when the Secret contains both forms. The MCP pod refuses to start if it receives neither a nonblank API key nor a complete Basic auth pair. For API key provisioning, see the [ServiceNow bootstrap guide](../scripts/servicenow-bootstrap/README.md).
 
 For direct Helm, add the following to your deployment values and pass the file with `-f` to `helm upgrade --install`. This example uses an existing Secret.
 
@@ -153,7 +153,7 @@ global:
       existingSecretName: servicenow-credentials
 ```
 
-Set `global.servicenow.mcp.image.repository` and `global.servicenow.mcp.image.tag` to use a custom MCP image. The mock image uses `global.servicenow.mock.image.repository` and `global.servicenow.mock.image.tag`.
+Set `global.servicenow.mcp.image.repository` and `global.servicenow.mcp.image.tag` to use a custom MCP image. The chart checks credentials with `python`, then starts `mcp_servicenow:app` with `uvicorn`. The mock image uses `global.servicenow.mock.image.repository` and `global.servicenow.mock.image.tag`.
 
 ### Upgrade an existing Network release
 

@@ -2,18 +2,19 @@
 {{- $sharedServiceNow := .Values.global.servicenow | default dict -}}
 {{- $legacyServiceNow := dig "mcp-servers" "noc-servicenow" (dict) (index .Values "mcp-servers") -}}
 {{- $legacyMcpUrl := dig "env" "SERVICENOW_URL" "" $legacyServiceNow -}}
-{{- if and .Release.IsUpgrade (eq $legacyMcpUrl "http://servicenow-mock.hub.svc:8080") -}}
+{{- if and .Release.IsUpgrade (eq $legacyMcpUrl (include "hub.servicenowLegacyMockUrl" .)) -}}
   {{- $legacyMcpUrl = "" -}}
 {{- end -}}
 {{- $legacyChatbotUrl := .Values.chatbotService.env.servicenowUrl -}}
-{{- if and .Release.IsUpgrade (eq $legacyChatbotUrl "http://servicenow-mock:8080") -}}
+{{- $mockUrl := include "hub.servicenowMockUrl" . -}}
+{{- if and .Release.IsUpgrade (eq $legacyChatbotUrl $mockUrl) -}}
   {{- $legacyChatbotUrl = "" -}}
 {{- end -}}
 {{- $serviceNowUrl := coalesce $legacyChatbotUrl $legacyMcpUrl -}}
 {{- if hasKey $sharedServiceNow "url" -}}
   {{- $serviceNowUrl = $sharedServiceNow.url -}}
 {{- end -}}
-{{- $serviceNowUrl = $serviceNowUrl | default "" | trim | trimSuffix "/" | default "http://servicenow-mock:8080" -}}
+{{- $serviceNowUrl = $serviceNowUrl | default "" | trim | trimSuffix "/" | default $mockUrl -}}
 {{- $legacyCredentials := dig "servicenow" (dict) .Values.mcpSecrets -}}
 {{- $sharedCredentials := $sharedServiceNow.credentials | default dict -}}
 {{- if eq $sharedCredentials.create nil -}}
@@ -21,7 +22,7 @@
 {{- end -}}
 {{- $serviceNowCredentials := mergeOverwrite (dict) $legacyCredentials $sharedCredentials -}}
 {{- $manageServiceNowCredentials := or (eq $serviceNowCredentials.create nil) $serviceNowCredentials.create -}}
-{{- $serviceNowSecret := $serviceNowCredentials.existingSecretName | default "noc-servicenow-secret" -}}
+{{- $serviceNowSecret := $serviceNowCredentials.existingSecretName | default (include "hub.servicenowSecretName" .) -}}
 {{- /* Mock mode controls the hub Secret's credential defaults. */ -}}
 {{- $legacyMock := .Values.servicenowMock | default dict -}}
 {{- $sharedMock := $sharedServiceNow.mock | default dict -}}
@@ -79,14 +80,7 @@ spec:
               value: {{ .Values.chatbotService.env.mcpServicenowUrl | quote }}
             - name: SERVICENOW_URL
               value: {{ $serviceNowUrl | quote }}
-            {{- range $key := list "SERVICENOW_USERNAME" "SERVICENOW_PASSWORD" "SERVICENOW_API_KEY" }}
-            - name: {{ $key }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $serviceNowSecret | quote }}
-                  key: {{ $key }}
-                  optional: true
-            {{- end }}
+            {{- include "hub.servicenowCredentialEnv" (dict "secretName" $serviceNowSecret) | nindent 12 }}
             - name: KAFKA_BOOTSTRAP
               value: {{ .Values.chatbotService.env.kafkaBootstrap | quote }}
             - name: MODEL_API_URL

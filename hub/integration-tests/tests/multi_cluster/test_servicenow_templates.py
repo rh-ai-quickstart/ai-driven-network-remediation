@@ -2,6 +2,8 @@
 
 import base64
 import shutil
+import subprocess
+import sys
 
 import pytest
 import yaml
@@ -143,6 +145,47 @@ def test_shared_api_key_rotation_rolls_both_clients_without_changing_the_url():
         before_pod = resource(before, "Deployment", deployment)["spec"]["template"]
         after_pod = resource(after, "Deployment", deployment)["spec"]["template"]
         assert before_pod != after_pod
+
+
+@pytest.mark.parametrize(
+    "credentials, starts",
+    [
+        ({}, False),
+        ({"SERVICENOW_USERNAME": "agent"}, False),
+        ({"SERVICENOW_PASSWORD": "password"}, False),
+        ({"SERVICENOW_API_KEY": " "}, False),
+        ({"SERVICENOW_API_KEY": "test-key"}, True),
+        ({"SERVICENOW_USERNAME": "agent", "SERVICENOW_PASSWORD": "password"}, True),
+    ],
+)
+def test_chart_checks_external_credentials_before_starting_a_published_mcp_image(tmp_path, credentials, starts):
+    docs = render_hub(
+        ("false", "true"),
+        "helm",
+        "--set", "global.servicenow.mock.enabled=false",
+        "--set-string", "global.servicenow.url=https://instance.example.test",
+        "--set-string", "global.servicenow.credentials.existingSecretName=external-servicenow",
+    )
+    mcp = deployment_container(docs, "mcp-noc-servicenow")
+    (tmp_path / "python").symlink_to(sys.executable)
+    uvicorn = tmp_path / "uvicorn"
+    uvicorn.write_text("#!/bin/sh\nprintf '%s\\n' \"$1\"\n")
+    uvicorn.chmod(0o700)
+    result = subprocess.run(
+        [*mcp["command"], *mcp["args"]],
+        env={"PATH": f"{tmp_path}:/bin", **credentials},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if starts:
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "mcp_servicenow:app"
+    else:
+        assert result.returncode != 0
+        assert "ServiceNow credentials required" in result.stderr
+        assert result.stdout == ""
 
 
 def test_mock_defaults_resolve_values_from_a_legacy_release():

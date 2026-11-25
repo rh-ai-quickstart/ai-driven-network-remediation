@@ -46,9 +46,10 @@ new chart defaults. Preserve the global/local precedence of llama-stack 0.8.7.
 {{- end -}}
 {{- $credentials := mergeOverwrite (dict "create" true "username" "" "password" "" "apiKey" "") $legacyCredentials -}}
 {{- if $mockEnabled -}}
-  {{- $_ := set $credentials "username" ($credentials.username | default "admin") -}}
-  {{- $_ := set $credentials "password" ($credentials.password | default "admin") -}}
-  {{- $_ := set $credentials "apiKey" ($credentials.apiKey | default "demo-api-key-2026") -}}
+  {{- $demoUser := "admin" -}}
+  {{- range $key, $value := dict "username" $demoUser "password" $demoUser "apiKey" "demo-api-key-2026" -}}
+    {{- $_ := set $credentials $key (get $credentials $key | default $value) -}}
+  {{- end -}}
 {{- else if and $sharedCredentials.username $sharedCredentials.password -}}
   {{- /* Explicit shared Basic auth replaces any inherited API key. */ -}}
   {{- $_ := set $credentials "apiKey" "" -}}
@@ -59,7 +60,7 @@ new chart defaults. Preserve the global/local precedence of llama-stack 0.8.7.
 {{- end -}}
 {{- $_ := set $credentials "apiKey" ($credentials.apiKey | default "" | toString) -}}
 {{- $legacyUrl := dig "env" "SERVICENOW_URL" "" $legacyMcp -}}
-{{- if and .Release.IsUpgrade (eq $legacyUrl "http://servicenow-mock.hub.svc:8080") -}}
+{{- if and .Release.IsUpgrade (eq $legacyUrl (include "hub.servicenowLegacyMockUrl" .)) -}}
   {{- /* Helm can carry the old hardcoded namespace forward with --reuse-values. */ -}}
   {{- $legacyUrl = "" -}}
 {{- end -}}
@@ -68,18 +69,21 @@ new chart defaults. Preserve the global/local precedence of llama-stack 0.8.7.
   {{- $url = get $shared "url" -}}
 {{- end -}}
 {{- $url = $url | default "" | trim | trimSuffix "/" -}}
+{{- $mockUrl := include "hub.servicenowMockUrl" . -}}
 {{- if not $mockEnabled -}}
-  {{- if or (not $url) (eq $url "http://servicenow-mock:8080") -}}
+  {{- if or (not $url) (eq $url $mockUrl) -}}
     {{- fail "Set global.servicenow.url (SERVICENOW_INSTANCE_URL in Make) to use a real ServiceNow instance." -}}
   {{- end -}}
   {{- $apiKey := trim $credentials.apiKey -}}
-  {{- if and $credentials.create (not $credentials.existingSecretName) (not (or $apiKey (and $credentials.username $credentials.password))) -}}
+  {{- $username := $credentials.username | default "" | toString | trim -}}
+  {{- $password := $credentials.password | default "" | toString | trim -}}
+  {{- if and $credentials.create (not $credentials.existingSecretName) (not (or $apiKey (and $username $password))) -}}
     {{- fail "Set global.servicenow.credentials to an API key, a username and password, or an existing Secret name. See docs/integration-setup.md for Helm and Make settings." -}}
   {{- end -}}
 {{- end -}}
 {{- $env := mergeOverwrite (dict "MCP_PORT" "8000" "MCP_TRANSPORT" "streamable-http") (get $legacyMcp "env" | default dict) -}}
-{{- $_ := set $env "SERVICENOW_URL" ($url | default "http://servicenow-mock:8080") -}}
-{{- $credentialEnv := dict "secretName" ($credentials.existingSecretName | default "noc-servicenow-secret") -}}
+{{- $_ := set $env "SERVICENOW_URL" ($url | default $mockUrl) -}}
+{{- $credentialEnv := dict "secretName" ($credentials.existingSecretName | default (include "hub.servicenowSecretName" .)) -}}
 {{- $mcpCredentialEnv := merge (dict "sharedSecretName" $sharedCredentials.existingSecretName "mappings" ($legacyMcp.envSecrets | default dict)) $credentialEnv -}}
 {{- dict "mock" $mock "mcp" $mcp "credentials" $credentials "env" $env "credentialEnv" $credentialEnv "mcpCredentialEnv" $mcpCredentialEnv | toJson -}}
 {{- end -}}
@@ -88,18 +92,6 @@ new chart defaults. Preserve the global/local precedence of llama-stack 0.8.7.
 {{- if and .create (not .existingSecretName) -}}
 annotations:
   checksum/servicenow-credentials: {{ . | toJson | sha256sum | quote }}
-{{- end -}}
-{{- end -}}
-
-{{- define "hub.servicenowCredentialEnv" -}}
-{{- range $key := list "SERVICENOW_USERNAME" "SERVICENOW_PASSWORD" "SERVICENOW_API_KEY" }}
-{{- $mapping := index ($.mappings | default dict) $key | default dict }}
-- name: {{ $key }}
-  valueFrom:
-    secretKeyRef:
-      name: {{ coalesce $.sharedSecretName $mapping.name $.secretName | quote }}
-      key: {{ $mapping.key | default $key | quote }}
-      optional: true
 {{- end -}}
 {{- end -}}
 

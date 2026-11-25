@@ -22,6 +22,23 @@ spec:
         - name: noc-servicenow
           image: "{{ $config.mcp.image.repository }}:{{ $config.mcp.image.tag }}"
           imagePullPolicy: {{ $config.mcp.imagePullPolicy }}
+          # Enforce authentication with older MCP images during in-place upgrades.
+          command: ["python", "-c"]
+          args:
+            - |
+              import os
+              import sys
+
+              api_key = os.getenv("SERVICENOW_API_KEY", "").strip()
+              username = os.getenv("SERVICENOW_USERNAME", "").strip()
+              password = os.getenv("SERVICENOW_PASSWORD", "").strip()
+              if not (api_key or (username and password)):
+                  sys.exit("ServiceNow credentials required: set an API key or both username and password.")
+
+              module = os.getenv("MODULE_NAME") or "mcp_servicenow"
+              host = os.getenv("APP_HOST") or "0.0.0.0"
+              port = os.getenv("APP_PORT") or "8000"
+              os.execvp("uvicorn", ["uvicorn", f"{module}:app", "--host", host, "--port", port])
           ports:
             - name: http
               containerPort: {{ $config.mcp.targetPort }}

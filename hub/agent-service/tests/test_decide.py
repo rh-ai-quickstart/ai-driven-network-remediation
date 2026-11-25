@@ -40,6 +40,18 @@ async def test_prebuilt_remediation_does_not_require_generated_selection(has_sel
     assert outcome["decision"] == "remediate"
 
 
+async def test_analyze_escalation_takes_precedence_over_prebuilt_remediation():
+    rca = make_rca(recommended_actions=["increase memory limit"], selected_action=None)
+    state = make_state(root_cause_analysis=rca, decision="escalate")
+    with patch(
+        "agent_service.nodes.decide.verify_playbook_match", AsyncMock(return_value=MatchVerdict.MATCH)
+    ) as match_guard:
+        outcome = await make_decide_node(GraphConfig())(state)
+
+    assert outcome == {"decision": "escalate"}
+    match_guard.assert_not_awaited()
+
+
 async def test_incomplete_generated_selection_does_not_veto_matching_prebuilt():
     selection = selected_action()
     selection = selection.model_copy(update={"target": selection.target.model_copy(update={"namespace": ""})})

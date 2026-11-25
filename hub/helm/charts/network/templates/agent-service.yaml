@@ -1,4 +1,6 @@
 {{- if .Values.agentService.enabled }}
+{{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) -}}
+{{- $usesSharedSlackToken := and $sharedSlackToken (not .Values.agentService.slack.existingSecret) -}}
 {{- $sharedServiceNow := .Values.global.servicenow | default dict -}}
 {{- $serviceNowInstanceUrl := coalesce .Values.agentService.servicenowInstanceUrl $sharedServiceNow.url | default "" | trim | trimSuffix "/" -}}
 {{- $enabledMcpServers := list }}
@@ -28,6 +30,10 @@ spec:
       app.kubernetes.io/component: agent-service
   template:
     metadata:
+      {{- if $usesSharedSlackToken }}
+      annotations:
+        checksum/slack-token: {{ $sharedSlackToken | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "network.labels" . | nindent 8 }}
         app.kubernetes.io/component: agent-service
@@ -116,9 +122,8 @@ spec:
               value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL
               value: {{ .Values.agentService.slack.channel | quote }}
-            {{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) }}
             {{- $slackSecretName := "noc-slack-secret" }}
-            {{- if $sharedSlackToken }}
+            {{- if $usesSharedSlackToken }}
             {{- $slackSecretName = "hub-slack-secret" }}
             {{- end }}
             - name: SLACK_BOT_TOKEN

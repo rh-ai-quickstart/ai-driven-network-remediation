@@ -1,4 +1,7 @@
 {{- if .Values.ranRemediationService.enabled }}
+{{- $slackSecret := dig "slack" "existingSecret" "" .Values.ranRemediationService -}}
+{{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) -}}
+{{- $usesSharedSlackToken := and $sharedSlackToken (not $slackSecret) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,6 +17,10 @@ spec:
       app.kubernetes.io/component: ran-remediation-service
   template:
     metadata:
+      {{- if $usesSharedSlackToken }}
+      annotations:
+        checksum/slack-token: {{ $sharedSlackToken | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "telco.labels" . | nindent 8 }}
         app.kubernetes.io/component: ran-remediation-service
@@ -50,15 +57,13 @@ spec:
               value: {{ .Values.ranRemediationService.env.jobTimeoutSeconds | quote }}
             - name: RECENT_RESULTS_LIMIT
               value: {{ .Values.ranRemediationService.env.recentResultsLimit | quote }}
-            {{- $slackSecret := dig "slack" "existingSecret" "" .Values.ranRemediationService }}
-            {{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) }}
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
                   {{- if $slackSecret }}
                   name: {{ $slackSecret | quote }}
                   key: token
-                  {{- else if $sharedSlackToken }}
+                  {{- else if $usesSharedSlackToken }}
                   name: hub-slack-secret
                   key: SLACK_BOT_TOKEN
                   {{- else }}
