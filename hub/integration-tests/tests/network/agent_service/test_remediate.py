@@ -39,6 +39,7 @@ INCIDENT_STATE_FIELDS = {
 _KNOWN_PLAYBOOK_TYPES = {"OOMKilled", "CrashLoopBackOff", "ConfigError", "NetworkTimeout", "StorageFull"}
 _MIN_REMEDIATION_CONFIDENCE = 0.8
 _ANALYSIS_FAILURE_SUMMARY = "Analysis failed, escalate for manual review"
+_INVALID_ACTION_WARNING = "The model supplied an invalid remediation action."
 
 
 def _make_raw_event(message):
@@ -64,12 +65,15 @@ def _assert_valid_remediation_response(response, expected_raw_event):
     assert body["raw_event"] == expected_raw_event
     assert body["incident_id"]
     assert body["log_event"]["raw"] == expected_raw_event
-    assert not body["error_message"], body
     assert body["total_duration_ms"] > 0
     rca = body["root_cause_analysis"]
     assert rca["summary"] and rca["summary"] != _ANALYSIS_FAILURE_SUMMARY, body
     assert 0 <= rca["confidence"] <= 1
     assert isinstance(rca["evidence"], list), body
+    if body["error_message"]:
+        # A successful escalation can carry the diagnostic for a discarded action.
+        assert body["error_message"] == _INVALID_ACTION_WARNING, body
+        assert body["decision"] == "escalate" and rca["selected_action"] is None, body
     _assert_decision_outcome(body)
 
 
