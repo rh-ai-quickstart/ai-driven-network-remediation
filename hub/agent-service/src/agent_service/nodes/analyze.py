@@ -12,6 +12,25 @@ from agent_service.models import RootCauseAnalysis
 _MAX_CONTEXT_CHARS = 5000
 
 
+def _validate_diagnosis(diagnosis: object) -> tuple[RootCauseAnalysis, dict]:
+    try:
+        return RootCauseAnalysis.model_validate(diagnosis), {}
+    except ValidationError as exc:
+        if not (
+            isinstance(diagnosis, dict)
+            and diagnosis.get("selected_action") is not None
+            and all(error["loc"] and error["loc"][0] == "selected_action" for error in exc.errors(include_input=False))
+        ):
+            raise
+
+    rca = RootCauseAnalysis.model_validate({**diagnosis, "selected_action": None})
+    logger.warning("Model returned an invalid remediation action; escalating with the diagnosis")
+    return rca, {
+        "decision": "escalate",
+        "error_message": "The model supplied an invalid remediation action.",
+    }
+
+
 async def analyze_node(state: dict) -> dict:
     logger.info("Analyze node invoked")
 
@@ -42,28 +61,14 @@ async def analyze_node(state: dict) -> dict:
         )
         latency_ms = (time.monotonic() - t0) * 1000
 
-        diagnosis = json.loads(response.content)
-        try:
-            rca = RootCauseAnalysis.model_validate(diagnosis)
-        except ValidationError as exc:
-            # An invalid proposed action cannot be executed, but the rest of a
-            # valid diagnosis can still guide a safe escalation.
-            if not (
-                isinstance(diagnosis, dict)
-                and diagnosis.get("selected_action") is not None
-                and all(error["loc"] and error["loc"][0] == "selected_action" for error in exc.errors())
-            ):
-                raise
-            logger.warning("Discarding invalid selected_action from LLM diagnosis: {}", exc)
-            diagnosis["selected_action"] = None
-            rca = RootCauseAnalysis.model_validate(diagnosis)
-
+        rca, updates = _validate_diagnosis(json.loads(response.content))
         logger.debug("Root cause analysis: {}", rca.model_dump_json())
 
         usage = response.usage_metadata or {}
         tokens = usage.get("total_tokens", 0)
 
         return {
+            **updates,
             "root_cause_analysis": rca,
             "analysis_tokens_used": tokens,
             "analysis_latency_ms": latency_ms,

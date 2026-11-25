@@ -5,5 +5,8 @@ dependencies:
 - name: lokistack
   repository: file://../../lib-charts/lokistack
   version: 0.1.0
-digest: sha256:63feabac546595090966ccbf5b233b92cdf8ec80dedd7f7a537dc79090f01297
-generated: "2026-09-07T17:12:03.613109+02:00"
+- name: servicenow-common
+  repository: file://../../lib-charts/servicenow-common
+  version: 0.1.0
+digest: sha256:467eade2f32073094c143666d3856fe42553cac8834b8ecc244b88375fff30b0
+generated: "2026-11-25T16:56:52.529873+02:00"

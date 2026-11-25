@@ -1,4 +1,7 @@
 dependencies:
+- name: servicenow-common
+  repository: file://lib-charts/servicenow-common
+  version: 0.1.0
 - name: pgvector
   repository: https://rh-ai-quickstart.github.io/ai-architecture-charts
   version: 0.5.5
@@ -20,5 +23,5 @@ dependencies:
 - name: gitea
   repository: file://charts/gitea
   version: 0.1.0
-digest: sha256:bc86fe8164d37641edf261f50a3dec7ce725c3cfa7e19d9c665aa2969016d1ad
-generated: "2026-09-28T14:49:44.602204+02:00"
+digest: sha256:38946387a3cd815a10675a22c0bfbb176fce00305937c12aa86b6e749efe7471
+generated: "2026-11-25T16:56:53.423126+02:00"

@@ -1,4 +1,7 @@
 {{- if .Values.ranRemediationService.enabled }}
+{{- $slackSecret := dig "slack" "existingSecret" "" .Values.ranRemediationService -}}
+{{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) -}}
+{{- $usesSharedSlackToken := and $sharedSlackToken (not $slackSecret) -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,6 +17,10 @@ spec:
       app.kubernetes.io/component: ran-remediation-service
   template:
     metadata:
+      {{- if $usesSharedSlackToken }}
+      annotations:
+        checksum/slack-token: {{ $sharedSlackToken | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "telco.labels" . | nindent 8 }}
         app.kubernetes.io/component: ran-remediation-service
@@ -36,7 +43,12 @@ spec:
             - name: KAFKA_CONSUMER_ENABLED
               value: {{ .Values.ranRemediationService.env.kafkaConsumerEnabled | quote }}
             - name: SLACK_ENABLED
-              value: {{ .Values.ranRemediationService.env.slackEnabled | quote }}
+              {{- $slackEnabled := dig "slack" "enabled" false (.Values.global | default dict) }}
+              {{- $profileSlackEnabled := .Values.ranRemediationService.env.slackEnabled }}
+              {{- if and (ne $profileSlackEnabled nil) (ne (toString $profileSlackEnabled) "") }}
+              {{- $slackEnabled = $profileSlackEnabled }}
+              {{- end }}
+              value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL
               value: {{ .Values.ranRemediationService.env.slackChannel | quote }}
             - name: POLL_INTERVAL_SECONDS
@@ -48,9 +60,17 @@ spec:
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
+                  {{- if $slackSecret }}
+                  name: {{ $slackSecret | quote }}
+                  key: token
+                  {{- else if $usesSharedSlackToken }}
+                  name: hub-slack-secret
+                  key: SLACK_BOT_TOKEN
+                  {{- else }}
                   name: slack-secret
                   key: token
                   optional: true
+                  {{- end }}
             # Unset against aap-mock, which has no auth; a real AAP controller
             # needs this secret to exist.
             - name: AAP_TOKEN

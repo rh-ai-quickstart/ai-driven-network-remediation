@@ -1,10 +1,18 @@
 {{- if .Values.agentService.enabled }}
+{{- $sharedSlackToken := dig "slack" "botToken" "" (.Values.global | default dict) -}}
+{{- $usesSharedSlackToken := and $sharedSlackToken (not .Values.agentService.slack.existingSecret) -}}
+{{- $sharedServiceNow := .Values.global.servicenow | default dict -}}
+{{- $serviceNowInstanceUrl := coalesce .Values.agentService.servicenowInstanceUrl $sharedServiceNow.url | default "" | trim | trimSuffix "/" -}}
 {{- $enabledMcpServers := list }}
 {{- if index .Values "mcp-servers" "enabled" }}
 {{- range $name, $server := index .Values "mcp-servers" "mcp-servers" }}
-{{- if $server.enabled }}
+{{- if and (ne $name "noc-servicenow") $server.enabled }}
 {{- $enabledMcpServers = append $enabledMcpServers $name }}
 {{- end }}
+{{- end }}
+{{- $legacyMcp := dig "mcp-servers" "noc-servicenow" (dict) (index .Values "mcp-servers") }}
+{{- if dig "enabled" true $legacyMcp }}
+{{- $enabledMcpServers = append $enabledMcpServers "noc-servicenow" }}
 {{- end }}
 {{- end }}
 apiVersion: apps/v1
@@ -22,6 +30,10 @@ spec:
       app.kubernetes.io/component: agent-service
   template:
     metadata:
+      {{- if $usesSharedSlackToken }}
+      annotations:
+        checksum/slack-token: {{ $sharedSlackToken | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "network.labels" . | nindent 8 }}
         app.kubernetes.io/component: agent-service
@@ -102,19 +114,29 @@ spec:
             - name: GITEA_PROJECT_NAME
               value: {{ printf "%s%s" (include "network.aapResourcePrefix" .) .Values.agentService.lightspeed.projectName | quote }}
             - name: SLACK_ENABLED
-              value: {{ .Values.agentService.slack.enabled | quote }}
+              {{- $slackEnabled := dig "slack" "enabled" false (.Values.global | default dict) }}
+              {{- $profileSlackEnabled := .Values.agentService.slack.enabled }}
+              {{- if and (ne $profileSlackEnabled nil) (ne (toString $profileSlackEnabled) "") }}
+              {{- $slackEnabled = $profileSlackEnabled }}
+              {{- end }}
+              value: {{ $slackEnabled | quote }}
             - name: SLACK_CHANNEL
               value: {{ .Values.agentService.slack.channel | quote }}
-            {{- if or .Values.agentService.slack.botToken .Values.agentService.slack.existingSecret }}
+            {{- $slackSecretName := "noc-slack-secret" }}
+            {{- if $usesSharedSlackToken }}
+            {{- $slackSecretName = "hub-slack-secret" }}
+            {{- end }}
             - name: SLACK_BOT_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.agentService.slack.existingSecret | default "noc-slack-secret" }}
+                  name: {{ .Values.agentService.slack.existingSecret | default $slackSecretName | quote }}
                   key: SLACK_BOT_TOKEN
-            {{- end }}
-            {{- if .Values.agentService.servicenowInstanceUrl }}
+                  {{- if not (or .Values.agentService.slack.existingSecret $sharedSlackToken .Values.agentService.slack.botToken) }}
+                  optional: true
+                  {{- end }}
+            {{- if $serviceNowInstanceUrl }}
             - name: SERVICENOW_INSTANCE_URL
-              value: {{ .Values.agentService.servicenowInstanceUrl | quote }}
+              value: {{ $serviceNowInstanceUrl | quote }}
             {{- end }}
             - name: SERVICENOW_CREATE_RESOLVED
               value: {{ .Values.agentService.servicenowCreateResolved | quote }}

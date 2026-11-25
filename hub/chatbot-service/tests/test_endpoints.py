@@ -2,6 +2,10 @@
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+import respx
+from chatbot_service import probes
+
 
 def test_health(client):
     resp = client.get("/health")
@@ -35,6 +39,29 @@ def test_summary_servicenow_unreachable(mock_snow, client):
     data = resp.json()
     assert data["_deps"] == {"status": "degraded", "unavailable": ["servicenow"]}
     assert data["open_incidents"] == 0
+
+
+@pytest.mark.parametrize("api_key", ["", "test-token"])
+@respx.mock
+def test_summary_uses_configured_servicenow_authentication(client, monkeypatch, api_key):
+    monkeypatch.setattr(probes, "SERVICENOW_URL", "https://servicenow.example")
+    monkeypatch.setattr(probes, "SERVICENOW_USERNAME", "agent")
+    monkeypatch.setattr(probes, "SERVICENOW_PASSWORD", "password")
+    monkeypatch.setattr(probes, "SERVICENOW_API_KEY", api_key)
+    incidents = respx.get(
+        "https://servicenow.example/api/now/table/incident",
+        params={"sysparm_limit": 100, "sysparm_fields": "number"},
+    ).respond(200, json={"result": [{"number": "INC001"}]})
+
+    response = client.get("/api/summary")
+
+    assert response.json()["open_incidents"] == 1
+    headers = incidents.calls.last.request.headers
+    if api_key:
+        assert headers["x-sn-apikey"] == api_key
+        assert "Authorization" not in headers
+    else:
+        assert headers["Authorization"] == "Basic YWdlbnQ6cGFzc3dvcmQ="
 
 
 @patch("chatbot_service.fetch_recent_audits")

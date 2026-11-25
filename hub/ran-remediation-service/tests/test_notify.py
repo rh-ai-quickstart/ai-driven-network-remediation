@@ -1,7 +1,12 @@
 """Unit tests for the notify node."""
 
+import runpy
+from unittest.mock import patch
+
 import pytest
+from ran_remediation_service import config
 from ran_remediation_service.models import RemediationState
+from ran_remediation_service.nodes import notify
 from ran_remediation_service.nodes.notify import _build_payload, notify_node
 
 
@@ -56,8 +61,6 @@ async def test_notify_node_slack_disabled_returns_empty():
 
 @pytest.mark.asyncio
 async def test_notify_node_slack_enabled_no_token_returns_empty():
-    from unittest.mock import patch
-
     state = _state()
     with (
         patch("ran_remediation_service.nodes.notify.SLACK_ENABLED", True),
@@ -65,3 +68,31 @@ async def test_notify_node_slack_enabled_no_token_returns_empty():
     ):
         result = await notify_node(state)
     assert result == {}
+
+
+@pytest.mark.parametrize("enabled", [None, "false", "true"], ids=["default", "disabled", "enabled"])
+@pytest.mark.asyncio
+async def test_notify_node_uses_slack_settings_from_environment(monkeypatch, enabled):
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-shared-test")
+    monkeypatch.setenv("SLACK_CHANNEL", "#ran-team")
+    if enabled is None:
+        monkeypatch.delenv("SLACK_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("SLACK_ENABLED", enabled)
+
+    settings = runpy.run_path(config.__file__)
+    with (
+        patch.multiple(config, **{key: settings[key] for key in ("SLACK_ENABLED", "SLACK_BOT_TOKEN", "SLACK_CHANNEL")}),
+        patch("slack_sdk.WebClient", autospec=True) as slack_client,
+    ):
+        node = runpy.run_path(notify.__file__)["notify_node"]
+        assert await node(_state()) == {}
+
+    if enabled == "true":
+        assert slack_client.call_args.kwargs["token"] == "xoxb-shared-test"
+        post_message = slack_client.return_value.chat_postMessage
+        post_message.assert_called_once()
+        assert post_message.call_args.kwargs["channel"] == "#ran-team"
+        assert "a3f7c2d1" in post_message.call_args.kwargs["text"]
+    else:
+        slack_client.assert_not_called()

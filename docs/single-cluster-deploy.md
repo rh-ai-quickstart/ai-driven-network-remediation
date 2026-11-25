@@ -104,14 +104,95 @@ Set the connection details:
 
 ### Slack configuration
 
-Configure a Slack workspace and an app with a bot that can post to your
-chosen channel. Follow the [Slack app setup guide](https://docs.slack.dev/app-management/quickstart-app-settings/)
-to add the `chat:write` bot scope, install the app in your workspace, and
-obtain its bot token. Invite the bot to the channel.
+Install a Slack app with the `chat:write` bot scope and invite the bot to each
+channel where it should post. [Slack app setup guide](https://docs.slack.dev/app-management/quickstart-app-settings/)
 
-1. `SLACK_BOT_TOKEN`: bot token.
-2. `SLACK_CHANNEL`: the channel where incident events will be posted.
-3. Set `ENABLE_SLACK` to `true`.
+#### Use one shared bot
+
+Set `SLACK_BOT_TOKEN` to the shared bot token. Use `ENABLE_SLACK=true` to
+enable notifications for all installed profiles. Notifications default to off
+even when a token is configured. Network posts to `SLACK_CHANNEL` and Telco
+posts to `TELCO_SLACK_CHANNEL`.
+
+```bash
+make helm-install ENABLE_SLACK=true SLACK_BOT_TOKEN="$SLACK_BOT_TOKEN" \
+  SLACK_CHANNEL='#network-ops' TELCO_SLACK_CHANNEL='#ran-ops'
+```
+
+For direct Helm, pass the following values with `-f shared-slack.yaml` on
+`helm upgrade --install`. The chart stores the token in one `hub-slack-secret`
+in the release namespace.
+
+```yaml
+global:
+  slack:
+    enabled: true
+    botToken: "<shared-bot-token>"
+network:
+  agentService:
+    slack:
+      channel: "#network-ops"
+telco:
+  ranRemediationService:
+    env:
+      slackChannel: "#ran-ops"
+```
+
+#### Use separate bots
+
+Create or reuse the bot Secrets in the hub namespace. Network reads the
+`SLACK_BOT_TOKEN` key and Telco reads the `token` key. Select each Secret by
+name. A selected Secret takes precedence for that profile. The other profile
+can use the shared token.
+
+```bash
+make helm-install ENABLE_SLACK=true \
+  NETWORK_SLACK_SECRET_NAME=network-slack-bot TELCO_SLACK_SECRET_NAME=telco-slack-bot \
+  SLACK_CHANNEL='#network-ops' TELCO_SLACK_CHANNEL='#ran-ops'
+```
+
+With direct Helm, add these Secret selections to your values alongside the
+enablement and channel settings.
+
+```yaml
+network:
+  agentService:
+    slack:
+      existingSecret: network-slack-bot
+telco:
+  ranRemediationService:
+    slack:
+      existingSecret: telco-slack-bot
+```
+
+To override enablement for one profile, use `ENABLE_NETWORK_SLACK` or
+`ENABLE_TELCO_SLACK` with Make. The Helm equivalents are
+`network.agentService.slack.enabled` and `telco.ranRemediationService.env.slackEnabled`.
+
+#### Retain existing credentials on upgrade
+
+When no shared token is supplied, Network falls back to `noc-slack-secret`
+with the `SLACK_BOT_TOKEN` key and Telco falls back to `slack-secret` with the
+`token` key. Keep those Secrets in the hub namespace. If Helm created
+`noc-slack-secret`, carry forward the legacy `network.agentService.slack.botToken`
+value to keep Helm managing it. Pass your existing values file or reuse the
+release's saved values with `--reset-then-reuse-values`.
+
+```bash
+# Upgrade with Make while keeping the legacy credential settings and channels.
+make helm-install ENABLE_SLACK=true SLACK_BOT_TOKEN= \
+  HELM_EXTRA_ARGS=--reset-then-reuse-values
+
+# Upgrade directly with Helm and keep the release's saved settings.
+helm upgrade hub hub/helm --namespace hub --reset-then-reuse-values --wait
+```
+
+Add the shared token when ready. Profiles without a Secret selection will
+switch to the shared token. For example, set `TELCO_SLACK_SECRET_NAME=slack-secret`
+to keep Telco on its legacy bot while Network switches to the shared bot. To
+keep Network on its legacy bot, set `NETWORK_SLACK_SECRET_NAME=noc-slack-secret`
+or `network.agentService.slack.existingSecret: noc-slack-secret` in Helm values.
+Helm retains the existing Network Secret when the same release owns it.
 
 ## Deploy the quickstart
 

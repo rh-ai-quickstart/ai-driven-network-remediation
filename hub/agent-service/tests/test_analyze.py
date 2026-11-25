@@ -4,7 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from helpers import make_log_event, make_state
 
-from agent_service.models import RootCauseAnalysis
+from agent_service.models import GraphConfig, RootCauseAnalysis
+from agent_service.nodes.decide import make_decide_node
 
 _VALID_RCA_JSON = (
     '{"failure_type": "OOMKilled", "confidence": 0.92, '
@@ -183,6 +184,43 @@ class TestLlmErrorFallback:
             result = await analyze_node(make_state())
 
         assert result["root_cause_analysis"].summary == "Analysis failed, escalate for manual review"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("valid_diagnosis", [True, False])
+    async def test_malformed_selected_action_escalates(self, valid_diagnosis):
+        from agent_service.nodes.analyze import analyze_node
+
+        diagnosis = json.loads(_VALID_RCA_JSON)
+        if not valid_diagnosis:
+            diagnosis["confidence"] = 2.0
+        response = {
+            **diagnosis,
+            "selected_action": {
+                "goal": "",
+                "target": {"edge_site_id": "", "kind": "", "name": ""},
+                "evidence": [""],
+                "parameters": {},
+                "verification": [],
+            },
+        }
+        mock_llm = AsyncMock()
+        mock_llm.ainvoke.return_value = _make_llm_response(json.dumps(response))
+
+        with patch("agent_service.nodes.analyze.get_llm", return_value=mock_llm):
+            result = await analyze_node(make_state())
+
+        rca = result["root_cause_analysis"]
+        assert rca.selected_action is None
+        if valid_diagnosis:
+            assert rca == RootCauseAnalysis.model_validate(diagnosis)
+            assert result["analysis_tokens_used"] == 150
+            assert result["error_message"] == "The model supplied an invalid remediation action."
+        else:
+            assert rca.failure_type == "Unknown"
+            assert result["analysis_tokens_used"] == 0
+
+        decision = await make_decide_node(GraphConfig(enable_match_guard=False))(make_state(**result))
+        assert decision == {"decision": "escalate"}
 
     @pytest.mark.asyncio
     async def test_llm_error_returns_fallback_rca(self):

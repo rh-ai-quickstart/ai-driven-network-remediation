@@ -25,6 +25,9 @@ def _generated_remediation_decision(rca) -> dict:
 def make_decide_node(config: GraphConfig):
     async def decide_node(state) -> dict:
         logger.info("Decide node invoked")
+        if state.decision == "escalate":
+            return {"decision": "escalate"}
+
         rca = state.root_cause_analysis
         confidence = rca.confidence
 

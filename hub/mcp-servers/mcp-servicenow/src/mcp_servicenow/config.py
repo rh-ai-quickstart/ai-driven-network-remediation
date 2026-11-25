@@ -12,10 +12,13 @@ MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 
 SNOW_URL = os.getenv("SERVICENOW_URL", "http://servicenow-mock.dark-noc-servicenow-mock.svc:8080").rstrip("/")
-SNOW_USERNAME = os.getenv("SERVICENOW_USERNAME", "admin")
-SNOW_PASSWORD = os.getenv("SERVICENOW_PASSWORD", "admin")
+SNOW_USERNAME = os.getenv("SERVICENOW_USERNAME", "")
+SNOW_PASSWORD = os.getenv("SERVICENOW_PASSWORD", "")
 SNOW_API_KEY = os.getenv("SERVICENOW_API_KEY", "").strip()
 SNOW_CALLER_NAME = os.getenv("SERVICENOW_CALLER_NAME", "NOC Agent")
+
+if not (SNOW_API_KEY or (SNOW_USERNAME.strip() and SNOW_PASSWORD.strip())):
+    raise RuntimeError("ServiceNow credentials required: set an API key or both username and password.")
 
 mcp = FastMCP(
     "noc-servicenow",

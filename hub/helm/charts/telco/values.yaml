@@ -135,6 +135,9 @@ ranRemediationService:
   aapSecretName: noc-aap-secret
   enabled: true
   replicaCount: 1
+  slack:
+    # Existing Secret in the release namespace with a token key.
+    existingSecret: ""
   env:
     # Same controller as Network; Make overrides this when ENABLE_AAP_MOCK=true.
     aapUrl: "http://aap.aap.svc"
@@ -143,7 +146,7 @@ ranRemediationService:
     kafkaRemediationTopic: "ran-remediation-results"
     kafkaGroupId: "ran-remediation-service"
     kafkaConsumerEnabled: "true"
-    slackEnabled: "false"
+    # slackEnabled: false  # Omit to inherit global.slack.enabled.
     slackChannel: "#ran-alerts"
     pollIntervalSeconds: "5"
     jobTimeoutSeconds: "120"

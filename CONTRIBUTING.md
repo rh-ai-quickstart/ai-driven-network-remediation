@@ -35,13 +35,13 @@ Make uses the exported values; reload `.env` after edits or opening a new shell.
 | Setting | Development behavior |
 | --- | --- |
 | `ENABLE_AAP_MOCK=true` | Deploys `aap-mock`, directs Network and RAN automation requests to it, and provides simulated job results. The mock also supplies the generated-playbook repository API used by Network. |
-| `ENABLE_SERVICENOW_MOCK=true` | Deploys `servicenow-mock` and directs the Network ticketing tools to its simulated incident API. |
+| `ENABLE_SERVICENOW_MOCK=true` | Deploys `servicenow-mock` in the hub namespace and directs the shared ServiceNow MCP endpoint to its simulated incident API. |
 | `ENABLE_LIGHTSPEED=false` | Leaves optional playbook generation disabled. Existing-template AAP requests still use the selected real or mock controller. |
 | `LIGHTSPEED_SKIP_AAP=true` | Skips execution of newly generated Lightspeed playbooks in the Network agent only; see the next section for how to apply it. |
 
 `ENABLE_AAP_MOCK=false` selects real AAP; it does **not** disable automation. Use the mock when developing other components without an AAP controller. Likewise, `ENABLE_SERVICENOW_MOCK=false` requires real ServiceNow configuration. Follow the main README when switching to real integrations.
 
-These settings are wired by the Makefile, including service URLs and credentials. Enabling a chart flag directly with Helm does not reproduce all of Make's connection settings.
+Make wires the service URLs and credentials for the mocks. Direct Helm installs use the same ServiceNow mock defaults. See the [ServiceNow setup guide](docs/integration-setup.md#servicenow) for shared chart settings and upgrades.
 
 Check the mock deployments and open the dashboards:
 
@@ -52,7 +52,7 @@ oc get route hub-frontend -n "$NAMESPACE" -o jsonpath='https://{.spec.host}{"\n"
 oc get route hub-ran-frontend -n "$NAMESPACE" -o jsonpath='https://{.spec.host}{"\n"}'
 ```
 
-Skip the ServiceNow and Network dashboard checks when Network is disabled, and skip the RAN dashboard check when RAN is disabled. These resource names assume the default Helm release name, `hub`.
+Check both mock deployments for each profile. Run the dashboard checks for the profiles you enabled. These resource names assume the default Helm release name, `hub`.
 
 - In Network, select **Trigger CrashLoop Demo** and follow the incident. This publishes a synthetic alert; it does not crash a workload.
 - In RAN, select **Antenna Failure** under **Demo Mode** and follow detection, diagnosis, and remediation. This sends a public lab trace through the real inference pipeline.
@@ -142,13 +142,7 @@ make build-all-images
 make push-all-images
 ```
 
-These targets cover the selected application components. They exclude the mock images; build and push those separately before deploying a custom registry/tag with mocks enabled:
-
-```bash
-make build-push-aap-mock
-make build-push-servicenow-mock
-make deploy ENABLE_AAP_MOCK=true ENABLE_SERVICENOW_MOCK=true
-```
+These targets cover the selected application components and mock images. Use the same `ENABLE_AAP_MOCK` and `ENABLE_SERVICENOW_MOCK` settings for the build, push, and deployment.
 
 Keep the same registry, version, component selections, and topology configuration across build, push, and deployment. Report which checks you ran and any failures or skipped checks when submitting a change.
 

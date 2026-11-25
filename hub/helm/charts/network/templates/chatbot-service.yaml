@@ -1,4 +1,31 @@
 {{- if .Values.chatbotService.enabled }}
+{{- $sharedServiceNow := .Values.global.servicenow | default dict -}}
+{{- $legacyServiceNow := dig "mcp-servers" "noc-servicenow" (dict) (index .Values "mcp-servers") -}}
+{{- $legacyMcpUrl := dig "env" "SERVICENOW_URL" "" $legacyServiceNow -}}
+{{- if and .Release.IsUpgrade (eq $legacyMcpUrl (include "hub.servicenowLegacyMockUrl" .)) -}}
+  {{- $legacyMcpUrl = "" -}}
+{{- end -}}
+{{- $legacyChatbotUrl := .Values.chatbotService.env.servicenowUrl -}}
+{{- $mockUrl := include "hub.servicenowMockUrl" . -}}
+{{- if and .Release.IsUpgrade (eq $legacyChatbotUrl $mockUrl) -}}
+  {{- $legacyChatbotUrl = "" -}}
+{{- end -}}
+{{- $serviceNowUrl := coalesce $legacyChatbotUrl $legacyMcpUrl -}}
+{{- if hasKey $sharedServiceNow "url" -}}
+  {{- $serviceNowUrl = $sharedServiceNow.url -}}
+{{- end -}}
+{{- $serviceNowUrl = $serviceNowUrl | default "" | trim | trimSuffix "/" | default $mockUrl -}}
+{{- $legacyCredentials := dig "servicenow" (dict) .Values.mcpSecrets -}}
+{{- $sharedCredentials := $sharedServiceNow.credentials | default dict -}}
+{{- if eq $sharedCredentials.create nil -}}
+  {{- $sharedCredentials = omit $sharedCredentials "create" -}}
+{{- end -}}
+{{- $serviceNowCredentials := mergeOverwrite (dict) $legacyCredentials $sharedCredentials -}}
+{{- $manageServiceNowCredentials := or (eq $serviceNowCredentials.create nil) $serviceNowCredentials.create -}}
+{{- $serviceNowSecret := $serviceNowCredentials.existingSecretName | default (include "hub.servicenowSecretName" .) -}}
+{{- /* Mock mode controls the hub Secret's credential defaults. */ -}}
+{{- $legacyMock := .Values.servicenowMock | default dict -}}
+{{- $sharedMock := $sharedServiceNow.mock | default dict -}}
 {{- $defaultCpuDemoSiteA := .Values.chatbotService.env.edgeSiteId -}}
 {{- if and (eq .Values.topology.deploymentMode "hub-spoke") (gt (len .Values.topology.spokes) 0) -}}
 {{- $defaultCpuDemoSiteA = index (index .Values.topology.spokes 0) "siteId" -}}
@@ -24,6 +51,10 @@ spec:
       app.kubernetes.io/component: chatbot-service
   template:
     metadata:
+      {{- if and $manageServiceNowCredentials (not $serviceNowCredentials.existingSecretName) }}
+      annotations:
+        checksum/servicenow-credentials: {{ list $legacyCredentials $sharedCredentials $legacyMock.enabled $sharedMock.enabled | toJson | sha256sum | quote }}
+      {{- end }}
       labels:
         {{- include "network.labels" . | nindent 8 }}
         app.kubernetes.io/component: chatbot-service
@@ -48,17 +79,8 @@ spec:
             - name: MCP_SERVICENOW_URL
               value: {{ .Values.chatbotService.env.mcpServicenowUrl | quote }}
             - name: SERVICENOW_URL
-              value: {{ .Values.chatbotService.env.servicenowUrl | quote }}
-            - name: SERVICENOW_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.mcpSecrets.servicenow.existingSecretName | default "noc-servicenow-secret" }}
-                  key: SERVICENOW_USERNAME
-            - name: SERVICENOW_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.mcpSecrets.servicenow.existingSecretName | default "noc-servicenow-secret" }}
-                  key: SERVICENOW_PASSWORD
+              value: {{ $serviceNowUrl | quote }}
+            {{- include "hub.servicenowCredentialEnv" (dict "secretName" $serviceNowSecret) | nindent 12 }}
             - name: KAFKA_BOOTSTRAP
               value: {{ .Values.chatbotService.env.kafkaBootstrap | quote }}
             - name: MODEL_API_URL
